@@ -98,14 +98,3 @@ int uuid_gen(uint8_t* out)
 
     return 0;
 }
-
-void uuid_hex(char out_hex[33], const uint8_t uid[16])
-{
-    static const char* H = "0123456789abcdef";
-    for(int i = 0; i < 16; ++i)
-    {
-        out_hex[i * 2 + 0] = H[(uid[i] >> 4) & 0xF];
-        out_hex[i * 2 + 1] = H[(uid[i]) & 0xF];
-    }
-    out_hex[32] = '\0';
-}
