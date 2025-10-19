@@ -41,6 +41,8 @@ extern "C"
  */
 int uuid_gen(uint8_t* val);
 
+void uuid_hex(char out_hex[33], const uint8_t uid[16]);
+
 #ifdef __cplusplus
 }
 #endif

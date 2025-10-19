@@ -6,6 +6,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef _GNU_SOURCE
+#    define _GNU_SOURCE
+#endif
+
 /* Monotonic state: upper 52 bits = millis, lower 12 bits = seq */
 static _Atomic uint64_t g_v7_state = 0;
 
@@ -93,4 +97,15 @@ int uuid_gen(uint8_t* out)
     out[15] = rb[7];
 
     return 0;
+}
+
+void uuid_hex(char out_hex[33], const uint8_t uid[16])
+{
+    static const char* H = "0123456789abcdef";
+    for(int i = 0; i < 16; ++i)
+    {
+        out_hex[i * 2 + 0] = H[(uid[i] >> 4) & 0xF];
+        out_hex[i * 2 + 1] = H[(uid[i]) & 0xF];
+    }
+    out_hex[32] = '\0';
 }
