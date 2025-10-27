@@ -42,7 +42,7 @@ int uuid_gen(uint8_t* out)
     {
         const uint64_t now_ms = realtime_ms();
 
-        uint64_t prev = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
+        uint64_t       prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = prev >> 12;
         const uint16_t prev_seq = (uint16_t)(prev & 0x0FFFu);
 
@@ -50,15 +50,13 @@ int uuid_gen(uint8_t* out)
         use_ms = (now_ms >= prev_ms) ? now_ms : prev_ms;
 
         /* same ms => bump seq; new ms => seq=0 */
-        uint16_t next_seq =
-            (use_ms == prev_ms) ? (uint16_t)((prev_seq + 1u) & 0x0FFFu) : 0u;
+        uint16_t next_seq = (use_ms == prev_ms) ? (uint16_t)((prev_seq + 1u) & 0x0FFFu) : 0u;
 
         /* if we wrapped within same ms, wait for the next ms and retry */
         if(use_ms == prev_ms && next_seq == 0u) continue;
 
         const uint64_t next = (use_ms << 12) | (uint64_t)next_seq;
-        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, next,
-                                                 memory_order_acq_rel,
+        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, next, memory_order_acq_rel,
                                                  memory_order_relaxed))
         {
             seq12 = next_seq;
@@ -87,7 +85,7 @@ int uuid_gen(uint8_t* out)
     out[6] = (uint8_t)((0x7u << 4) | ((seq12 >> 8) & 0x0Fu));  // version = 7
     out[7] = (uint8_t)(seq12 & 0xFFu);
 
-    out[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u);  // variant = 10xxxxxx
+    out[8]  = (uint8_t)((rb[0] & 0x3Fu) | 0x80u);              // variant = 10xxxxxx
     out[9]  = rb[1];
     out[10] = rb[2];
     out[11] = rb[3];
