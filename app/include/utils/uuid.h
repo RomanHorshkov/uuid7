@@ -11,6 +11,7 @@
 #define UUID_H
 
 #include <stdint.h>
+#include <stddef.h> /* size_t */
 
 #ifdef __cplusplus
 extern "C"
@@ -46,6 +47,26 @@ extern "C"
  * @return 0 on success, -1 if @p val is NULL.
  */
 int uuid_gen(uint8_t* val);
+
+/**
+ * @brief Type of RNG function used to fill random bytes in UUIDs.
+ * The function must fill @p n bytes into @p buf.
+ * 
+ * @param buf  Output buffer.
+ * @param n    Number of bytes to fill.
+ */
+typedef void (*uuid_rng_fn_t)(void* buf, const size_t n);
+
+/**
+ * @brief Set the RNG function used to fill random bytes in UUIDs.
+ *
+ * If @p fn is NULL, resets to the default RNG (reads from /dev/urandom
+ * or uses libsodium's `randombytes_buf` if available).
+ *
+ * @param[in] fn  RNG function pointer or NULL to reset to default.
+ * @return 0 on success, -1 if @p fn is NULL (reset to default).
+ */
+int uuid_set_rng(uuid_rng_fn_t fn);
 
 #ifdef __cplusplus
 }

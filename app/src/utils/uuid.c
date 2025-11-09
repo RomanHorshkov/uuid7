@@ -39,9 +39,17 @@
  */
 #include "uuid.h"
 
-#include <sodium.h>  // randombytes_buf()
 #include <stdatomic.h>
 #include <time.h>
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#if defined(__linux__)
+#    include <sys/syscall.h>
+#    include <sys/random.h>
+#endif
+
 
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
@@ -103,6 +111,8 @@ _Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
  */
 static _Atomic uint64_t g_v7_state = 0;
 
+static uuid_rng_fn_t g_uuid_rng = NULL; /* initialized to default at startup */
+
 /****************************************************************************
  * PRIVATE FUNCTIONS PROTOTYPES
  ****************************************************************************
@@ -114,6 +124,21 @@ static _Atomic uint64_t g_v7_state = 0;
  * @return uint64_t Current time in ms.
  */
 static inline uint64_t realtime_ms(void);
+
+/**
+ * @brief Default RNG implementation: reads from /dev/urandom.
+ *
+ * @param buf  Output buffer.
+ * @param n    Number of bytes to fill.
+ */
+static void default_rng(void* buf, size_t n);
+
+/**
+ * @brief Helper: call the configured RNG.
+ * @param buf  Output buffer.
+ * @param n    Number of bytes to fill.
+ */
+static inline void uuid_fill_random(void* buf, size_t n);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
@@ -146,7 +171,7 @@ int uuid_gen(uint8_t* out)
 
         /* Sample fresh 12-bit randomness for rand_a */
         uint16_t rnd = 0;
-        randombytes_buf(&rnd, sizeof(rnd));
+        uuid_fill_random(&rnd, sizeof(rnd));
         rnd &= (uint16_t)V7_SEQ_MASK;
         if(rnd == 0u) rnd = 1u; /* prefer non-zero start */
 
@@ -155,8 +180,8 @@ int uuid_gen(uint8_t* out)
         if(candidate <= prev)
         {
             /* Need to produce a strictly greater value.
-             * If prev_seq hasn't overflowed, increment prev.
-             * Otherwise advance ms by 1 and re-randomize seq. */
+                * If prev_seq hasn't overflowed, increment prev.
+                * Otherwise advance ms by 1 and re-randomize seq. */
             if(prev_seq != (uint16_t)V7_SEQ_MASK)
             {
                 candidate = prev + 1ull; /* increment seq, preserves monotonicity */
@@ -166,7 +191,7 @@ int uuid_gen(uint8_t* out)
                 /* Overflow: move to next millisecond and sample a non-zero seq */
                 uint64_t next_ms = prev_ms + 1ull;
                 uint16_t rnd2 = 0;
-                randombytes_buf(&rnd2, sizeof(rnd2));
+                uuid_fill_random(&rnd2, sizeof(rnd2));
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
                 if(rnd2 == 0u) rnd2 = 1u;
                 candidate = V7_PACK(next_ms, rnd2);
@@ -174,20 +199,20 @@ int uuid_gen(uint8_t* out)
         }
 
         if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate, memory_order_acq_rel,
-                                                 memory_order_relaxed))
+                                                    memory_order_relaxed))
         {
             seq12 = (uint16_t)(candidate & V7_SEQ_MASK);
             use_ms = V7_UNPACK_MS(candidate);
             break;
         }
-        /* else: CAS failed, loop and try again */
+    /* else: CAS failed, loop and try again */
     }
 
     /* random tail: V7_RB_BYTES bytes of CSPRNG entropy. Some bits are
      * consumed by the version/variant fields above, the remainder form the
      * variable/random tail of the UUID. */
     uint8_t rb[V7_RB_BYTES];
-    randombytes_buf(rb, V7_RB_BYTES);
+    uuid_fill_random(rb, V7_RB_BYTES);
 
     /* UUIDv7 (RFC4122bis):
        - bytes 0..5 : 48-bit unix ms (big-endian)
@@ -215,6 +240,20 @@ int uuid_gen(uint8_t* out)
     return 0;
 }
 
+int uuid_set_rng(uuid_rng_fn_t fn)
+{
+    if(fn)
+    {
+        g_uuid_rng = fn;
+        return 0;
+    }
+    else
+    {
+        g_uuid_rng = default_rng;
+        return -1;
+    }
+}
+
 /****************************************************************************
  * PRIVATE FUNCTIONS DEFINITIONS
  ****************************************************************************
@@ -225,4 +264,53 @@ static inline uint64_t realtime_ms(void)
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
+}
+
+static void default_rng(void* buf, size_t n)
+{
+    if(!buf || n == 0) return;
+#if defined(__linux__)
+    /* Try getrandom(2) in a loop */
+    size_t off = 0;
+    while(off < n)
+    {
+        ssize_t r = syscall(SYS_getrandom, (char*)buf + off, n - off, 0);
+        if(r < 0)
+        {
+            if(errno == EINTR) continue;
+            break; /* fall back to /dev/urandom */
+        }
+        off += (size_t)r;
+    }
+    if(off == n) return;
+#endif
+    /* Fallback: read from /dev/urandom */
+    int fd = open("/dev/urandom", O_RDONLY);
+    if(fd < 0) return;
+    size_t off2 = 0;
+    while(off2 < n)
+    {
+        ssize_t r = read(fd, (char*)buf + off2, n - off2);
+        if(r < 0)
+        {
+            if(errno == EINTR) continue;
+            close(fd);
+            return;
+        }
+        if(r == 0)
+        {
+            close(fd);
+            return;
+        }
+        off2 += (size_t)r;
+    }
+    close(fd);
+    return;
+}
+
+static inline void uuid_fill_random(void* buf, size_t n)
+{
+    if(!g_uuid_rng) g_uuid_rng = default_rng;
+    g_uuid_rng(buf, n);
+    return;
 }
