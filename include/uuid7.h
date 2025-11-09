@@ -1,5 +1,5 @@
 /**
- * @file uuid.h
+ * @file uuid7.h
  * @brief 
  *
  * @author  Roman Horshkov <roman.horshkov@gmail.com>

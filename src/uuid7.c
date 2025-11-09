@@ -1,5 +1,5 @@
 /**
- * @file uuid.c
+ * @file uuid7.c
  * @brief UUIDv7 generator implementation with monotonic sequence and CSPRNG
  *        initialization for the 12-bit sequence field.
  *
