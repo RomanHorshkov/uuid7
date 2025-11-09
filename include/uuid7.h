@@ -83,7 +83,7 @@ int uuid7_set_rng(uuid_rng_fn_t fn);
  * RNG implementation.
  *
  * This function performs any module-local initialization that is required
- * before using `uuid_gen()`. It also accepts an optional RNG function
+ * before using `uuid7_gen()`. It also accepts an optional RNG function
  * pointer which will be used to generate cryptographically secure bytes.
  * If @p fn is NULL the module will install the built-in default RNG.
  *
