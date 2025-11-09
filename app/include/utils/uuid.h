@@ -35,9 +35,15 @@ extern "C"
 */
 
 /**
- * @brief Generate a random v7 UUID.
- * @param val Output buffer [16 bytes].
- * @return 0 on success, -EINVAL if invalid args.
+ * @brief Generate a UUIDv7 value.
+ *
+ * Produces a 16-byte RFC-v7 style UUID into the provided buffer. The caller
+ * must supply a buffer of at least 16 bytes. The function is safe to call
+ * concurrently from multiple threads (uses an atomic CAS to reserve a
+ * monotonic (ms,seq) pair).
+ *
+ * @param[out] val  Output buffer, must be at least 16 bytes.
+ * @return 0 on success, -1 if @p val is NULL.
  */
 int uuid_gen(uint8_t* val);
 

@@ -41,7 +41,6 @@
 
 #include <sodium.h>  // randombytes_buf()
 #include <stdatomic.h>
-#include <string.h>
 #include <time.h>
 
 #ifndef _GNU_SOURCE
@@ -128,45 +127,60 @@ int uuid_gen(uint8_t* out)
     uint64_t use_ms;
     uint16_t seq12;
 
-    /* Reserve strictly increasing (ms,seq) using a CAS loop */
+    /* Reserve strictly increasing (ms,rand_a) using a CAS loop.
+     * Strategy: sample fresh 12-bit randomness for each candidate. If the
+     * candidate is not greater than the last stored state, increment the
+     * sequence where possible; on overflow advance the millisecond and
+     * re-sample randomness. This keeps rand_a random most of the time but
+     * preserves monotonicity when needed (RFC-compatible approach). */
     for(;;)
     {
         const uint64_t now_ms = realtime_ms();
 
-        uint64_t       prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
+        uint64_t prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
         const uint16_t prev_seq = V7_UNPACK_SEQ(prev);
 
         /* clamp to non-decreasing ms */
         use_ms = (now_ms >= prev_ms) ? now_ms : prev_ms;
 
-        uint16_t next_seq;
-        if(use_ms == prev_ms)
+        /* Sample fresh 12-bit randomness for rand_a */
+        uint16_t rnd = 0;
+        randombytes_buf(&rnd, sizeof(rnd));
+        rnd &= (uint16_t)V7_SEQ_MASK;
+        if(rnd == 0u) rnd = 1u; /* prefer non-zero start */
+
+        uint64_t candidate = V7_PACK(use_ms, rnd);
+
+        if(candidate <= prev)
         {
-            /* same ms => bump seq */
-            next_seq = (uint16_t)((prev_seq + 1u) & 0x0FFFu);
-            /* if wrapped within same ms, wait for the next ms and retry */
-            if(next_seq == 0u) continue;
-        }
-        else
-        {
-            /* New ms: initialize sequence to a CSPRNG-derived 12-bit value.
-             * Avoid starting at 0 to reduce predictability and clustering.
-             * Using libsodium's randombytes_buf provides cryptographic randomness. */
-            uint16_t rnd = 0;
-            randombytes_buf(&rnd, sizeof(rnd));
-            rnd &= 0x0FFFu;         /* keep 12 bits */
-            if(rnd == 0u) rnd = 1u; /* avoid zero-start for predictability */
-            next_seq = rnd;
+            /* Need to produce a strictly greater value.
+             * If prev_seq hasn't overflowed, increment prev.
+             * Otherwise advance ms by 1 and re-randomize seq. */
+            if(prev_seq != (uint16_t)V7_SEQ_MASK)
+            {
+                candidate = prev + 1ull; /* increment seq, preserves monotonicity */
+            }
+            else
+            {
+                /* Overflow: move to next millisecond and sample a non-zero seq */
+                uint64_t next_ms = prev_ms + 1ull;
+                uint16_t rnd2 = 0;
+                randombytes_buf(&rnd2, sizeof(rnd2));
+                rnd2 &= (uint16_t)V7_SEQ_MASK;
+                if(rnd2 == 0u) rnd2 = 1u;
+                candidate = V7_PACK(next_ms, rnd2);
+            }
         }
 
-        const uint64_t next = V7_PACK(use_ms, next_seq);
-        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, next, memory_order_acq_rel,
+        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate, memory_order_acq_rel,
                                                  memory_order_relaxed))
         {
-            seq12 = next_seq;
+            seq12 = (uint16_t)(candidate & V7_SEQ_MASK);
+            use_ms = V7_UNPACK_MS(candidate);
             break;
         }
+        /* else: CAS failed, loop and try again */
     }
 
     /* random tail: V7_RB_BYTES bytes of CSPRNG entropy. Some bits are
