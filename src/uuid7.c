@@ -24,7 +24,7 @@
  * - Random tail: the low 64-bit tail is filled from CSPRNG to supply entropy
  *   for uniqueness and privacy.
  *
- * Thread-safety: `uuid_gen()` is safe for concurrent calls thanks to the
+ * Thread-safety: `uuid7_gen()` is safe for concurrent calls thanks to the
  * atomic CAS loop protecting `g_v7_state`.
  *
  * Security note: the use of libsodium's `randombytes_buf` provides a
@@ -116,7 +116,7 @@ _Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
 static _Atomic uint64_t g_v7_state = 0;
 
 /* RNG function pointer stored atomically to avoid data races between
- * callers of `uuid_gen()` and `uuid_set_rng()`. Using uintptr_t for
+ * callers of `uuid7_gen()` and `uuid7_set_rng()`. Using uintptr_t for
  * atomicity avoids portable issues with atomic function-pointer types.
  */
 static _Atomic uintptr_t g_uuid_rng_ptr = (uintptr_t)0; /* 0 means not set */
@@ -145,7 +145,7 @@ static inline void store_uuid_rng(uuid_rng_fn_t fn)
  * 
  * @return uint64_t Current time in ms.
  */
-static inline uint64_t realtime_ms(void);
+static inline uint64_t _realtime_ms(void);
 
 /**
  * @brief Default RNG implementation: reads from /dev/urandom.
@@ -153,21 +153,21 @@ static inline uint64_t realtime_ms(void);
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  */
-static void default_rng(void* buf, size_t n);
+static void _default_rng(void* buf, size_t n);
 
 /**
  * @brief Helper: call the configured RNG.
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  */
-static inline void uuid_fill_random(void* buf, size_t n);
+static inline void _fill_random(void* buf, size_t n);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
 
-int uuid_gen(uint8_t* out)
+int uuid7_gen(uint8_t* out)
 {
     if(!out) return -1;
 
@@ -182,7 +182,7 @@ int uuid_gen(uint8_t* out)
      * preserves monotonicity when needed (RFC-compatible approach). */
     for(;;)
     {
-        const uint64_t now_ms = realtime_ms();
+        const uint64_t now_ms = _realtime_ms();
 
         uint64_t prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
@@ -193,7 +193,7 @@ int uuid_gen(uint8_t* out)
 
         /* Sample fresh 12-bit randomness for rand_a */
         uint16_t rnd = 0;
-        uuid_fill_random(&rnd, sizeof(rnd));
+        _fill_random(&rnd, sizeof(rnd));
         rnd &= (uint16_t)V7_SEQ_MASK;
         if(rnd == 0u) rnd = 1u; /* prefer non-zero start */
 
@@ -213,7 +213,7 @@ int uuid_gen(uint8_t* out)
                 /* Overflow: move to next millisecond and sample a non-zero seq */
                 uint64_t next_ms = prev_ms + 1ull;
                 uint16_t rnd2 = 0;
-                uuid_fill_random(&rnd2, sizeof(rnd2));
+                _fill_random(&rnd2, sizeof(rnd2));
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
                 if(rnd2 == 0u) rnd2 = 1u;
                 candidate = V7_PACK(next_ms, rnd2);
@@ -234,7 +234,7 @@ int uuid_gen(uint8_t* out)
      * consumed by the version/variant fields above, the remainder form the
      * variable/random tail of the UUID. */
     uint8_t rb[V7_RB_BYTES];
-    uuid_fill_random(rb, V7_RB_BYTES);
+    _fill_random(rb, V7_RB_BYTES);
 
     /* UUIDv7 (RFC4122bis):
        - bytes 0..5 : 48-bit unix ms (big-endian)
@@ -262,12 +262,12 @@ int uuid_gen(uint8_t* out)
     return 0;
 }
 
-int uuid_set_rng(uuid_rng_fn_t fn)
+int uuid7_set_rng(uuid_rng_fn_t fn)
 {
     /* Accept NULL to reset to default RNG. Return 0 on success.
      * No error conditions currently; keep return negative only for future
      * extensibility. The atomic store makes this safe to call concurrently
-     * with `uuid_gen()`.
+     * with `uuid7_gen()`.
      */
     if(fn)
     {
@@ -275,12 +275,12 @@ int uuid_set_rng(uuid_rng_fn_t fn)
     }
     else
     {
-        store_uuid_rng(default_rng);
+        store_uuid_rng(_default_rng);
     }
     return 0;
 }
 
-int uuid_init(uuid_rng_fn_t fn)
+int uuid7_init(uuid_rng_fn_t fn)
 {
     /* If caller provided an RNG, install it atomically. Otherwise attempt to
      * install the built-in default RNG if none is present. Use CAS to remain
@@ -293,7 +293,7 @@ int uuid_init(uuid_rng_fn_t fn)
     }
 
     uintptr_t expected = (uintptr_t)0;
-    uintptr_t desired = (uintptr_t)default_rng;
+    uintptr_t desired = (uintptr_t)_default_rng;
     atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
                                            memory_order_acq_rel, memory_order_relaxed);
     return 0;
@@ -304,14 +304,14 @@ int uuid_init(uuid_rng_fn_t fn)
  ****************************************************************************
  */
 
-static inline uint64_t realtime_ms(void)
+static inline uint64_t _realtime_ms(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
 }
 
-static void default_rng(void* buf, size_t n)
+static void _default_rng(void* buf, size_t n)
 {
     if(!buf || n == 0) return;
 #if defined(__linux__)
@@ -353,24 +353,24 @@ static void default_rng(void* buf, size_t n)
     return;
 }
 
-static inline void uuid_fill_random(void* buf, size_t n)
+static inline void _fill_random(void* buf, size_t n)
 {
     if(!buf || n == 0) return;
 
     /* Load the current RNG function pointer atomically. If it hasn't been
      * set yet, attempt to install the default RNG once using a
      * compare-exchange. This avoids races between first-callers and callers
-     * of `uuid_set_rng()`.
+     * of `uuid7_set_rng()`.
      */
     uuid_rng_fn_t fn = load_uuid_rng();
     if(!fn)
     {
         uintptr_t expected = (uintptr_t)0;
-        uintptr_t desired = (uintptr_t)default_rng;
+        uintptr_t desired = (uintptr_t)_default_rng;
         atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
                                                memory_order_acq_rel, memory_order_relaxed);
         fn = load_uuid_rng();
-        if(!fn) fn = default_rng; /* fallback, should not happen */
+        if(!fn) fn = _default_rng; /* fallback, should not happen */
     }
 
     fn(buf, n);

@@ -46,7 +46,7 @@ extern "C"
  * @param[out] val  Output buffer, must be at least 16 bytes.
  * @return 0 on success, -1 if @p val is NULL.
  */
-int uuid_gen(uint8_t* val);
+int uuid7_gen(uint8_t* val);
 
 /**
  * @brief Type of RNG function used to fill random bytes in UUIDs.
@@ -76,7 +76,7 @@ typedef void (*uuid_rng_fn_t)(void* buf, const size_t n);
  * @param[in] fn  RNG function pointer to use, or NULL to reset to default.
  * @return 0 on success, negative on error.
  */
-int uuid_set_rng(uuid_rng_fn_t fn);
+int uuid7_set_rng(uuid_rng_fn_t fn);
 
 /**
  * @brief Explicitly initialize the UUID module and optionally configure the
@@ -95,7 +95,7 @@ int uuid_set_rng(uuid_rng_fn_t fn);
  * @param[in] fn  Optional RNG function to use. If NULL, install default.
  * @return 0 on success, negative on error.
  */
-int uuid_init(uuid_rng_fn_t fn);
+int uuid7_init(uuid_rng_fn_t fn);
 
 #ifdef __cplusplus
 }
