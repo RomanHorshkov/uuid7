@@ -41,7 +41,7 @@
 #    define _GNU_SOURCE
 #endif
 
-#include "uuid.h"
+#include "uuid7.h"
 
 #include <stdatomic.h>
 #include <time.h>
