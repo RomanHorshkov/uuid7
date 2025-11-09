@@ -37,6 +37,10 @@
  * @author: Roman Horshkov <roman.horshkov@gmail.com>
  * @date:   2025
  */
+#ifndef _GNU_SOURCE
+#    define _GNU_SOURCE
+#endif
+
 #include "uuid.h"
 
 #include <stdatomic.h>
@@ -111,7 +115,25 @@ _Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
  */
 static _Atomic uint64_t g_v7_state = 0;
 
-static uuid_rng_fn_t g_uuid_rng = NULL; /* initialized to default at startup */
+/* RNG function pointer stored atomically to avoid data races between
+ * callers of `uuid_gen()` and `uuid_set_rng()`. Using uintptr_t for
+ * atomicity avoids portable issues with atomic function-pointer types.
+ */
+static _Atomic uintptr_t g_uuid_rng_ptr = (uintptr_t)0; /* 0 means not set */
+
+/* Helper: convert stored uintptr_t to function pointer */
+static inline uuid_rng_fn_t load_uuid_rng(void)
+{
+    uintptr_t p = atomic_load_explicit(&g_uuid_rng_ptr, memory_order_acquire);
+    return (uuid_rng_fn_t)(uintptr_t)p;
+}
+
+/* Helper: store function pointer into atomic slot */
+static inline void store_uuid_rng(uuid_rng_fn_t fn)
+{
+    uintptr_t p = (uintptr_t)fn;
+    atomic_store_explicit(&g_uuid_rng_ptr, p, memory_order_release);
+}
 
 /****************************************************************************
  * PRIVATE FUNCTIONS PROTOTYPES
@@ -242,16 +264,39 @@ int uuid_gen(uint8_t* out)
 
 int uuid_set_rng(uuid_rng_fn_t fn)
 {
+    /* Accept NULL to reset to default RNG. Return 0 on success.
+     * No error conditions currently; keep return negative only for future
+     * extensibility. The atomic store makes this safe to call concurrently
+     * with `uuid_gen()`.
+     */
     if(fn)
     {
-        g_uuid_rng = fn;
-        return 0;
+        store_uuid_rng(fn);
     }
     else
     {
-        g_uuid_rng = default_rng;
-        return -1;
+        store_uuid_rng(default_rng);
     }
+    return 0;
+}
+
+int uuid_init(uuid_rng_fn_t fn)
+{
+    /* If caller provided an RNG, install it atomically. Otherwise attempt to
+     * install the built-in default RNG if none is present. Use CAS to remain
+     * idempotent and thread-safe.
+     */
+    if(fn)
+    {
+        store_uuid_rng(fn);
+        return 0;
+    }
+
+    uintptr_t expected = (uintptr_t)0;
+    uintptr_t desired = (uintptr_t)default_rng;
+    atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
+                                           memory_order_acq_rel, memory_order_relaxed);
+    return 0;
 }
 
 /****************************************************************************
@@ -310,7 +355,24 @@ static void default_rng(void* buf, size_t n)
 
 static inline void uuid_fill_random(void* buf, size_t n)
 {
-    if(!g_uuid_rng) g_uuid_rng = default_rng;
-    g_uuid_rng(buf, n);
+    if(!buf || n == 0) return;
+
+    /* Load the current RNG function pointer atomically. If it hasn't been
+     * set yet, attempt to install the default RNG once using a
+     * compare-exchange. This avoids races between first-callers and callers
+     * of `uuid_set_rng()`.
+     */
+    uuid_rng_fn_t fn = load_uuid_rng();
+    if(!fn)
+    {
+        uintptr_t expected = (uintptr_t)0;
+        uintptr_t desired = (uintptr_t)default_rng;
+        atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
+                                               memory_order_acq_rel, memory_order_relaxed);
+        fn = load_uuid_rng();
+        if(!fn) fn = default_rng; /* fallback, should not happen */
+    }
+
+    fn(buf, n);
     return;
 }
