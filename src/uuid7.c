@@ -254,9 +254,11 @@ int uuid7_gen(uint8_t* out)
 
     /* variant (10xxxxxx) | top 6 bits of rb[0] */
     out[8] = (uint8_t)((rb[0] & V7_RB0_LOW6_MASK) | V7_VARIANT_TOP);
+
+    /* Remaining tail: copy rb[1..7] into bytes 9..15 without clobbering variant */
     for(uint8_t i = 0; i < V7_RB_BYTES - 1u; ++i)
     {
-        out[V7_MS_BYTES + 2u + i] = rb[1 + i];
+        out[V7_MS_BYTES + 3u + i] = rb[1 + i];
     }
 
     return 0;
