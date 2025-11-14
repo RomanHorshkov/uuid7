@@ -9,6 +9,7 @@ BUILD_TYPE="${BUILD_TYPE:-Release}"
 cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DUUID7_BUILD_TESTS=OFF \
+    -DUUID7_BUILD_SHARED=ON \
     "$@"
 
 cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --target uuid7_static uuid7_shared
