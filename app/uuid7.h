@@ -42,10 +42,14 @@ extern "C"
  * Produces a 16-byte RFC-v7 style UUID into the provided buffer. The caller
  * must supply a buffer of at least 16 bytes. The function is safe to call
  * concurrently from multiple threads (uses an atomic CAS to reserve a
- * monotonic (ms,seq) pair).
+ * monotonic (ms,seq) pair). If more than 4095 UUIDs are generated within the
+ * same millisecond, the generator advances the logical millisecond by 1 to
+ * preserve monotonicity; this may embed a timestamp slightly ahead of wall
+ * clock time under extreme burst rates.
  *
  * @param[out] val  Output buffer, must be at least 16 bytes.
- * @return 0 on success, -1 if @p val is NULL.
+ * @return 0 on success, -1 if @p val is NULL, -2 if the built-in RNG fails to
+ *         provide entropy.
  */
 int uuid7_gen(uint8_t* val);
 
@@ -54,8 +58,9 @@ int uuid7_gen(uint8_t* val);
  *
  * The function must fill @p n bytes into @p buf. The RNG function is
  * responsible for producing cryptographically secure random bytes when used
- * in production. For unit testing a deterministic RNG may be substituted via
- * `uuid_set_rng()`.
+ * in production and must not fail. For unit testing a deterministic RNG may
+ * be substituted via `uuid7_set_rng()`. Custom RNGs are assumed to succeed; the
+ * library can only detect entropy failures in the built-in default RNG.
  *
  * @param[out] buf  Output buffer to fill with random bytes.
  * @param[in]  n    Number of bytes to generate.
@@ -89,7 +94,7 @@ int uuid7_set_rng(uuid_rng_fn_t fn);
  * If @p fn is NULL the module will install the built-in default RNG.
  *
  * The function is idempotent and thread-safe. Typical usage: call
- * `uuid_init(randombytes_buf)` after any global CSPRNG libraries (e.g.,
+ * `uuid7_init(randombytes_buf)` after any global CSPRNG libraries (e.g.,
  * libsodium's `sodium_init()`) are initialized and before creating
  * application threads.
  *

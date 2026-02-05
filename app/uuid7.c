@@ -19,8 +19,10 @@
  *   `randombytes_buf`) to reduce predictability and clustering. The sequence
  *   is forced non-zero to avoid trivial low-valued sequences.
  * - Wrap handling: if the 12-bit counter wraps within the same millisecond
- *   (i.e., >4095 values generated in a single ms), the generator will spin
- *   waiting for the next millisecond to avoid duplicates.
+ *   (i.e., >4095 values generated in a single ms), the generator advances
+ *   the logical millisecond by 1 and re-randomizes the sequence. This keeps
+ *   values strictly monotonic but may embed a timestamp slightly ahead of
+ *   wall clock time under extreme burst rates.
  * - Random tail: the low 64-bit tail is filled from CSPRNG to supply entropy
  *   for uniqueness and privacy.
  *
@@ -46,6 +48,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdatomic.h>
+#include <string.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -88,7 +91,6 @@
 /* Sizes */
 #define V7_RB_BYTES         8u
 #define V7_MS_BYTES         6u
-#define V7_UUID_BYTES       16u
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -112,6 +114,10 @@ static _Atomic uint64_t g_v7_state = 0;
  * atomicity avoids portable issues with atomic function-pointer types.
  */
 static _Atomic uintptr_t g_uuid_rng_ptr = (uintptr_t)0; /* 0 means not set */
+
+/* Thread-local error flag for the default RNG. Only meaningful when the
+ * active RNG is `_default_rng()`. */
+static _Thread_local int g_default_rng_error = 0;
 
 /* Helper: convert stored uintptr_t to function pointer */
 static inline uuid_rng_fn_t load_uuid_rng(void)
@@ -142,6 +148,9 @@ static inline uint64_t _realtime_ms(void);
 /**
  * @brief Default RNG implementation: reads from /dev/urandom.
  *
+ * On failure, this function sets a thread-local error flag and zero-fills
+ * any remaining bytes to avoid leaving uninitialized data in the UUID.
+ *
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  */
@@ -151,8 +160,9 @@ static void _default_rng(void* buf, size_t n);
  * @brief Helper: call the configured RNG.
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
+ * @return 0 on success, negative on error (only detectable for default RNG).
  */
-static inline void _fill_random(void* buf, size_t n);
+static inline int _fill_random(void* buf, size_t n);
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
@@ -185,7 +195,10 @@ int uuid7_gen(uint8_t* out)
 
         /* Sample fresh 12-bit randomness for rand_a */
         uint16_t rnd = 0;
-        _fill_random(&rnd, sizeof(rnd));
+        if(_fill_random(&rnd, sizeof(rnd)) != 0)
+        {
+            return -2;
+        }
         rnd &= (uint16_t)V7_SEQ_MASK;
         if(rnd == 0u) rnd = 1u; /* prefer non-zero start */
 
@@ -205,7 +218,10 @@ int uuid7_gen(uint8_t* out)
                 /* Overflow: move to next millisecond and sample a non-zero seq */
                 uint64_t next_ms = prev_ms + 1ull;
                 uint16_t rnd2    = 0;
-                _fill_random(&rnd2, sizeof(rnd2));
+                if(_fill_random(&rnd2, sizeof(rnd2)) != 0)
+                {
+                    return -2;
+                }
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
                 if(rnd2 == 0u) rnd2 = 1u;
                 candidate = V7_PACK(next_ms, rnd2);
@@ -226,7 +242,10 @@ int uuid7_gen(uint8_t* out)
      * consumed by the version/variant fields above, the remainder form the
      * variable/random tail of the UUID. */
     uint8_t rb[V7_RB_BYTES];
-    _fill_random(rb, V7_RB_BYTES);
+    if(_fill_random(rb, V7_RB_BYTES) != 0)
+    {
+        return -2;
+    }
 
     /* UUIDv7 (RFC4122bis):
        - bytes 0..5 : 48-bit unix ms (big-endian)
@@ -308,6 +327,7 @@ static inline uint64_t _realtime_ms(void)
 
 static void _default_rng(void* buf, size_t n)
 {
+    g_default_rng_error = 0;
     if(!buf || n == 0) return;
 #if defined(__linux__)
     /* Try getrandom(2) in a loop */
@@ -323,23 +343,34 @@ static void _default_rng(void* buf, size_t n)
         off += (size_t)r;
     }
     if(off == n) return;
+#else
+    size_t off = 0;
 #endif
     /* Fallback: read from /dev/urandom */
     int fd = open("/dev/urandom", O_RDONLY);
-    if(fd < 0) return;
-    size_t off2 = 0;
-    while(off2 < n)
+    if(fd < 0)
     {
-        ssize_t r = read(fd, (char*)buf + off2, n - off2);
+        g_default_rng_error = -1;
+        memset((char*)buf + off, 0, n - off);
+        return;
+    }
+    size_t off2 = 0;
+    while(off2 < (n - off))
+    {
+        ssize_t r = read(fd, (char*)buf + off + off2, n - off - off2);
         if(r < 0)
         {
             if(errno == EINTR) continue;
             close(fd);
+            g_default_rng_error = -1;
+            memset((char*)buf + off + off2, 0, n - off - off2);
             return;
         }
         if(r == 0)
         {
             close(fd);
+            g_default_rng_error = -1;
+            memset((char*)buf + off + off2, 0, n - off - off2);
             return;
         }
         off2 += (size_t)r;
@@ -348,9 +379,10 @@ static void _default_rng(void* buf, size_t n)
     return;
 }
 
-static inline void _fill_random(void* buf, size_t n)
+static inline int _fill_random(void* buf, size_t n)
 {
-    if(!buf || n == 0) return;
+    if(!buf) return -1;
+    if(n == 0) return 0;
 
     /* Load the current RNG function pointer atomically. If it hasn't been
      * set yet, attempt to install the default RNG once using a
@@ -369,7 +401,11 @@ static inline void _fill_random(void* buf, size_t n)
     }
 
     fn(buf, n);
-    return;
+    if(fn == _default_rng && g_default_rng_error != 0)
+    {
+        return -1;
+    }
+    return 0;
 }
 
 /****************************************************************************
@@ -381,5 +417,5 @@ static inline void _fill_random(void* buf, size_t n)
  * must equal total UUID size. Note: RB bytes include the first byte used for the
  * variant/top bits, so the number of tail bytes written after out[8] is
  * (V7_RB_BYTES - 1). The check below simplifies the arithmetic. */
-_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
+_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE,
                "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");
