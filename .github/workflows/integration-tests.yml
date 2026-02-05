@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - deb_lib_creation
   pull_request:
   workflow_dispatch:
 
