@@ -4,10 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <stdatomic.h>
 #include <pthread.h>
-#include <errno.h>
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -75,6 +73,11 @@ static void fast_rng(void* buf, const size_t n)
     }
 }
 
+static void zero_rng(void* buf, const size_t n)
+{
+    memset(buf, 0, n);
+}
+
 static uint64_t fake_time_now(void)
 {
     return atomic_load_explicit(&g_fake_time_ms, memory_order_relaxed);
@@ -113,29 +116,6 @@ static void reset_state(void)
     atomic_store_explicit(&g_fast_rng_state, 0x12345678u, memory_order_relaxed);
     atomic_store_explicit(&g_fake_time_ms, 0, memory_order_relaxed);
     atomic_store_explicit(&g_time_flip, 0, memory_order_relaxed);
-}
-
-static size_t env_sizet(const char* name, size_t defval)
-{
-    const char* v = getenv(name);
-    if(!v || !*v) return defval;
-    errno = 0;
-    char* end = NULL;
-    unsigned long long val = strtoull(v, &end, 10);
-    if(errno != 0 || end == v) return defval;
-    if(val == 0) return defval;
-    return (size_t)val;
-}
-
-static int env_bool(const char* name, int defval)
-{
-    const char* v = getenv(name);
-    if(!v || !*v) return defval;
-    if(strcmp(v, "0") == 0 || strcasecmp(v, "false") == 0 || strcasecmp(v, "no") == 0)
-    {
-        return 0;
-    }
-    return 1;
 }
 
 static void test_default_rng_used_when_uninitialized(void** state)
@@ -235,7 +215,7 @@ static void test_overflow_advances_ms(void** state)
     (void)state;
     reset_state();
 
-    rng_load_script(NULL, 0, 0x00);
+    uuid7_set_rng(zero_rng);
     set_fake_time(1000);
     uuid7_test_set_time_fn(fake_time_now);
 
@@ -406,9 +386,8 @@ static void test_multithreaded_uniqueness(void** state)
 
     uuid7_set_rng(fast_rng);
 
-    const int heavy = env_bool("UUID7_IT_HEAVY", 1);
-    const size_t threads = env_sizet("UUID7_IT_THREADS", heavy ? 8u : 4u);
-    const size_t per_thread = env_sizet("UUID7_IT_PER_THREAD", heavy ? 50000u : 5000u);
+    const size_t threads = 16u;
+    const size_t per_thread = 100000u;
     const size_t total = threads * per_thread;
 
     uint8_t* all = calloc(total, 16u);
@@ -469,11 +448,11 @@ static void test_overflow_multiple_ms_advances(void** state)
     (void)state;
     reset_state();
 
-    rng_load_script(NULL, 0, 0x00);
+    uuid7_set_rng(zero_rng);
     set_fake_time(1000);
     uuid7_test_set_time_fn(fake_time_now);
 
-    const size_t total = 4096u * 3u;
+    const size_t total = 4095u * 3u;
     for(size_t i = 0; i < total; ++i)
     {
         uint8_t uuid[16] = {0};
@@ -497,7 +476,12 @@ static void test_overflow_multiple_ms_advances(void** state)
             assert_int_equal(ms, 1001);
             assert_int_equal(seq, 1);
         }
-        if(i == 8191)
+        if(i == 8189)
+        {
+            assert_int_equal(ms, 1001);
+            assert_int_equal(seq, 0x0FFF);
+        }
+        if(i == 8190)
         {
             assert_int_equal(ms, 1002);
             assert_int_equal(seq, 1);
@@ -510,14 +494,9 @@ static void test_heavy_single_thread_uniqueness(void** state)
     (void)state;
     reset_state();
 
-    if(!env_bool("UUID7_IT_HEAVY", 1))
-    {
-        return;
-    }
-
     uuid7_set_rng(fast_rng);
 
-    const size_t total = env_sizet("UUID7_IT_SOAK", 200000u);
+    const size_t total = 1000000u;
     uint8_t* all = calloc(total, 16u);
     assert_non_null(all);
 
