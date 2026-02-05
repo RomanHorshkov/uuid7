@@ -34,8 +34,8 @@
  * libsodium will still work as `randombytes_buf` will auto-initialize on many
  * platforms, but explicit init is clearer.
  *
- * @author: Roman Horshkov <roman.horshkov@gmail.com>
- * @date:   2025
+ * @author: Roman Horshkov <https://github.com/RomanHorshkov>
+ * @date:   2026
  */
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE

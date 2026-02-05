@@ -2,13 +2,13 @@
  * @file uuid7.h
  * @brief 
  *
- * @author  Roman Horshkov <roman.horshkov@gmail.com>
- * @date    2025
- * (c) 2025
+ * @author  Roman Horshkov <https://github.com/RomanHorshkov>
+ * @date    2026
+ * (c) 2026
  */
 
-#ifndef UUID_H
-#define UUID_H
+#ifndef UUID7_H
+#define UUID7_H
 
 #include <stdint.h>
 #include <stddef.h> /* size_t */
@@ -22,7 +22,8 @@ extern "C"
  * PUBLIC DEFINES
  ****************************************************************************
  */
-/* None */
+
+#define UUID7_SIZE 16u
 
 /****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
@@ -101,4 +102,4 @@ int uuid7_init(uuid_rng_fn_t fn);
 }
 #endif
 
-#endif  // UUID_H
+#endif  // UUID7_H
