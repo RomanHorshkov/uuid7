@@ -66,7 +66,7 @@ gcc "${CFLAGS[@]}" -fPIC -c app/uuid7.c -o build/uuid7.pic.o
 gcc "${CFLAGS[@]}"       -c app/uuid7.c -o build/uuid7.o
 
 # Create the shared .so library with the pic.o object file
-gcc -shared -Wl,-soname,libuuid7.so.$MAJOR -o build/uuid7.so.$VER build/uuid7.pic.o
+gcc -shared -Wl,-soname,libuuid7.so.$MAJOR -o build/libuuid7.so.$VER build/uuid7.pic.o
 
 # Create the static .a library with the .o object file
 ar rcs build/libuuid7.a build/uuid7.o

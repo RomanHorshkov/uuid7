@@ -119,6 +119,34 @@ static _Atomic uintptr_t g_uuid_rng_ptr = (uintptr_t)0; /* 0 means not set */
  * active RNG is `_default_rng()`. */
 static _Thread_local int g_default_rng_error = 0;
 
+#ifdef UUID7_TESTING
+typedef uint64_t (*uuid7_time_fn_t)(void);
+
+static _Atomic uintptr_t g_uuid_time_ptr = (uintptr_t)0;
+static _Atomic int g_force_rng_fail = 0;
+
+int uuid7_test_set_time_fn(uuid7_time_fn_t fn)
+{
+    atomic_store_explicit(&g_uuid_time_ptr, (uintptr_t)fn, memory_order_release);
+    return 0;
+}
+
+int uuid7_test_set_default_rng_fail(int enable)
+{
+    atomic_store_explicit(&g_force_rng_fail, enable ? 1 : 0, memory_order_release);
+    return 0;
+}
+
+void uuid7_test_reset_state(void)
+{
+    atomic_store_explicit(&g_v7_state, 0, memory_order_release);
+    atomic_store_explicit(&g_uuid_rng_ptr, (uintptr_t)0, memory_order_release);
+    atomic_store_explicit(&g_uuid_time_ptr, (uintptr_t)0, memory_order_release);
+    atomic_store_explicit(&g_force_rng_fail, 0, memory_order_release);
+    g_default_rng_error = 0;
+}
+#endif
+
 /* Helper: convert stored uintptr_t to function pointer */
 static inline uuid_rng_fn_t load_uuid_rng(void)
 {
@@ -320,6 +348,14 @@ int uuid7_init(uuid_rng_fn_t fn)
 
 static inline uint64_t _realtime_ms(void)
 {
+#ifdef UUID7_TESTING
+    uuid7_time_fn_t fn =
+        (uuid7_time_fn_t)(uintptr_t)atomic_load_explicit(&g_uuid_time_ptr, memory_order_acquire);
+    if(fn)
+    {
+        return fn();
+    }
+#endif
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
@@ -329,6 +365,14 @@ static void _default_rng(void* buf, size_t n)
 {
     g_default_rng_error = 0;
     if(!buf || n == 0) return;
+#ifdef UUID7_TESTING
+    if(atomic_load_explicit(&g_force_rng_fail, memory_order_acquire))
+    {
+        g_default_rng_error = -1;
+        memset(buf, 0, n);
+        return;
+    }
+#endif
 #if defined(__linux__)
     /* Try getrandom(2) in a loop */
     size_t off = 0;
