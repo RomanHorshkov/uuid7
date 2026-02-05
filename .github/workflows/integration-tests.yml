@@ -1,0 +1,47 @@
+name: integration-tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  it:
+    name: Integration test (manual script)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr
+
+      - name: Build + run integration test
+        run: |
+          ./utils/make_ITs.sh
+
+      - name: Upload integration result
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-result
+          path: |
+            tests/results/ITs/integration_result.txt
+
+      - name: Upload IT coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: it-coverage
+          path: |
+            tests/results/ITs/ITs_all_coverage.html
+            tests/results/ITs/ITs_all_coverage.xml
+            tests/results/ITs/coverage-summary.json
