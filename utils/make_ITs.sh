@@ -16,6 +16,7 @@ cd -- "$ROOT_DIR"
 
 BUILD_DIR="${ROOT_DIR}/build/ITs"
 RESULT_DIR="${ROOT_DIR}/tests/results/ITs"
+RESULT_FILE="${RESULT_DIR}/integration_result.txt"
 mkdir -p "$BUILD_DIR"
 mkdir -p "${RESULT_DIR}"
 
@@ -41,7 +42,8 @@ gcc "${CFLAGS[@]}" -c app/uuid7.c -o "${BUILD_DIR}/uuid7.o"
 gcc "${CFLAGS[@]}" "${CMOCKA_CFLAGS[@]}" -c tests/ITs/integration_test.c -o "${BUILD_DIR}/integration_test.o"
 gcc --coverage -O0 -g "${BUILD_DIR}/uuid7.o" "${BUILD_DIR}/integration_test.o" -o "${BUILD_DIR}/integration_test" -pthread "${CMOCKA_LIBS[@]}"
 
-"${BUILD_DIR}/integration_test"
+TEST_RC=0
+"${BUILD_DIR}/integration_test" | tee "${RESULT_FILE}" || TEST_RC=$?
 
 if ! command -v gcovr >/dev/null 2>&1; then
   echo "[coverage] gcovr not found; install it to generate reports"
@@ -71,3 +73,5 @@ gcovr -r "${ROOT_DIR}" \
   -o "${RESULT_DIR}/coverage-summary.json"
 
 printf '[coverage] report ready: %s\n' "${RESULT_DIR}/ITs_all_coverage.html"
+
+exit "${TEST_RC}"
