@@ -55,6 +55,7 @@ WARN_FLAGS=(
 CFLAGS=(
   -std=c11
   -O2
+  -UUUID7_TESTING
   -I app/
   "${WARN_FLAGS[@]}"
 )
