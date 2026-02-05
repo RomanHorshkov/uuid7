@@ -10,8 +10,8 @@
 #ifndef UUID7_H
 #define UUID7_H
 
-#include <stdint.h>
 #include <stddef.h> /* size_t */
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"

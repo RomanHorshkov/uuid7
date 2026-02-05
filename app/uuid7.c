@@ -43,17 +43,16 @@
 
 #include "uuid7.h"
 
-#include <stdatomic.h>
-#include <time.h>
 #include <errno.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 #if defined(__linux__)
-#    include <sys/syscall.h>
 #    include <sys/random.h>
+#    include <sys/syscall.h>
 #endif
-
 
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
@@ -73,30 +72,23 @@
 #define V7_UNPACK_SEQ(word) ((uint16_t)((word) & V7_SEQ_MASK))
 
 /* Byte-level helpers and masks */
-#define V7_BYTE_MASK 0xFFu
+#define V7_BYTE_MASK        0xFFu
 /* Get the n'th byte of the 48-bit ms (n in [0..5], 0 is most-significant) */
-#define V7_MS_BYTE(ms, n) ((uint8_t)((((uint64_t)(ms)) >> (8 * (5 - (n)))) & V7_BYTE_MASK))
+#define V7_MS_BYTE(ms, n)   ((uint8_t)((((uint64_t)(ms)) >> (8 * (5 - (n)))) & V7_BYTE_MASK))
 
 /* Sequence high/low helpers */
-#define V7_SEQ_HIGH_SHIFT 8u
-#define V7_SEQ_HIGH_MASK 0x0Fu
-#define V7_SEQ_LOW_MASK 0xFFu
+#define V7_SEQ_HIGH_SHIFT   8u
+#define V7_SEQ_HIGH_MASK    0x0Fu
+#define V7_SEQ_LOW_MASK     0xFFu
 
 /* Variant/rb masks */
-#define V7_RB0_LOW6_MASK 0x3Fu
-#define V7_VARIANT_TOP 0x80u
+#define V7_RB0_LOW6_MASK    0x3Fu
+#define V7_VARIANT_TOP      0x80u
 
 /* Sizes */
-#define V7_RB_BYTES 8u
-#define V7_MS_BYTES 6u
-#define V7_UUID_BYTES 16u
-
-/* Compile-time sanity check: MS bytes + 2 (version+seq bytes) + remaining RB bytes
- * must equal total UUID size. Note: RB bytes include the first byte used for the
- * variant/top bits, so the number of tail bytes written after out[8] is
- * (V7_RB_BYTES - 1). The check below simplifies the arithmetic. */
-_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
-               "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");
+#define V7_RB_BYTES         8u
+#define V7_MS_BYTES         6u
+#define V7_UUID_BYTES       16u
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -184,7 +176,7 @@ int uuid7_gen(uint8_t* out)
     {
         const uint64_t now_ms = _realtime_ms();
 
-        uint64_t prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
+        uint64_t       prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
         const uint16_t prev_seq = V7_UNPACK_SEQ(prev);
 
@@ -212,7 +204,7 @@ int uuid7_gen(uint8_t* out)
             {
                 /* Overflow: move to next millisecond and sample a non-zero seq */
                 uint64_t next_ms = prev_ms + 1ull;
-                uint16_t rnd2 = 0;
+                uint16_t rnd2    = 0;
                 _fill_random(&rnd2, sizeof(rnd2));
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
                 if(rnd2 == 0u) rnd2 = 1u;
@@ -220,14 +212,14 @@ int uuid7_gen(uint8_t* out)
             }
         }
 
-        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate, memory_order_acq_rel,
-                                                    memory_order_relaxed))
+        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate,
+                                                 memory_order_acq_rel, memory_order_relaxed))
         {
-            seq12 = (uint16_t)(candidate & V7_SEQ_MASK);
+            seq12  = (uint16_t)(candidate & V7_SEQ_MASK);
             use_ms = V7_UNPACK_MS(candidate);
             break;
         }
-    /* else: CAS failed, loop and try again */
+        /* else: CAS failed, loop and try again */
     }
 
     /* random tail: V7_RB_BYTES bytes of CSPRNG entropy. Some bits are
@@ -249,7 +241,8 @@ int uuid7_gen(uint8_t* out)
     }
 
     /* version 7 in high nibble | top 4 bits of sequence */
-    out[6] = (uint8_t)(((0x7u & V7_BYTE_MASK) << 4) | ((uint8_t)((seq12 >> V7_SEQ_HIGH_SHIFT) & V7_SEQ_HIGH_MASK)));
+    out[6] = (uint8_t)(((0x7u & V7_BYTE_MASK) << 4) |
+                       ((uint8_t)((seq12 >> V7_SEQ_HIGH_SHIFT) & V7_SEQ_HIGH_MASK)));
     out[7] = (uint8_t)((uint8_t)seq12 & V7_SEQ_LOW_MASK);
 
     /* variant (10xxxxxx) | top 6 bits of rb[0] */
@@ -295,9 +288,9 @@ int uuid7_init(uuid_rng_fn_t fn)
     }
 
     uintptr_t expected = (uintptr_t)0;
-    uintptr_t desired = (uintptr_t)_default_rng;
+    uintptr_t desired  = (uintptr_t)_default_rng;
     atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
-                                           memory_order_acq_rel, memory_order_relaxed);
+                                            memory_order_acq_rel, memory_order_relaxed);
     return 0;
 }
 
@@ -368,9 +361,9 @@ static inline void _fill_random(void* buf, size_t n)
     if(!fn)
     {
         uintptr_t expected = (uintptr_t)0;
-        uintptr_t desired = (uintptr_t)_default_rng;
+        uintptr_t desired  = (uintptr_t)_default_rng;
         atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
-                                               memory_order_acq_rel, memory_order_relaxed);
+                                                memory_order_acq_rel, memory_order_relaxed);
         fn = load_uuid_rng();
         if(!fn) fn = _default_rng; /* fallback, should not happen */
     }
@@ -378,3 +371,15 @@ static inline void _fill_random(void* buf, size_t n)
     fn(buf, n);
     return;
 }
+
+/****************************************************************************
+ * SANITY CHECKS
+ ****************************************************************************
+ */
+
+/* Compile-time sanity check: MS bytes + 2 (version+seq bytes) + remaining RB bytes
+ * must equal total UUID size. Note: RB bytes include the first byte used for the
+ * variant/top bits, so the number of tail bytes written after out[8] is
+ * (V7_RB_BYTES - 1). The check below simplifies the arithmetic. */
+_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == V7_UUID_BYTES,
+               "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");
