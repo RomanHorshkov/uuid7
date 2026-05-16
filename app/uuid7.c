@@ -36,8 +36,8 @@
  * libsodium will still work as `randombytes_buf` will auto-initialize on many
  * platforms, but explicit init is clearer.
  *
- * @author: Roman Horshkov <https://github.com/RomanHorshkov>
- * @date:   2026
+ * @author  Roman Horshkov <https://github.com/RomanHorshkov>
+ * @date    may 2026
  */
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
@@ -163,23 +163,138 @@
  */
 #define V7_UNPACK_SEQ(word) ((uint16_t)((word) & V7_SEQ_MASK))
 
-/* Byte-level helpers and masks */
+/**
+ * @brief Generic 8-bit mask used when isolating a single byte from a wider
+ *        integer value.
+ *
+ * This constant is applied after right-shifting multi-byte fields so the
+ * result is truncated to one octet before storing into the output UUID byte
+ * array.
+ */
 #define V7_BYTE_MASK        0xFFu
-/* Get the n'th byte of the 48-bit ms (n in [0..5], 0 is most-significant) */
+
+/**
+ * @brief Extract one big-endian byte from the 48-bit Unix millisecond
+ *        timestamp used in the UUIDv7 output layout.
+ *
+ * The UUID stores the timestamp in bytes `0..5` in network order
+ * (most-significant byte first). This macro selects byte @p n from a
+ * timestamp value by shifting the requested octet into the low 8 bits and
+ * masking with `V7_BYTE_MASK`.
+ *
+ * Byte index mapping:
+ *
+ * - `n = 0`: most-significant timestamp byte
+ * - `n = 5`: least-significant timestamp byte
+ *
+ * @param ms
+ *     Unix timestamp in milliseconds.
+ * @param n
+ *     Byte index in the inclusive range `[0..5]`.
+ *
+ * @return Selected timestamp byte as `uint8_t`.
+ *
+ * @note Supplying an index outside `[0..5]` is a caller error.
+ */
 #define V7_MS_BYTE(ms, n)   ((uint8_t)((((uint64_t)(ms)) >> (8 * (5 - (n)))) & V7_BYTE_MASK))
 
-/* Sequence high/low helpers */
+/**
+ * @brief Bit shift used to obtain the high 4 bits of the 12-bit `rand_a`
+ *        sequence field.
+ *
+ * The UUIDv7 layout splits `rand_a` across two bytes:
+ *
+ * - `rand_a[11:8]` is stored in the low nibble of byte 6
+ * - `rand_a[7:0]` is stored in byte 7
+ *
+ * Shifting the 12-bit sequence right by 8 positions exposes the upper nibble
+ * before applying `V7_SEQ_HIGH_MASK`.
+ */
 #define V7_SEQ_HIGH_SHIFT   8u
+
+/**
+ * @brief Mask for the high 4-bit nibble of the 12-bit `rand_a` sequence field
+ *        after it has been shifted down to the low bits.
+ *
+ * With the current layout this mask equals `0x0F` and is used when composing
+ * UUID byte 6 together with the version nibble.
+ */
 #define V7_SEQ_HIGH_MASK    0x0Fu
+
+/**
+ * @brief Mask for the low 8 bits of the 12-bit `rand_a` sequence field.
+ *
+ * This mask isolates `rand_a[7:0]`, which are written directly into UUID byte
+ * 7.
+ */
 #define V7_SEQ_LOW_MASK     0xFFu
 
-/* Variant/rb masks */
+/**
+ * @brief Mask for the low 6 payload bits of UUID byte 8 after reserving the
+ *        top 2 bits for the RFC variant.
+ *
+ * UUID byte 8 is formed as:
+ *
+ * - bits `[7:6]`: variant bits (`10`)
+ * - bits `[5:0]`: high 6 bits of `rand_b`
+ *
+ * This mask keeps only the payload portion that may coexist with the variant
+ * marker in the same byte.
+ */
 #define V7_RB0_LOW6_MASK    0x3Fu
+
+/**
+ * @brief Pre-encoded RFC variant bits for UUID byte 8.
+ *
+ * The UUID variant required by RFC 4122 / RFC 9562 is binary `10` in the two
+ * most-significant bits of byte 8. OR-ing with this value sets bit 7 and
+ * leaves bit 6 cleared.
+ */
 #define V7_VARIANT_TOP      0x80u
 
-/* Sizes */
+/**
+ * @brief Number of random-tail bytes stored in the low 64 bits of the UUID
+ *        assembly buffer before variant adjustment.
+ *
+ * The implementation samples 8 random bytes, then overlays the variant bits in
+ * the first of those bytes when constructing bytes `8..15`.
+ */
 #define V7_RB_BYTES         8u
+
+/**
+ * @brief Number of bytes occupied by the UUIDv7 Unix millisecond timestamp.
+ *
+ * UUIDv7 stores a 48-bit timestamp, which corresponds to exactly 6 bytes in
+ * the binary output representation.
+ */
 #define V7_MS_BYTES         6u
+
+/**
+ * @brief Convert whole seconds to milliseconds.
+ *
+ * This macro is used when collapsing a `struct timespec` into a single Unix
+ * millisecond timestamp.
+ *
+ * @param sec
+ *     Whole-second component to convert.
+ *
+ * @return Equivalent millisecond count as `uint64_t`.
+ */
+#define SEC_TO_MSEC(sec)    ((uint64_t)(sec) * 1000ULL)
+
+/**
+ * @brief Convert nanoseconds to milliseconds using truncating integer
+ *        division.
+ *
+ * This preserves the intended millisecond-resolution behavior of the UUIDv7
+ * timestamp encoding.
+ *
+ * @param nsec
+ *     Nanosecond component to convert.
+ *
+ * @return Whole milliseconds extracted from @p nsec as `uint64_t`.
+ */
+#define NSEC_TO_MSEC(nsec)  ((uint64_t)(nsec) / 1000000ULL)
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -211,8 +326,8 @@ static _Thread_local int g_default_rng_error = 0;
 #ifdef UUID7_TESTING
 typedef uint64_t (*uuid7_time_fn_t)(void);
 
-static _Atomic uintptr_t g_uuid_time_ptr = (uintptr_t)0;
-static _Atomic int g_force_rng_fail = 0;
+static _Atomic uintptr_t g_uuid_time_ptr  = (uintptr_t)0;
+static _Atomic int       g_force_rng_fail = 0;
 
 int uuid7_test_set_time_fn(uuid7_time_fn_t fn)
 {
@@ -236,6 +351,11 @@ void uuid7_test_reset_state(void)
 }
 #endif
 
+/****************************************************************************
+ * PRIVATE INLINE FUNCTIONS
+ ****************************************************************************
+ */
+
 /* Helper: convert stored uintptr_t to function pointer */
 static inline uuid7_rng_function_t load_uuid_rng(void)
 {
@@ -258,9 +378,22 @@ static inline void store_uuid_rng(uuid7_rng_function_t fn)
 /**
  * @brief Returns current real time in milliseconds since Unix epoch.
  * 
- * @return uint64_t Current time in ms.
+ * @return uint64_t Current time in ms. On failure, return 0. 
  */
-static inline uint64_t _realtime_ms(void);
+static inline uint64_t _realtime_ms(void)
+{
+#ifdef UUID7_TESTING
+    uuid7_time_fn_t fn =
+        (uuid7_time_fn_t)(uintptr_t)atomic_load_explicit(&g_uuid_time_ptr, memory_order_acquire);
+    if(fn) return fn();
+#endif
+    /* returning 0 is a reasonable fallback since it produces valid UUIDs with a known timestamp.
+    * The sequence initialization logic will still ensure monotonicity and uniqueness. */
+    struct timespec ts;
+    if(clock_gettime(CLOCK_REALTIME, &ts) != 0) return (uint64_t)0;
+    
+    return SEC_TO_MSEC(ts.tv_sec) + NSEC_TO_MSEC(ts.tv_nsec);
+}
 
 /**
  * @brief Default RNG implementation: reads from /dev/urandom.
@@ -315,7 +448,7 @@ int uuid7_gen(uint8_t* out)
         /* Sample fresh 12-bit randomness for rand_a */
         uint16_t rnd = 0;
         if(_fill_random(&rnd, sizeof(rnd)) != 0) return -2;
-        
+
         rnd &= (uint16_t)V7_SEQ_MASK;
         /* prefer non-zero start */
         if(rnd == 0u) rnd = 1u;
@@ -337,7 +470,7 @@ int uuid7_gen(uint8_t* out)
                 uint64_t next_ms = prev_ms + 1ull;
                 uint16_t rnd2    = 0;
                 if(_fill_random(&rnd2, sizeof(rnd2)) != 0) return -2;
-                
+
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
                 /* prefer non-zero start */
                 if(rnd2 == 0u) rnd2 = 1u;
@@ -435,20 +568,6 @@ int uuid7_init(uuid7_rng_function_t fn)
  ****************************************************************************
  */
 
-static inline uint64_t _realtime_ms(void)
-{
-#ifdef UUID7_TESTING
-    uuid7_time_fn_t fn =
-        (uuid7_time_fn_t)(uintptr_t)atomic_load_explicit(&g_uuid_time_ptr, memory_order_acquire);
-    if(fn)
-    {
-        return fn();
-    }
-#endif
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
-}
 
 static void _default_rng(void* buf, size_t n)
 {
@@ -534,10 +653,8 @@ static inline int _fill_random(void* buf, size_t n)
     }
 
     fn(buf, n);
-    if(fn == _default_rng && g_default_rng_error != 0)
-    {
-        return -1;
-    }
+    if(fn == _default_rng && g_default_rng_error != 0) return -1;
+
     return 0;
 }
 
