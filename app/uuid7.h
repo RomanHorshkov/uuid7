@@ -23,7 +23,7 @@ extern "C"
  ****************************************************************************
  */
 
-#define UUID7_SIZE 16u
+#define UUID7_SIZE_BYTES 16u
 
 /****************************************************************************
  * PUBLIC STRUCTURED VARIABLES
@@ -65,7 +65,7 @@ int uuid7_gen(uint8_t* val);
  * @param[out] buf  Output buffer to fill with random bytes.
  * @param[in]  n    Number of bytes to generate.
  */
-typedef void (*uuid_rng_fn_t)(void* buf, const size_t n);
+typedef void (*uuid7_rng_function_t)(void* buf, const size_t n);
 
 /**
  * @brief Configure the RNG used by the UUID generator.
@@ -82,7 +82,7 @@ typedef void (*uuid_rng_fn_t)(void* buf, const size_t n);
  * @param[in] fn  RNG function pointer to use, or NULL to reset to default.
  * @return 0 on success, negative on error.
  */
-int uuid7_set_rng(uuid_rng_fn_t fn);
+int uuid7_set_rng(uuid7_rng_function_t fn);
 
 /**
  * @brief Explicitly initialize the UUID module and optionally configure the
@@ -101,7 +101,7 @@ int uuid7_set_rng(uuid_rng_fn_t fn);
  * @param[in] fn  Optional RNG function to use. If NULL, install default.
  * @return 0 on success, negative on error.
  */
-int uuid7_init(uuid_rng_fn_t fn);
+int uuid7_init(uuid7_rng_function_t fn);
 
 #ifdef __cplusplus
 }

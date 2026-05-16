@@ -148,14 +148,14 @@ void uuid7_test_reset_state(void)
 #endif
 
 /* Helper: convert stored uintptr_t to function pointer */
-static inline uuid_rng_fn_t load_uuid_rng(void)
+static inline uuid7_rng_function_t load_uuid_rng(void)
 {
     uintptr_t p = atomic_load_explicit(&g_uuid_rng_ptr, memory_order_acquire);
-    return (uuid_rng_fn_t)(uintptr_t)p;
+    return (uuid7_rng_function_t)(uintptr_t)p;
 }
 
 /* Helper: store function pointer into atomic slot */
-static inline void store_uuid_rng(uuid_rng_fn_t fn)
+static inline void store_uuid_rng(uuid7_rng_function_t fn)
 {
     uintptr_t p = (uintptr_t)fn;
     atomic_store_explicit(&g_uuid_rng_ptr, p, memory_order_release);
@@ -212,8 +212,10 @@ int uuid7_gen(uint8_t* out)
      * preserves monotonicity when needed (RFC-compatible approach). */
     for(;;)
     {
+        /* get time in ms */
         const uint64_t now_ms = _realtime_ms();
 
+        /* load previous ms stamp to compare with actual */
         uint64_t       prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
         const uint16_t prev_seq = V7_UNPACK_SEQ(prev);
@@ -223,20 +225,19 @@ int uuid7_gen(uint8_t* out)
 
         /* Sample fresh 12-bit randomness for rand_a */
         uint16_t rnd = 0;
-        if(_fill_random(&rnd, sizeof(rnd)) != 0)
-        {
-            return -2;
-        }
+        if(_fill_random(&rnd, sizeof(rnd)) != 0) return -2;
+        
         rnd &= (uint16_t)V7_SEQ_MASK;
-        if(rnd == 0u) rnd = 1u; /* prefer non-zero start */
+        /* prefer non-zero start */
+        if(rnd == 0u) rnd = 1u;
 
         uint64_t candidate = V7_PACK(use_ms, rnd);
 
         if(candidate <= prev)
         {
             /* Need to produce a strictly greater value.
-                * If prev_seq hasn't overflowed, increment prev.
-                * Otherwise advance ms by 1 and re-randomize seq. */
+            * If prev_seq hasn't overflowed, increment prev.
+            * Otherwise advance ms by 1 and re-randomize seq. */
             if(prev_seq != (uint16_t)V7_SEQ_MASK)
             {
                 candidate = prev + 1ull; /* increment seq, preserves monotonicity */
@@ -246,11 +247,10 @@ int uuid7_gen(uint8_t* out)
                 /* Overflow: move to next millisecond and sample a non-zero seq */
                 uint64_t next_ms = prev_ms + 1ull;
                 uint16_t rnd2    = 0;
-                if(_fill_random(&rnd2, sizeof(rnd2)) != 0)
-                {
-                    return -2;
-                }
+                if(_fill_random(&rnd2, sizeof(rnd2)) != 0) return -2;
+                
                 rnd2 &= (uint16_t)V7_SEQ_MASK;
+                /* prefer non-zero start */
                 if(rnd2 == 0u) rnd2 = 1u;
                 candidate = V7_PACK(next_ms, rnd2);
             }
@@ -304,7 +304,7 @@ int uuid7_gen(uint8_t* out)
     return 0;
 }
 
-int uuid7_set_rng(uuid_rng_fn_t fn)
+int uuid7_set_rng(uuid7_rng_function_t fn)
 {
     /* Accept NULL to reset to default RNG. Return 0 on success.
      * No error conditions currently; keep return negative only for future
@@ -322,7 +322,7 @@ int uuid7_set_rng(uuid_rng_fn_t fn)
     return 0;
 }
 
-int uuid7_init(uuid_rng_fn_t fn)
+int uuid7_init(uuid7_rng_function_t fn)
 {
     /* If caller provided an RNG, install it atomically. Otherwise attempt to
      * install the built-in default RNG if none is present. Use CAS to remain
@@ -433,7 +433,7 @@ static inline int _fill_random(void* buf, size_t n)
      * compare-exchange. This avoids races between first-callers and callers
      * of `uuid7_set_rng()`.
      */
-    uuid_rng_fn_t fn = load_uuid_rng();
+    uuid7_rng_function_t fn = load_uuid_rng();
     if(!fn)
     {
         uintptr_t expected = (uintptr_t)0;
@@ -461,5 +461,5 @@ static inline int _fill_random(void* buf, size_t n)
  * must equal total UUID size. Note: RB bytes include the first byte used for the
  * variant/top bits, so the number of tail bytes written after out[8] is
  * (V7_RB_BYTES - 1). The check below simplifies the arithmetic. */
-_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE,
+_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE_BYTES,
                "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");

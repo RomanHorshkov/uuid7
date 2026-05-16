@@ -67,7 +67,7 @@ Usage
 ```c
 #include "uuid7.h"
 
-uint8_t u[UUID7_SIZE];
+uint8_t u[UUID7_SIZE_BYTES];
 if (uuid7_gen(u) != 0) {
     /* handle error */
 }
