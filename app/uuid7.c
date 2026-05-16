@@ -431,16 +431,6 @@ static inline int _fill_random(void* buf, size_t n)
     return installed_rng_function(buf, n);
 }
 
-static int _store_uuid_candidate(const uint64_t prev_state, uint64_t candidate)
-{
-
-    if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev_state, candidate,
-                                                memory_order_acq_rel, memory_order_relaxed))
-        return 0; /* success */
-
-    return -1; /* CAS failed, caller should retry */
-}
-
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
@@ -473,7 +463,7 @@ int uuid7_gen(uint8_t* out)
     if(_fill_random(rb, V7_RB_BYTES) != 0) return -2;
 
     /* Prepare variables */
-    uint64_t use_ms; /* ms to use in generating uuid7 */
+    uint64_t use_ms;  /* ms to use in generating uuid7 */
     uint16_t use_seq; /* sequence to use in generating uuid7 */
     uint64_t candidate = 0;
 
@@ -530,13 +520,13 @@ int uuid7_gen(uint8_t* out)
                  */
                 candidate = V7_PACK(prev_ms + 1ULL, (uint16_t)0ULL);
             }
-
         }
 
         /**
          * Attempt to reserve the candidate in the global g_v7_state using CAS.
          */
-        if(_store_uuid_candidate(prev, candidate) != 0)
+        if(!atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate,
+                                                 memory_order_acq_rel, memory_order_relaxed))
         {
             /**
              * CAS failed because another thread reserved a UUID first.
