@@ -43,7 +43,7 @@
  * It is not the wire-format UUID by itself.
  *
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
- * @date    2026
+ * @date    may 2026
  * (c) 2026
  */
 
@@ -51,7 +51,7 @@
 #define UUID7_H
 
 #include <stddef.h> /* size_t */
-#include <stdint.h>
+#include <stdint.h> /* uintX_t */
 
 #ifdef __cplusplus
 extern "C"
