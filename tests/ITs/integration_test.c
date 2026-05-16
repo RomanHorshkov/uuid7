@@ -30,7 +30,7 @@ static _Atomic uint32_t g_fast_rng_state = 0x12345678u;
 static _Atomic uint64_t g_fake_time_ms = 0;
 static _Atomic uint32_t g_time_flip = 0;
 
-static void scripted_rng(void* buf, const size_t n)
+static int scripted_rng(void* buf, const size_t n)
 {
     uint8_t* out = (uint8_t*)buf;
     for(size_t i = 0; i < n; ++i)
@@ -44,6 +44,8 @@ static void scripted_rng(void* buf, const size_t n)
             out[i] = g_rng_ctx.fallback++;
         }
     }
+
+    return 0;
 }
 
 static void rng_load_script(const uint8_t* data, size_t len, uint8_t fallback_start)
@@ -59,10 +61,10 @@ static void rng_load_script(const uint8_t* data, size_t len, uint8_t fallback_st
     g_rng_ctx.script_len = len;
     g_rng_ctx.cursor = 0;
     g_rng_ctx.fallback = fallback_start;
-    uuid7_set_rng(scripted_rng);
+    uuid7_set_rng_func(scripted_rng);
 }
 
-static void fast_rng(void* buf, const size_t n)
+static int fast_rng(void* buf, const size_t n)
 {
     uint8_t* out = (uint8_t*)buf;
     for(size_t i = 0; i < n; ++i)
@@ -71,11 +73,14 @@ static void fast_rng(void* buf, const size_t n)
         v = v * 1103515245u + 12345u;
         out[i] = (uint8_t)(v >> 24);
     }
+
+    return 0;
 }
 
-static void zero_rng(void* buf, const size_t n)
+static int zero_rng(void* buf, const size_t n)
 {
     memset(buf, 0, n);
+    return 0;
 }
 
 static uint64_t fake_time_now(void)
@@ -215,7 +220,7 @@ static void test_overflow_advances_ms(void** state)
     (void)state;
     reset_state();
 
-    uuid7_set_rng(zero_rng);
+    uuid7_set_rng_func(zero_rng);
     set_fake_time(1000);
     uuid7_test_set_time_fn(fake_time_now);
 
@@ -267,7 +272,7 @@ static void test_rng_reset_to_default(void** state)
     uint8_t uuid[16] = {0};
     assert_int_equal(uuid7_gen(uuid), 0);
 
-    assert_int_equal(uuid7_set_rng(NULL), 0);
+    assert_int_equal(uuid7_set_rng_func(NULL), 0);
     const int rc = uuid7_gen(uuid);
     assert_true(rc == 0 || rc == -2);
     if(rc != 0) return;
@@ -308,7 +313,7 @@ static void test_default_rng_failure_returns_minus2(void** state)
     (void)state;
     reset_state();
 
-    assert_int_equal(uuid7_set_rng(NULL), 0);
+    assert_int_equal(uuid7_set_rng_func(NULL), 0);
     assert_int_equal(uuid7_test_set_default_rng_fail(1), 0);
 
     uint8_t uuid[16];
@@ -384,7 +389,7 @@ static void test_multithreaded_uniqueness(void** state)
     (void)state;
     reset_state();
 
-    uuid7_set_rng(fast_rng);
+    uuid7_set_rng_func(fast_rng);
 
     const size_t threads = 16u;
     const size_t per_thread = 100000u;
@@ -448,7 +453,7 @@ static void test_overflow_multiple_ms_advances(void** state)
     (void)state;
     reset_state();
 
-    uuid7_set_rng(zero_rng);
+    uuid7_set_rng_func(zero_rng);
     set_fake_time(1000);
     uuid7_test_set_time_fn(fake_time_now);
 
@@ -494,7 +499,7 @@ static void test_heavy_single_thread_uniqueness(void** state)
     (void)state;
     reset_state();
 
-    uuid7_set_rng(fast_rng);
+    uuid7_set_rng_func(fast_rng);
 
     const size_t total = 1000000u;
     uint8_t* all = calloc(total, 16u);
