@@ -43,23 +43,17 @@
 #    define _GNU_SOURCE
 #endif
 
-#include "uuid7.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdatomic.h>
 #include <string.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#if defined(__linux__)
+#ifdef __linux__
 #    include <sys/random.h>
-#    include <sys/syscall.h>
 #endif
 
-#ifndef _GNU_SOURCE
-#    define _GNU_SOURCE
-#endif
+#include "uuid7.h"
 
 /****************************************************************************
  * PRIVATE DEFINES
@@ -314,14 +308,10 @@
 static _Atomic uint64_t g_v7_state = 0;
 
 /* RNG function pointer stored atomically to avoid data races between
- * callers of `uuid7_gen()` and `uuid7_set_rng()`. Using uintptr_t for
+ * callers of `uuid7_gen()` and `uuid7_set_rng_func()`. Using uintptr_t for
  * atomicity avoids portable issues with atomic function-pointer types.
  */
 static _Atomic uintptr_t g_uuid_rng_ptr = (uintptr_t)0; /* 0 means not set */
-
-/* Thread-local error flag for the default RNG. Only meaningful when the
- * active RNG is `_default_rng()`. */
-static _Thread_local int g_default_rng_error = 0;
 
 #ifdef UUID7_TESTING
 typedef uint64_t (*uuid7_time_fn_t)(void);
@@ -347,28 +337,8 @@ void uuid7_test_reset_state(void)
     atomic_store_explicit(&g_uuid_rng_ptr, (uintptr_t)0, memory_order_release);
     atomic_store_explicit(&g_uuid_time_ptr, (uintptr_t)0, memory_order_release);
     atomic_store_explicit(&g_force_rng_fail, 0, memory_order_release);
-    g_default_rng_error = 0;
 }
 #endif
-
-/****************************************************************************
- * PRIVATE INLINE FUNCTIONS
- ****************************************************************************
- */
-
-/* Helper: convert stored uintptr_t to function pointer */
-static inline uuid7_rng_function_t load_uuid_rng(void)
-{
-    uintptr_t p = atomic_load_explicit(&g_uuid_rng_ptr, memory_order_acquire);
-    return (uuid7_rng_function_t)(uintptr_t)p;
-}
-
-/* Helper: store function pointer into atomic slot */
-static inline void store_uuid_rng(uuid7_rng_function_t fn)
-{
-    uintptr_t p = (uintptr_t)fn;
-    atomic_store_explicit(&g_uuid_rng_ptr, p, memory_order_release);
-}
 
 /****************************************************************************
  * PRIVATE FUNCTIONS PROTOTYPES
@@ -376,11 +346,53 @@ static inline void store_uuid_rng(uuid7_rng_function_t fn)
  */
 
 /**
+ * @brief Default RNG implementation: reads from /dev/urandom.
+ *
+ * On failure, this function sets a thread-local error flag and zero-fills
+ * any remaining bytes to avoid leaving uninitialized data in the UUID.
+ *
+ * @param buf  Output buffer.
+ * @param n    Number of bytes to fill.
+ * 
+ * @return 0 on success.
+ * @return negative on failure (e.g., if /dev/urandom cannot be read).
+ */
+static int _default_rng(void* buf, size_t n);
+
+/****************************************************************************
+ * PRIVATE INLINE FUNCTIONS
+ ****************************************************************************
+ */
+
+/**
+ * @brief Helper: load the current RNG function pointer atomically.
+ * 
+ * @return The currently configured RNG function, or NULL if none is set.
+ */
+static inline uuid7_rng_function_t _load_rng_func(void)
+{
+    return (uuid7_rng_function_t)(uintptr_t)atomic_load_explicit(&g_uuid_rng_ptr,
+                                                                 memory_order_acquire);
+}
+
+/**
+ * @brief Store a new RNG function pointer atomically.
+ * 
+ * @param fn The RNG function to set as the current RNG.
+ *           May be NULL to indicate no RNG configured.
+ */
+static inline void _set_rng_func(uuid7_rng_function_t fn)
+{
+    atomic_store_explicit(&g_uuid_rng_ptr, (uintptr_t)fn, memory_order_release);
+    return;
+}
+
+/**
  * @brief Returns current real time in milliseconds since Unix epoch.
  * 
  * @return uint64_t Current time in ms. On failure, return 0. 
  */
-static inline uint64_t _realtime_ms(void)
+static inline uint64_t _get_realtime_ms(void)
 {
 #ifdef UUID7_TESTING
     uuid7_time_fn_t fn =
@@ -391,40 +403,79 @@ static inline uint64_t _realtime_ms(void)
     * The sequence initialization logic will still ensure monotonicity and uniqueness. */
     struct timespec ts;
     if(clock_gettime(CLOCK_REALTIME, &ts) != 0) return (uint64_t)0;
-    
+
     return SEC_TO_MSEC(ts.tv_sec) + NSEC_TO_MSEC(ts.tv_nsec);
 }
 
 /**
- * @brief Default RNG implementation: reads from /dev/urandom.
- *
- * On failure, this function sets a thread-local error flag and zero-fills
- * any remaining bytes to avoid leaving uninitialized data in the UUID.
- *
- * @param buf  Output buffer.
- * @param n    Number of bytes to fill.
- */
-static void _default_rng(void* buf, size_t n);
-
-/**
- * @brief Helper: call the configured RNG.
+ * @brief Call the configured with uuid7_set_rng_func RNG function to write to @p buf.
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  * @return 0 on success, negative on error (only detectable for default RNG).
  */
-static inline int _fill_random(void* buf, size_t n);
+static inline int _fill_random(void* buf, size_t n)
+{
+    /* get rng function */
+    uuid7_rng_function_t installed_rng_function = _load_rng_func();
+
+    if(!installed_rng_function)
+    {
+        /* install default if nothing set */
+        uuid7_set_rng_func(_default_rng);
+
+        /* get again */
+        installed_rng_function = _load_rng_func();
+    }
+
+    /* call the RNG function */
+    return installed_rng_function(buf, n);
+}
+
+static int _store_uuid_candidate(const uint64_t prev_state, uint64_t candidate)
+{
+
+    if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev_state, candidate,
+                                                memory_order_acq_rel, memory_order_relaxed))
+        return 0; /* success */
+
+    return -1; /* CAS failed, caller should retry */
+}
 
 /****************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
  ****************************************************************************
  */
 
+void uuid7_init(uuid7_rng_function_t fn)
+{
+    /* Always call this to set the rng function.
+    If a function is passed, it will be used;
+    otherwise, the default RNG is used. */
+    uuid7_set_rng_func(fn);
+
+    return;
+}
+
 int uuid7_gen(uint8_t* out)
 {
+    /* Check input */
     if(!out) return -1;
 
-    uint64_t use_ms;
-    uint16_t seq12;
+    /**
+     * random tail: V7_RB_BYTES bytes of CSPRNG entropy.
+     * 
+     * Fill the random tail before reserving the monotonic state.
+     *
+     * If RNG fails, return without advancing g_v7_state.
+     * This avoids burning sequence numbers on failed generations.
+     */
+    uint8_t rb[V7_RB_BYTES];
+    if(_fill_random(rb, V7_RB_BYTES) != 0) return -2;
+
+    /* Prepare variables */
+    uint64_t use_ms; /* ms to use in generating uuid7 */
+    uint16_t use_seq; /* sequence to use in generating uuid7 */
+    uint64_t candidate = 0;
 
     /* Reserve strictly increasing (ms,rand_a) using a CAS loop.
      * Strategy: sample fresh 12-bit randomness for each candidate. If the
@@ -434,67 +485,75 @@ int uuid7_gen(uint8_t* out)
      * preserves monotonicity when needed (RFC-compatible approach). */
     for(;;)
     {
-        /* get time in ms */
-        const uint64_t now_ms = _realtime_ms();
+        /* get actual time in ms */
+        const uint64_t now_ms = _get_realtime_ms();
 
-        /* load previous ms stamp to compare with actual */
+        /* load previous candidate */
         uint64_t       prev     = atomic_load_explicit(&g_v7_state, memory_order_relaxed);
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
         const uint16_t prev_seq = V7_UNPACK_SEQ(prev);
 
-        /* clamp to non-decreasing ms */
-        use_ms = (now_ms >= prev_ms) ? now_ms : prev_ms;
-
-        /* Sample fresh 12-bit randomness for rand_a */
-        uint16_t rnd = 0;
-        if(_fill_random(&rnd, sizeof(rnd)) != 0) return -2;
-
-        rnd &= (uint16_t)V7_SEQ_MASK;
-        /* prefer non-zero start */
-        if(rnd == 0u) rnd = 1u;
-
-        uint64_t candidate = V7_PACK(use_ms, rnd);
-
-        if(candidate <= prev)
+        /* Clock moved forward */
+        if(now_ms > prev_ms)
         {
-            /* Need to produce a strictly greater value.
-            * If prev_seq hasn't overflowed, increment prev.
-            * Otherwise advance ms by 1 and re-randomize seq. */
-            if(prev_seq != (uint16_t)V7_SEQ_MASK)
+            /* Start the new (actual) millisecond from rand_a sequence 0. */
+            candidate = V7_PACK(now_ms, (uint16_t)0ULL);
+        }
+
+        /**
+         * Same millisecond, clock rollback, or logical time already ahead.
+         * Preserve monotonicity by continuing from previous state.
+         */
+        else
+        {
+            /* rand_a 12 bits sequence is NOT exhausted */
+            if(prev_seq < (uint16_t)V7_SEQ_MASK)
             {
-                candidate = prev + 1ull; /* increment seq, preserves monotonicity */
+                /**
+                 * Keep the previous ms and increment the sequence by 1
+                 * to get the next candidate. 
+                 * This is the common case when multiple UUIDs are generated within the same ms,
+                 * or when the clock is stable but not advancing (e.g., due to NTP adjustments
+                 * or low-resolution timers).
+                 * By incrementing the sequence, ensure that the next UUID is strictly greater
+                 * than the previous while still using the same timestamp.
+                 */
+                candidate = V7_PACK(prev_ms, (uint16_t)(prev_seq + 1u));
             }
+
+            /* rand_a 12 bits sequence is exhausted */
             else
             {
-                /* Overflow: move to next millisecond and sample a non-zero seq */
-                uint64_t next_ms = prev_ms + 1ull;
-                uint16_t rnd2    = 0;
-                if(_fill_random(&rnd2, sizeof(rnd2)) != 0) return -2;
-
-                rnd2 &= (uint16_t)V7_SEQ_MASK;
-                /* prefer non-zero start */
-                if(rnd2 == 0u) rnd2 = 1u;
-                candidate = V7_PACK(next_ms, rnd2);
+                /**
+                 * Move logical timestamp forward by one millisecond.
+                 * Start the new millisecond from rand_a sequence 0.
+                 */
+                candidate = V7_PACK(prev_ms + 1ULL, (uint16_t)0ULL);
             }
+
         }
 
-        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate,
-                                                 memory_order_acq_rel, memory_order_relaxed))
+        /**
+         * Attempt to reserve the candidate in the global g_v7_state using CAS.
+         */
+        if(_store_uuid_candidate(prev, candidate) != 0)
         {
-            seq12  = (uint16_t)(candidate & V7_SEQ_MASK);
-            use_ms = V7_UNPACK_MS(candidate);
-            break;
+            /**
+             * CAS failed because another thread reserved a UUID first.
+             * Retry from the new global state.
+             */
+            continue;
         }
-        /* else: CAS failed, loop and try again */
-    }
 
-    /* random tail: V7_RB_BYTES bytes of CSPRNG entropy. Some bits are
-     * consumed by the version/variant fields above, the remainder form the
-     * variable/random tail of the UUID. */
-    uint8_t rb[V7_RB_BYTES];
-    if(_fill_random(rb, V7_RB_BYTES) != 0)
-    {
-        return -2;
+        /**
+         * CAS succeeded:
+         * use_ms and use_seq reserved for this uuid7
+         */
+        use_ms  = V7_UNPACK_MS(candidate);
+        use_seq = V7_UNPACK_SEQ(candidate);
+
+        /* Exit the loop */
+        break;
     }
 
     /* UUIDv7 (RFC4122bis):
@@ -511,8 +570,8 @@ int uuid7_gen(uint8_t* out)
 
     /* version 7 in high nibble | top 4 bits of sequence */
     out[6] = (uint8_t)(((0x7u & V7_BYTE_MASK) << 4) |
-                       ((uint8_t)((seq12 >> V7_SEQ_HIGH_SHIFT) & V7_SEQ_HIGH_MASK)));
-    out[7] = (uint8_t)((uint8_t)seq12 & V7_SEQ_LOW_MASK);
+                       ((uint8_t)((use_seq >> V7_SEQ_HIGH_SHIFT) & V7_SEQ_HIGH_MASK)));
+    out[7] = (uint8_t)((uint8_t)use_seq & V7_SEQ_LOW_MASK);
 
     /* variant (10xxxxxx) | top 6 bits of rb[0] */
     out[8] = (uint8_t)((rb[0] & V7_RB0_LOW6_MASK) | V7_VARIANT_TOP);
@@ -526,41 +585,12 @@ int uuid7_gen(uint8_t* out)
     return 0;
 }
 
-int uuid7_set_rng(uuid7_rng_function_t fn)
+void uuid7_set_rng_func(uuid7_rng_function_t fn)
 {
-    /* Accept NULL to reset to default RNG. Return 0 on success.
-     * No error conditions currently; keep return negative only for future
-     * extensibility. The atomic store makes this safe to call concurrently
-     * with `uuid7_gen()`.
-     */
-    if(fn)
-    {
-        store_uuid_rng(fn);
-    }
-    else
-    {
-        store_uuid_rng(_default_rng);
-    }
-    return 0;
-}
-
-int uuid7_init(uuid7_rng_function_t fn)
-{
-    /* If caller provided an RNG, install it atomically. Otherwise attempt to
-     * install the built-in default RNG if none is present. Use CAS to remain
-     * idempotent and thread-safe.
-     */
-    if(fn)
-    {
-        store_uuid_rng(fn);
-        return 0;
-    }
-
-    uintptr_t expected = (uintptr_t)0;
-    uintptr_t desired  = (uintptr_t)_default_rng;
-    atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
-                                            memory_order_acq_rel, memory_order_relaxed);
-    return 0;
+    /* Set the RNG function to user if given,
+    otherwise set to default */
+    _set_rng_func(fn ? fn : _default_rng);
+    return;
 }
 
 /****************************************************************************
@@ -568,93 +598,74 @@ int uuid7_init(uuid7_rng_function_t fn)
  ****************************************************************************
  */
 
-
-static void _default_rng(void* buf, size_t n)
+static int _default_rng(void* out_buf, size_t n)
 {
-    g_default_rng_error = 0;
-    if(!buf || n == 0) return;
 #ifdef UUID7_TESTING
     if(atomic_load_explicit(&g_force_rng_fail, memory_order_acquire))
     {
-        g_default_rng_error = -1;
-        memset(buf, 0, n);
-        return;
+        memset(out_buf, 0, n);
+        return -1;
     }
-#endif
-#if defined(__linux__)
-    /* Try getrandom(2) in a loop */
+#endif /* UUID7_TESTING */
+
+#ifdef __linux__
+    /* Try getrandom(2) in a loop,
+     * letting the kernel fill up random bytes */
     size_t off = 0;
     while(off < n)
     {
-        ssize_t r = syscall(SYS_getrandom, (char*)buf + off, n - off, 0);
+        ssize_t r = getrandom((char*)out_buf + off, n - off, 0);
         if(r < 0)
         {
+            /* consider syscall interrupt as retry */
             if(errno == EINTR) continue;
-            break; /* fall back to /dev/urandom */
+            /* fall back to /dev/urandom */
+            break;
         }
+        /* shouldn't happen, but treat as failure if it does */
+        if(r == 0) break;
+
+        /* sum written bytes */
         off += (size_t)r;
     }
-    if(off == n) return;
+    /* filled all the necessary bytes */
+    if(off == n) return 0;
 #else
     size_t off = 0;
-#endif
+#endif /* __linux__*/
+
     /* Fallback: read from /dev/urandom */
-    int fd = open("/dev/urandom", O_RDONLY);
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
     if(fd < 0)
     {
-        g_default_rng_error = -1;
-        memset((char*)buf + off, 0, n - off);
-        return;
+        memset((char*)out_buf + off, 0, n - off);
+        return -1;
     }
+    /* Fill remaining bytes */
     size_t off2 = 0;
     while(off2 < (n - off))
     {
-        ssize_t r = read(fd, (char*)buf + off + off2, n - off - off2);
+        ssize_t r = read(fd, (char*)out_buf + off + off2, n - off - off2);
         if(r < 0)
         {
+            /* consider syscall interrupt as retry */
             if(errno == EINTR) continue;
+            /* close fd and set out_buf to zero */
             close(fd);
-            g_default_rng_error = -1;
-            memset((char*)buf + off + off2, 0, n - off - off2);
-            return;
+            memset((char*)out_buf + off + off2, 0, n - off - off2);
+            return -1;
         }
         if(r == 0)
         {
+            /* close fd and set out_buf to zero */
             close(fd);
-            g_default_rng_error = -1;
-            memset((char*)buf + off + off2, 0, n - off - off2);
-            return;
+            memset((char*)out_buf + off + off2, 0, n - off - off2);
+            return -1;
         }
+        /* sum written bytes */
         off2 += (size_t)r;
     }
     close(fd);
-    return;
-}
-
-static inline int _fill_random(void* buf, size_t n)
-{
-    if(!buf) return -1;
-    if(n == 0) return 0;
-
-    /* Load the current RNG function pointer atomically. If it hasn't been
-     * set yet, attempt to install the default RNG once using a
-     * compare-exchange. This avoids races between first-callers and callers
-     * of `uuid7_set_rng()`.
-     */
-    uuid7_rng_function_t fn = load_uuid_rng();
-    if(!fn)
-    {
-        uintptr_t expected = (uintptr_t)0;
-        uintptr_t desired  = (uintptr_t)_default_rng;
-        atomic_compare_exchange_strong_explicit(&g_uuid_rng_ptr, &expected, desired,
-                                                memory_order_acq_rel, memory_order_relaxed);
-        fn = load_uuid_rng();
-        if(!fn) fn = _default_rng; /* fallback, should not happen */
-    }
-
-    fn(buf, n);
-    if(fn == _default_rng && g_default_rng_error != 0) return -1;
-
     return 0;
 }
 
@@ -663,9 +674,10 @@ static inline int _fill_random(void* buf, size_t n)
  ****************************************************************************
  */
 
-/* Compile-time sanity check: MS bytes + 2 (version+seq bytes) + remaining RB bytes
- * must equal total UUID size. Note: RB bytes include the first byte used for the
- * variant/top bits, so the number of tail bytes written after out[8] is
- * (V7_RB_BYTES - 1). The check below simplifies the arithmetic. */
+/* Compile-time sanity check: MS bytes + 2 (version + seq bytes) + remaining
+ * RB bytes must equal total UUID size.
+ * Note: RB bytes include the first byte used for the variant/top bits, so
+ * the number of tail bytes written after out[8] is (V7_RB_BYTES - 1).
+ * The check below simplifies the arithmetic. */
 _Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE_BYTES,
                "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");
