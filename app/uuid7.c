@@ -66,12 +66,101 @@
  ****************************************************************************
  */
 
-/* Packing helpers: make shifts/masks explicit and readable */
+/**
+ * @brief Width in bits of the UUIDv7 `rand_a` / sequence field stored in the
+ *        internal monotonic state word.
+ *
+ * The generator keeps its monotonic reservation state in a single 64-bit
+ * integer with this logical layout:
+ *
+ * - bits `[63:12]`: Unix timestamp in milliseconds
+ * - bits `[11:0]` : 12-bit sequence / `rand_a` value
+ *
+ * This constant defines the width of the low-order sequence field. It is used
+ * by the packing, unpacking, and masking helpers below.
+ *
+ * @note A value of `12` matches the UUIDv7 `rand_a` field width defined by the
+ *       format used in this module.
+ */
 #define V7_SEQ_BITS         12u
+
+/**
+ * @brief Bitmask for extracting or constraining the low 12-bit sequence field.
+ *
+ * Expands to a mask with the lowest `V7_SEQ_BITS` bits set to `1`. With the
+ * current configuration this is equivalent to `0x0FFF`.
+ *
+ * Typical uses:
+ *
+ * - keep only the valid low 12 bits of a candidate sequence value
+ * - extract the stored sequence from a packed state word
+ *
+ * @note Any bits above bit 11 are cleared when this mask is applied.
+ */
 #define V7_SEQ_MASK         ((1ull << V7_SEQ_BITS) - 1ull)
+
+/**
+ * @brief Left-shift, in bits, applied to the millisecond timestamp when
+ *        packing the internal monotonic state word.
+ *
+ * Since the lower `V7_SEQ_BITS` bits are reserved for the sequence field, the
+ * timestamp is shifted left by exactly that amount so both values occupy
+ * disjoint bit ranges inside one 64-bit integer.
+ */
 #define V7_MS_SHIFT         V7_SEQ_BITS
+
+/**
+ * @brief Pack a millisecond timestamp and 12-bit sequence into one 64-bit
+ *        monotonic state word.
+ *
+ * Resulting bit layout:
+ *
+ * - upper bits: `ms`
+ * - lower 12 bits: `seq & V7_SEQ_MASK`
+ *
+ * Expanded form:
+ * `(((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))`
+ *
+ * @param ms
+ *     Unix timestamp in milliseconds. It is cast to `uint64_t` before being
+ *     shifted into the upper portion of the packed word.
+ * @param seq
+ *     Sequence / `rand_a` candidate. Only its low 12 bits are preserved; any
+ *     higher bits are discarded by `V7_SEQ_MASK`.
+ *
+ * @return 64-bit packed value suitable for atomic comparison and storage in
+ *         `g_v7_state`.
+ *
+ * @note This macro packs the module's internal `(ms, seq)` reservation state.
+ *       It does not by itself produce the final 16-byte UUID representation.
+ */
 #define V7_PACK(ms, seq)    (((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))
+
+/**
+ * @brief Extract the millisecond timestamp from a packed monotonic state word.
+ *
+ * This reverses the timestamp portion of `V7_PACK()` by shifting the input
+ * right by `V7_MS_SHIFT` bits and discarding the low sequence field.
+ *
+ * @param word
+ *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
+ *
+ * @return The unpacked Unix timestamp in milliseconds as `uint64_t`.
+ */
 #define V7_UNPACK_MS(word)  ((uint64_t)(word) >> V7_MS_SHIFT)
+
+/**
+ * @brief Extract the low 12-bit sequence field from a packed monotonic state
+ *        word.
+ *
+ * This reverses the sequence portion of `V7_PACK()` by masking the low
+ * `V7_SEQ_BITS` bits and casting the result to `uint16_t`.
+ *
+ * @param word
+ *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
+ *
+ * @return The unpacked 12-bit sequence / `rand_a` value as `uint16_t`.
+ */
 #define V7_UNPACK_SEQ(word) ((uint16_t)((word) & V7_SEQ_MASK))
 
 /* Byte-level helpers and masks */
