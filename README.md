@@ -19,6 +19,7 @@ Project layout
 - `app/uuid7.c` — UUIDv7 generator implementation.
 - `utils/` — Build, packaging, test, and coverage scripts.
 - `tests/ITs/` — Integration tests.
+- `tests/stress/` — Single-thread and multi-thread stress benchmarks.
 - `build/` — Build output directory.
 
 Build
@@ -62,10 +63,31 @@ Coverage outputs:
 - `tests/results/ITs/ITs_all_coverage.xml`
 - `tests/results/ITs/coverage-summary.json`
 
+Stress Benchmarks
+
+The stress script builds the library first, links dedicated benchmark binaries
+against the produced static library, and writes human-readable result files.
+
+Run:
+
+```sh
+./utils/make_stress.sh
+```
+
+Benchmark outputs:
+
+- `tests/results/stress/stress_result.txt`
+- `tests/results/stress/stress_mt_result.txt`
+
 Usage
 
 ```c
 #include "uuid7.h"
+
+/* Optional: restore monotonic state from the last persisted UUIDv7. */
+if (uuid7_init(NULL, last_uuid) != 0) {
+    /* handle invalid imported UUID */
+}
 
 uint8_t u[UUID7_SIZE_BYTES];
 if (uuid7_gen(u) != 0) {

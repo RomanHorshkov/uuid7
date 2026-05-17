@@ -103,19 +103,28 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
  * pointer which will be used to generate cryptographically secure bytes.
  * If @p fn is NULL the module will install the built-in default RNG. Custom
  * RNG callbacks must return `0` on success and a negative value on failure.
- * If @p last_gen_uuid7 is not NULL, it should point to a previously generated
- * UUIDv7 value whose state will be used to initialize the generator.
+ * If @p last_gen_uuid7 is not NULL, it must point to a valid previously
+ * generated UUIDv7 value whose `(timestamp, seq)` pair will be used as a
+ * monotonic floor for the generator. Importing an older UUID never moves the
+ * internal state backward; it only raises the floor when needed.
  *
- * The function is idempotent and thread-safe. Typical usage: call
- * `uuid7_init()` or pass a custom RNG callback before creating application
- * threads.
+ * The function is thread-safe. Repeated calls with the same arguments are
+ * safe, and imported state is applied using raise-only semantics so monotonic
+ * generation is preserved even if initialization happens after UUIDs have
+ * already been produced.
+ *
+ * Typical usage: call `uuid7_init()` before creating application threads, and
+ * pass the last persisted UUIDv7 if you want monotonicity to continue across
+ * process restarts.
  *
  * @param[in] fn  Optional RNG function to use. NULL to install default.
- * @param[in] last_gen_uuid7 Last generated uuid7 to set the state (optional).
+ * @param[in] last_gen_uuid7 Last generated UUIDv7 used to raise the internal
+ *                           monotonic floor (optional).
  * @return 0 on success.
- * @return -1 on failure.
+ * @return -2 if @p last_gen_uuid7 does not encode UUID version 7.
+ * @return -3 if @p last_gen_uuid7 does not encode the RFC variant bits.
  */
-int uuid7_init(uuid7_rng_function_t fn, void *last_gen_uuid7);
+int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
 
 /**
  * @brief Generate an UUIDv7 value.
@@ -154,7 +163,6 @@ int uuid7_gen(void *out_buf);
  *
  * @param[in] fn  RNG function pointer to use, or NULL to reset to default.
  * @return 0 on success.
- * @return -1 on failure.
  */
 int uuid7_set_rng_func(uuid7_rng_function_t fn);
 
