@@ -2,8 +2,6 @@ name: integration-tests
 
 on:
   push:
-    branches:
-      - master
   pull_request:
   workflow_dispatch:
 
@@ -16,8 +14,9 @@ concurrency:
 
 jobs:
   it:
-    name: Integration test (manual script)
+    name: Integration tests + coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -31,17 +30,47 @@ jobs:
           ./utils/make_ITs.sh
 
       - name: Upload integration result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: integration-result
+          if-no-files-found: warn
           path: |
             tests/results/ITs/integration_result.txt
 
       - name: Upload IT coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: it-coverage
+          if-no-files-found: warn
           path: |
             tests/results/ITs/ITs_all_coverage.html
             tests/results/ITs/ITs_all_coverage.xml
             tests/results/ITs/coverage-summary.json
+
+  stress:
+    name: Stress benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build + run stress benchmarks
+        run: |
+          ./utils/make_stress.sh
+
+      - name: Upload stress results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-results
+          if-no-files-found: warn
+          path: |
+            tests/results/stress/stress_result.txt
+            tests/results/stress/stress_mt_result.txt

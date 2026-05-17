@@ -2,8 +2,6 @@ name: ci
 
 on:
   push:
-    branches:
-      - master
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +16,7 @@ jobs:
   deb-package:
     name: Build .deb package
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +30,10 @@ jobs:
           ./utils/make_deb.sh
 
       - name: Upload .deb artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
+          if-no-files-found: error
           path: |
             build/debs/*.deb
