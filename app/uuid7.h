@@ -132,7 +132,7 @@ int uuid7_init(uuid7_rng_function_t fn);
  * @return -2 if the active RNG reports failure or the built-in default
  *         RNG cannot provide entropy.
  */
-int uuid7_gen(void* out_buf);
+int uuid7_gen(void * out_buf);
 
 /**
  * @brief Configure the RNG used by the UUID generator.

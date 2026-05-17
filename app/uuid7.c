@@ -88,7 +88,7 @@
  *
  * @note Any bits above bit 11 are cleared when this mask is applied.
  */
-#define V7_SEQ_MASK         ((1ull << V7_SEQ_BITS) - 1ull)
+#define V7_SEQ_MASK         ((UINT64_C(1) << V7_SEQ_BITS) - UINT64_C(1))
 
 /**
  * @brief Left-shift, in bits, applied to the millisecond timestamp when
@@ -271,7 +271,7 @@
  *
  * @return Equivalent millisecond count as `uint64_t`.
  */
-#define SEC_TO_MSEC(sec)    ((uint64_t)(sec) * 1000ULL)
+#define SEC_TO_MSEC(sec)    ((uint64_t)(sec) * UINT64_C(1000))
 
 /**
  * @brief Convert nanoseconds to milliseconds using truncating integer
@@ -285,7 +285,7 @@
  *
  * @return Whole milliseconds extracted from @p nsec as `uint64_t`.
  */
-#define NSEC_TO_MSEC(nsec)  ((uint64_t)(nsec) / 1000000ULL)
+#define NSEC_TO_MSEC(nsec)  ((uint64_t)(nsec) / UINT64_C(1000000))
 
 /****************************************************************************
  * PRIVATE STUCTURED VARIABLES
@@ -451,7 +451,7 @@ int uuid7_init(uuid7_rng_function_t fn)
     return uuid7_set_rng_func(fn);
 }
 
-int uuid7_gen(void * out_buf)
+int uuid7_gen(void *out_buf)
 {
     /* Check input */
     if(!out_buf) return -1;
@@ -502,7 +502,7 @@ int uuid7_gen(void * out_buf)
         if(now_ms > prev_ms)
         {
             /* Start the new (actual) millisecond from rand_a sequence 0. */
-            candidate = V7_PACK(now_ms, (uint16_t)0ULL);
+            candidate = V7_PACK(now_ms, 0u);
         }
 
         /**
@@ -523,7 +523,7 @@ int uuid7_gen(void * out_buf)
                  * By incrementing the sequence, ensure that the next UUID is strictly greater
                  * than the previous while still using the same timestamp.
                  */
-                candidate = V7_PACK(prev_ms, (uint16_t)(prev_seq + 1u));
+                candidate = V7_PACK(prev_ms, (prev_seq + 1u));
             }
 
             /* rand_a 12 bits sequence is exhausted */
@@ -533,7 +533,7 @@ int uuid7_gen(void * out_buf)
                  * Move logical timestamp forward by one millisecond.
                  * Start the new millisecond from rand_a sequence 0.
                  */
-                candidate = V7_PACK(prev_ms + 1ULL, (uint16_t)0ULL);
+                candidate = V7_PACK((prev_ms + 1ULL), 0u);
             }
         }
 
