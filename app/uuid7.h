@@ -2,8 +2,11 @@
  * @file uuid7.h
  * @brief Binary UUIDv7 generation interface with thread-safe monotonic ordering.
  *
+ * 
  * UUIDv7 byte / bit layout
  *
+ * @code
+ * @brief Byte mapping:
  * 
  * Byte: 0...
  *  +----.----+----.----+ ...
@@ -11,20 +14,19 @@
  * Bits count 0:47
  * Bits length 12
  * 
- * @code
- * @brief Byte mapping:
  *
  *       0         1         2         3         4         5         6         7
  *  +----.----+----.----+----.----+----.----+----.----+----.----+----.----+----.----+
  *  |                         unix_ts_ms                        |ver |    rand_a    |
  *                               0:47                           48:51     52:63
- *                                6                               2         12
+ *                                48                              4         12
  *
+ * 
  *       8         9         10        11        12        13        14        15
  *  +----.----+----.----+----.----+----.----+----.----+----.----+----.----+----.----+
- *  |var |                         rand_b                                           |
+ *  |var |                            rand_b                                        |
  *  64:65                             66:127
- *  2                                   62
+ *    2                                 62
  *
  *
  *  bytes 0..5  : unix_ts_ms, big-endian, 48 bits
@@ -35,10 +37,6 @@
  *
  * @endcode
  *
- * This internal 64-bit packed state is used only to guarantee monotonic,
- * non-decreasing `(timestamp, rand_a)` reservations across concurrent calls.
- * It is not the wire-format UUID by itself.
- *
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
  * @date    may 2026
  * (c) 2026
@@ -48,7 +46,6 @@
 #define UUID7_H
 
 #include <stddef.h> /* size_t */
-#include <stdint.h> /* uintX_t */
 
 #ifdef __cplusplus
 extern "C"
@@ -108,39 +105,40 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
  * RNG callbacks must return `0` on success and a negative value on failure.
  *
  * The function is idempotent and thread-safe. Typical usage: call
- * `uuid7_init(randombytes_buf)` after any global CSPRNG libraries (e.g.,
- * libsodium's `sodium_init()`) are initialized and before creating
- * application threads.
+ * `uuid7_init()` or pass a custom RNG callback before creating application
+ * threads.
  *
  * @param[in] fn  Optional RNG function to use. NULL to install default.
+ * @return 0 on success.
+ * @return -1 on failure.
  */
-void uuid7_init(uuid7_rng_function_t fn);
+int uuid7_init(uuid7_rng_function_t fn);
 
 /**
- * @brief Generate a UUIDv7 value.
+ * @brief Generate an UUIDv7 value.
  *
  * Produces a 16-byte RFC-v7 style UUID into the provided buffer.
- * The caller must supply a buffer of at least 16 bytes.
+ * The caller must supply a buffer of at least UUID7_SIZE_BYTES bytes.
  * The function is safe to call concurrently from multiple threads,
  * uses an atomic CAS to reserve a monotonic (ms,seq) pair).
- * If more than 4095 UUIDs are generated within the same millisecond,
- * the generator advances the logical millisecond by 1 to preserve
- * monotonicity; this may embed a timestamp slightly ahead of wall
- * clock time under extreme burst rates.
+ * If 4096 UUIDs are reserved for the same millisecond and another UUID is
+ * needed, the generator advances the logical millisecond by 1 to preserve
+ * monotonicity; this may embed a timestamp slightly ahead of wall clock
+ * time under extreme burst rates.
  *
- * @param[out] val  Output buffer, must be at least 16 bytes.
- * @return 0 on success
- * @return -1 if @p val is NULL,
+ * @param[out] out_buf  Output buffer, at least UUID7_SIZE_BYTES bytes.
+ * @return 0 on success.
+ * @return -1 if @p out_buf is NULL.
  * @return -2 if the active RNG reports failure or the built-in default
  *         RNG cannot provide entropy.
  */
-int uuid7_gen(uint8_t* val);
+int uuid7_gen(void* out_buf);
 
 /**
  * @brief Configure the RNG used by the UUID generator.
  *
  * If @p fn is non-NULL the UUID module will call this function to obtain
- * random bytes for sequence initialization and for the random tail.
+ * random bytes for the random tail.
  * If @p fn is NULL the module will reset to the built-in default RNG which
  * reads system entropy (getrandom(2) on Linux or /dev/urandom on fallback).
  * 
@@ -152,8 +150,10 @@ int uuid7_gen(uint8_t* val);
  * function pointer.
  *
  * @param[in] fn  RNG function pointer to use, or NULL to reset to default.
+ * @return 0 on success.
+ * @return -1 on failure.
  */
-void uuid7_set_rng_func(uuid7_rng_function_t fn);
+int uuid7_set_rng_func(uuid7_rng_function_t fn);
 
 #ifdef __cplusplus
 }
