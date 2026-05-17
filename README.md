@@ -3,6 +3,8 @@ UUID7 — Compact C implementation of UUIDv7
 
 [![Deb Package](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml)
 [![Build + Tests](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml)
+[![Release](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml)
+[![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/UUID7?sort=semver)](https://github.com/RomanHorshkov/UUID7/tags)
 [![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](#stress-benchmarks)
 
 Overview
@@ -41,6 +43,11 @@ Build Debian package:
 ```sh
 ./utils/make_deb.sh
 ```
+
+Release process
+
+Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
+merge, tag, and publish flow.
 
 Testing (heavy + coverage)
 

@@ -1,0 +1,92 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-release-assets:
+    name: Build release assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config fakeroot
+
+      - name: Read version
+        id: version
+        run: |
+          echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          EXPECTED_TAG="v${{ steps.version.outputs.value }}"
+          ACTUAL_TAG="${GITHUB_REF_NAME}"
+          if [ "$ACTUAL_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Tag/version mismatch: expected $EXPECTED_TAG but got $ACTUAL_TAG"
+            exit 1
+          fi
+
+      - name: Build libraries
+        run: |
+          ./utils/make_libs.sh
+
+      - name: Build Debian package
+        run: |
+          ./utils/make_deb.sh
+
+      - name: Assemble release bundle
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          STAGE_DIR="build/release-stage/uuid7-${VER}"
+          BUNDLE_DIR="build/release-bundle"
+          mkdir -p "${STAGE_DIR}/include" "${STAGE_DIR}/lib" "${BUNDLE_DIR}"
+
+          cp app/uuid7.h "${STAGE_DIR}/include/"
+          cp build/libuuid7.a "${STAGE_DIR}/lib/"
+          cp build/libuuid7.so."${VER}" "${STAGE_DIR}/lib/"
+          ln -sf "libuuid7.so.${VER}" "${STAGE_DIR}/lib/libuuid7.so"
+
+          tar -C "build/release-stage" -czf \
+            "${BUNDLE_DIR}/uuid7-${VER}-linux-x86_64.tar.gz" \
+            "uuid7-${VER}"
+
+          cp build/debs/*.deb "${BUNDLE_DIR}/"
+
+          (
+            cd "${BUNDLE_DIR}"
+            sha256sum * > SHA256SUMS
+          )
+
+      - name: Upload workflow artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          if-no-files-found: error
+          path: |
+            build/release-bundle/*
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            build/release-bundle/* \
+            --generate-notes \
+            --title "UUID7 ${GITHUB_REF_NAME}"
