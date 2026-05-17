@@ -103,16 +103,19 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
  * pointer which will be used to generate cryptographically secure bytes.
  * If @p fn is NULL the module will install the built-in default RNG. Custom
  * RNG callbacks must return `0` on success and a negative value on failure.
+ * If @p last_gen_uuid7 is not NULL, it should point to a previously generated
+ * UUIDv7 value whose state will be used to initialize the generator.
  *
  * The function is idempotent and thread-safe. Typical usage: call
  * `uuid7_init()` or pass a custom RNG callback before creating application
  * threads.
  *
  * @param[in] fn  Optional RNG function to use. NULL to install default.
+ * @param[in] last_gen_uuid7 Last generated uuid7 to set the state (optional).
  * @return 0 on success.
  * @return -1 on failure.
  */
-int uuid7_init(uuid7_rng_function_t fn);
+int uuid7_init(uuid7_rng_function_t fn, void *last_gen_uuid7);
 
 /**
  * @brief Generate an UUIDv7 value.
@@ -132,7 +135,7 @@ int uuid7_init(uuid7_rng_function_t fn);
  * @return -2 if the active RNG reports failure or the built-in default
  *         RNG cannot provide entropy.
  */
-int uuid7_gen(void * out_buf);
+int uuid7_gen(void *out_buf);
 
 /**
  * @brief Configure the RNG used by the UUID generator.
