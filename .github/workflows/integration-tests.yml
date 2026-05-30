@@ -27,7 +27,7 @@ jobs:
 
       - name: Build static and shared libraries
         run: |
-          ./utils/make_libs.sh
+          ./utils/build_libs.sh
 
       - name: Upload library build artifacts
         if: always()
@@ -36,8 +36,10 @@ jobs:
           name: library-build
           if-no-files-found: error
           path: |
+            build/*/libuuid7.a
+            build/*/libuuid7.so*
             build/libuuid7.a
-            build/libuuid7.so.*
+            build/libuuid7.so*
 
   it:
     name: Integration tests + coverage
@@ -53,18 +55,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr
 
-      - name: Build + run integration test
+      - name: Build integration tests
         run: |
-          ./utils/make_ITs.sh
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh build_ITs
 
-      - name: Upload integration result
+      - name: Run integration tests
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh run_ITs
+
+      - name: Upload integration pipeline report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-result
+          name: integration-pipeline-report
           if-no-files-found: warn
           path: |
-            tests/results/ITs/integration_result.txt
+            tests/results/pipeline/runs/**
 
       - name: Upload IT coverage
         if: always()
@@ -73,14 +81,12 @@ jobs:
           name: it-coverage
           if-no-files-found: warn
           path: |
-            tests/results/ITs/ITs_all_coverage.html
-            tests/results/ITs/ITs_all_coverage.xml
-            tests/results/ITs/coverage-summary.json
+            tests/results/pipeline/runs/**/coverage/**
 
   stress:
     name: Stress benchmarks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 120
     needs:
       - build-libs
     steps:
@@ -91,9 +97,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Build + run stress benchmarks
+      - name: Build stress benchmarks
         run: |
-          ./utils/make_stress.sh
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-stress"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh build_stress
+
+      - name: Run stress benchmarks
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-stress"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh run_stress
 
       - name: Upload stress results
         if: always()
@@ -102,5 +114,4 @@ jobs:
           name: stress-results
           if-no-files-found: warn
           path: |
-            tests/results/stress/stress_result.txt
-            tests/results/stress/stress_mt_result.txt
+            tests/results/pipeline/runs/**
