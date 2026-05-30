@@ -43,11 +43,11 @@ jobs:
 
       - name: Build libraries
         run: |
-          ./utils/make_libs.sh
+          ./utils/build_libs.sh release
 
       - name: Build Debian package
         run: |
-          ./utils/make_deb.sh
+          ./utils/build_deb.sh
 
       - name: Assemble release bundle
         run: |
@@ -57,8 +57,8 @@ jobs:
           mkdir -p "${STAGE_DIR}/include" "${STAGE_DIR}/lib" "${BUNDLE_DIR}"
 
           cp app/uuid7.h "${STAGE_DIR}/include/"
-          cp build/libuuid7.a "${STAGE_DIR}/lib/"
-          cp build/libuuid7.so."${VER}" "${STAGE_DIR}/lib/"
+          cp build/release/libuuid7.a "${STAGE_DIR}/lib/"
+          cp build/release/libuuid7.so."${VER}" "${STAGE_DIR}/lib/"
           ln -sf "libuuid7.so.${VER}" "${STAGE_DIR}/lib/libuuid7.so"
 
           tar -C "build/release-stage" -czf \

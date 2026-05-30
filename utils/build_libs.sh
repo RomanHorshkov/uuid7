@@ -36,8 +36,8 @@
 set -euo pipefail
 
 # Tools can be overridden by the caller if needed:
-#   CC=clang ./utils/make_libs.sh release
-#   AR=gcc-ar RANLIB=gcc-ranlib ./utils/make_libs.sh native
+#   CC=clang ./utils/build_libs.sh release
+#   AR=gcc-ar RANLIB=gcc-ranlib ./utils/build_libs.sh native
 CC="${CC:-gcc}"
 AR="${AR:-ar}"
 RANLIB="${RANLIB:-ranlib}"
