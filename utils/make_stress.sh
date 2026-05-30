@@ -1,58 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Compatibility wrapper for the stress matrix. Prefer using the explicit stages:
+#   ./utils/build_stress.sh
+#   ./utils/run_stress.sh
+
 START_DIR="$(pwd -P)"
-cleanup() { cd -- "$START_DIR"; }
+cleanup() { cd -- "${START_DIR}" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd -- "$ROOT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-BUILD_DIR="${ROOT_DIR}/build/stress"
-RESULT_DIR="${ROOT_DIR}/tests/results/stress"
-
-mkdir -p "${BUILD_DIR}"
-mkdir -p "${RESULT_DIR}"
-
-./utils/make_libs.sh
-
-WARN_FLAGS=(
-  -Wall
-  -Wextra
-  -Wpedantic
-  -Wshadow
-  -Wformat=2
-  -Wconversion
-  -Wnull-dereference
-  -Wdouble-promotion
-  -Wduplicated-cond
-  -Wduplicated-branches
-  -Wlogical-op
-  -Wfloat-equal
-)
-
-CFLAGS=(
-  -std=c11
-  -O3
-  -g
-  -pthread
-  -Iapp
-  -Itests/stress
-  "${WARN_FLAGS[@]}"
-)
-
-LIBS=(
-  build/libuuid7.a
-  -lm
-  -pthread
-)
-
-gcc "${CFLAGS[@]}" tests/stress/stress.c -o "${BUILD_DIR}/stress" "${LIBS[@]}"
-gcc "${CFLAGS[@]}" tests/stress/stress_mt.c -o "${BUILD_DIR}/stress_mt" "${LIBS[@]}"
-
-"${BUILD_DIR}/stress" | tee "${RESULT_DIR}/stress_result.txt"
-"${BUILD_DIR}/stress_mt" | tee "${RESULT_DIR}/stress_mt_result.txt"
-
-printf 'stress results written to:\n'
-printf '  %s\n' "${RESULT_DIR}/stress_result.txt"
-printf '  %s\n' "${RESULT_DIR}/stress_mt_result.txt"
+"${SCRIPT_DIR}/build_stress.sh" "$@"
+"${SCRIPT_DIR}/run_stress.sh"
