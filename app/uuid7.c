@@ -1,37 +1,17 @@
 /**
  * @file uuid7.c
- * @brief UUIDv7 generator implementation with monotonic sequence and random
- *        tail generation.
+ * @brief UUIDv7 generator implementation with process-wide monotonic reservation state.
  *
- * This module produces RFC-v7 style UUIDs (time-ordered) with the following
- * characteristics and guarantees:
+ * The implementation separates two concerns:
+ * - ordering is provided by a single atomic 64-bit state word containing `(unix_ms << 12) | rand_a`;
+ * - unpredictability is provided by the configured RNG, which fills the `rand_b` tail before the state reservation is attempted.
  *
- * - Layout: 16 bytes where bytes 0..5 contain a 48-bit unix millisecond
- *   timestamp (big-endian). Bytes 6..7 contain a 12-bit sequence and the
- *   4-bit version (7). Bytes 8..15 contain the variant and a random tail.
- * - Monotonicity: generated values are strictly non-decreasing when observed
- *   as (timestamp, sequence) pairs. A global atomic 64-bit word stores the
- *   last used (ms,seq) packed as (ms << 12) | seq. A CAS loop reserves the
- *   next pair to ensure uniqueness across threads in the same process.
- * - State import: initialization from a previously generated UUIDv7 raises
- *   the internal state floor but never rewinds it.
- * 
- * Sequence policy:
+ * The CAS loop reserves one unique `(timestamp, rand_a)` pair per successful call. If real time moves forward, the sequence starts at zero
+ * for the new millisecond. If real time stalls, regresses, or the logical clock is already ahead, the generator continues from the last
+ * reserved state. Sequence overflow advances the logical millisecond by one and restarts the sequence at zero.
  *
- * - When real time moves to a new millisecond, rand_a/seq starts at 0.
- * - If multiple UUIDs are generated in the same millisecond, seq increments.
- * - If the wall clock moves backward, the generator continues from the last
- *   reserved logical state.
- * - If seq reaches 4095 and another UUID is needed before time advances, the
- *   logical millisecond is advanced by 1 and seq restarts at 0.
- *
- * The sequence is deterministic. Entropy is provided by rand_b.
- *
- * Thread-safety: `uuid7_gen()` is safe for concurrent calls thanks to the
- * atomic CAS loop protecting `g_v7_state`.
- *
- * Security note: the configured RNG should provide cryptographically secure
- * random bytes for rand_b.
+ * State import is raise-only. A valid persisted UUIDv7 can move the process floor forward during initialization, but no import path can
+ * rewind `g_v7_state`.
  *
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
  * @date    may 2026
@@ -54,34 +34,29 @@
 
 #include "uuid7.h"
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PRIVATE DEFINES
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
 /**
- * @brief Width in bits of the UUIDv7 `rand_a` / sequence field stored in the
- *        internal monotonic state word.
+ * @brief Width in bits of the UUIDv7 `rand_a` / sequence field stored in the internal monotonic state word.
  *
- * The generator keeps its monotonic reservation state in a single 64-bit
- * integer with this logical layout:
+ * The generator keeps its monotonic reservation state in a single 64-bit integer with this logical layout:
  *
  * - bits `[63:12]`: Unix timestamp in milliseconds
  * - bits `[11:0]` : 12-bit sequence / `rand_a` value
  *
- * This constant defines the width of the low-order sequence field. It is used
- * by the packing, unpacking, and masking helpers below.
+ * This constant defines the width of the low-order sequence field. It is used by the packing, unpacking, and masking helpers below.
  *
- * @note A value of `12` matches the UUIDv7 `rand_a` field width defined by the
- *       format used in this module.
+ * @note A value of `12` matches the UUIDv7 `rand_a` field width defined by the format used in this module.
  */
 #define V7_SEQ_BITS         12u
 
 /**
  * @brief Bitmask for extracting or constraining the low 12-bit sequence field.
  *
- * Expands to a mask with the lowest `V7_SEQ_BITS` bits set to `1`. With the
- * current configuration this is equivalent to `0x0FFF`.
+ * Expands to a mask with the lowest `V7_SEQ_BITS` bits set to `1`. With the current configuration this is equivalent to `0x0FFF`.
  *
  * Typical uses:
  *
@@ -96,9 +71,8 @@
  * @brief Left-shift, in bits, applied to the millisecond timestamp when
  *        packing the internal monotonic state word.
  *
- * Since the lower `V7_SEQ_BITS` bits are reserved for the sequence field, the
- * timestamp is shifted left by exactly that amount so both values occupy
- * disjoint bit ranges inside one 64-bit integer.
+ * Since the lower `V7_SEQ_BITS` bits are reserved for the sequence field, the timestamp is shifted left by exactly that amount so both
+ * values occupy disjoint bit ranges inside one 64-bit integer.
  */
 #define V7_MS_SHIFT         V7_SEQ_BITS
 
@@ -111,8 +85,7 @@
  * - upper bits: `ms`
  * - lower 12 bits: `seq & V7_SEQ_MASK`
  *
- * Expanded form:
- * `(((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))`
+ * Expanded form: `(((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))`
  *
  * @param ms
  *     Unix timestamp in milliseconds. It is cast to `uint64_t` before being
@@ -132,8 +105,8 @@
 /**
  * @brief Extract the millisecond timestamp from a packed monotonic state word.
  *
- * This reverses the timestamp portion of `V7_PACK()` by shifting the input
- * right by `V7_MS_SHIFT` bits and discarding the low sequence field.
+ * This reverses the timestamp portion of `V7_PACK()` by shifting the input right by `V7_MS_SHIFT` bits and discarding the low sequence
+ * field.
  *
  * @param word
  *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
@@ -146,8 +119,7 @@
  * @brief Extract the low 12-bit sequence field from a packed monotonic state
  *        word.
  *
- * This reverses the sequence portion of `V7_PACK()` by masking the low
- * `V7_SEQ_BITS` bits and casting the result to `uint16_t`.
+ * This reverses the sequence portion of `V7_PACK()` by masking the low `V7_SEQ_BITS` bits and casting the result to `uint16_t`.
  *
  * @param word
  *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
@@ -160,9 +132,8 @@
  * @brief Generic 8-bit mask used when isolating a single byte from a wider
  *        integer value.
  *
- * This constant is applied after right-shifting multi-byte fields so the
- * result is truncated to one octet before storing into the output UUID byte
- * array.
+ * This constant is applied after right-shifting multi-byte fields so the result is truncated to one octet before storing into the output
+ * UUID byte array.
  */
 #define V7_BYTE_MASK        0xFFu
 
@@ -170,10 +141,8 @@
  * @brief Extract one big-endian byte from the 48-bit Unix millisecond
  *        timestamp used in the UUIDv7 output layout.
  *
- * The UUID stores the timestamp in bytes `0..5` in network order
- * (most-significant byte first). This macro selects byte @p n from a
- * timestamp value by shifting the requested octet into the low 8 bits and
- * masking with `V7_BYTE_MASK`.
+ * The UUID stores the timestamp in bytes `0..5` in network order (most-significant byte first). This macro selects byte @p n from a
+ * timestamp value by shifting the requested octet into the low 8 bits and masking with `V7_BYTE_MASK`.
  *
  * Byte index mapping:
  *
@@ -200,8 +169,7 @@
  * - `rand_a[11:8]` is stored in the low nibble of byte 6
  * - `rand_a[7:0]` is stored in byte 7
  *
- * Shifting the 12-bit sequence right by 8 positions exposes the upper nibble
- * before applying `V7_SEQ_HIGH_MASK`.
+ * Shifting the 12-bit sequence right by 8 positions exposes the upper nibble before applying `V7_SEQ_HIGH_MASK`.
  */
 #define V7_SEQ_HIGH_SHIFT   8u
 
@@ -209,8 +177,7 @@
  * @brief Mask for the high 4-bit nibble of the 12-bit `rand_a` sequence field
  *        after it has been shifted down to the low bits.
  *
- * With the current layout this mask equals `0x0F` and is used when composing
- * UUID byte 6 together with the version nibble.
+ * With the current layout this mask equals `0x0F` and is used when composing UUID byte 6 together with the version nibble.
  */
 #define V7_SEQ_HIGH_MASK    0x0Fu
 
@@ -227,8 +194,7 @@
 /**
  * @brief Mask for the low 8 bits of the 12-bit `rand_a` sequence field.
  *
- * This mask isolates `rand_a[7:0]`, which are written directly into UUID byte
- * 7.
+ * This mask isolates `rand_a[7:0]`, which are written directly into UUID byte 7.
  */
 #define V7_SEQ_LOW_MASK     0xFFu
 
@@ -241,8 +207,7 @@
  * - bits `[7:6]`: variant bits (`10`)
  * - bits `[5:0]`: high 6 bits of `rand_b`
  *
- * This mask keeps only the payload portion that may coexist with the variant
- * marker in the same byte.
+ * This mask keeps only the payload portion that may coexist with the variant marker in the same byte.
  */
 #define V7_RB0_LOW6_MASK    0x3Fu
 
@@ -254,9 +219,8 @@
 /**
  * @brief Pre-encoded RFC variant bits for UUID byte 8.
  *
- * The UUID variant required by RFC 4122 / RFC 9562 is binary `10` in the two
- * most-significant bits of byte 8. OR-ing with this value sets bit 7 and
- * leaves bit 6 cleared.
+ * The UUID variant required by RFC 4122 / RFC 9562 is binary `10` in the two most-significant bits of byte 8. OR-ing with this value sets
+ * bit 7 and leaves bit 6 cleared.
  */
 #define V7_VARIANT_TOP      0x80u
 
@@ -264,24 +228,21 @@
  * @brief Number of random-tail bytes stored in the low 64 bits of the UUID
  *        assembly buffer before variant adjustment.
  *
- * The implementation samples 8 random bytes, then overlays the variant bits in
- * the first of those bytes when constructing bytes `8..15`.
+ * The implementation samples 8 random bytes, then overlays the variant bits in the first of those bytes when constructing bytes `8..15`.
  */
 #define V7_RB_BYTES         8u
 
 /**
  * @brief Number of bytes occupied by the UUIDv7 Unix millisecond timestamp.
  *
- * UUIDv7 stores a 48-bit timestamp, which corresponds to exactly 6 bytes in
- * the binary output representation.
+ * UUIDv7 stores a 48-bit timestamp, which corresponds to exactly 6 bytes in the binary output representation.
  */
 #define V7_MS_BYTES         6u
 
 /**
  * @brief Convert whole seconds to milliseconds.
  *
- * This macro is used when collapsing a `struct timespec` into a single Unix
- * millisecond timestamp.
+ * This macro is used when collapsing a `struct timespec` into a single Unix millisecond timestamp.
  *
  * @param sec
  *     Whole-second component to convert.
@@ -294,8 +255,7 @@
  * @brief Convert nanoseconds to milliseconds using truncating integer
  *        division.
  *
- * This preserves the intended millisecond-resolution behavior of the UUIDv7
- * timestamp encoding.
+ * This preserves the intended millisecond-resolution behavior of the UUIDv7 timestamp encoding.
  *
  * @param nsec
  *     Nanosecond component to convert.
@@ -304,26 +264,24 @@
  */
 #define NSEC_TO_MSEC(nsec)  ((uint64_t)(nsec) / UINT64_C(1000000))
 
-/****************************************************************************
- * PRIVATE STUCTURED VARIABLES
- ****************************************************************************
+/*****************************************************************************************************************************************
+ * PRIVATE STRUCTURED VARIABLES
+ *****************************************************************************************************************************************
  */
 /* None */
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PRIVATE VARIABLES
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
 /* Monotonic state layout in a single 64-bit word:
  *  - bits [63:12] (upper 52 bits): unix milliseconds (uint64_t)
  *  - bits [11:0]  (lower 12 bits) : 12-bit sequence counter
  *
- * This atomic word is not protecting some separate shared object.
- * It is the shared object.
+ * This atomic word is not protecting some separate shared object. It is the shared object.
  *
- * Every caller races only on one question:
- * "which (ms, seq) pair do I reserve next?"
+ * Every caller races only on one question: "which (ms, seq) pair do I reserve next?"
  *
  * The atomic operations below are therefore about:
  *  - uniqueness: two threads must not reserve the same pair
@@ -342,7 +300,7 @@ static _Atomic(uuid7_rng_function_t) g_uuid_rng_func = NULL;
 typedef uint64_t (*uuid7_time_fn_t)(void);
 
 static _Atomic(uuid7_time_fn_t) g_uuid_time_func = NULL;
-static _Atomic int g_force_rng_fail = 0;
+static _Atomic int              g_force_rng_fail = 0;
 
 int uuid7_test_set_time_fn(uuid7_time_fn_t fn)
 {
@@ -365,20 +323,20 @@ void uuid7_test_reset_state(void)
 }
 #endif
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PRIVATE FUNCTIONS PROTOTYPES
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
 /**
- * @brief Default RNG implementation: reads from /dev/urandom.
+ * @brief Default RNG implementation backed by getrandom(2), with /dev/urandom fallback.
  *
- * On failure, this function sets a thread-local error flag and zero-fills
- * any remaining bytes to avoid leaving uninitialized data in the UUID.
+ * On failure, this function sets a thread-local error flag and zero-fills any remaining bytes to avoid leaving uninitialized data in the
+ * UUID.
  *
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
- * 
+ *
  * @return 0 on success.
  * @return negative on failure (e.g., if /dev/urandom cannot be read).
  */
@@ -387,32 +345,29 @@ static int _default_rng(void* buf, size_t n);
 /**
  * @brief Raise the internal monotonic state `g_v7_state` based on a UUIDv7
  *        buffer.
- * 
- * This is used during initialization when a previously generated UUIDv7 value
- * is provided. It extracts the timestamp and sequence from the input UUID and
- * raises `g_v7_state` to at least that value, ensuring that subsequent UUIDs
- * generated by this process remain monotonic with respect to the provided
- * UUID without ever rewinding an already newer in-process state.
- * 
+ *
+ * This is used during initialization when a previously generated UUIDv7 value is provided. It extracts the timestamp and sequence from the
+ * input UUID and raises `g_v7_state` to at least that value, ensuring that subsequent UUIDs generated by this process remain monotonic with
+ * respect to the provided UUID without ever rewinding an already newer in-process state.
+ *
  * @param uuid7_buf Pointer to a 16-byte buffer containing the previous UUID7.
  * @return 0 on success.
  * @return -1 if @p uuid7_buf is NULL.
  * @return -2 if @p uuid7_buf does not encode UUID version 7.
  * @return -3 if @p uuid7_buf does not encode the RFC variant bits.
  */
-static int _raise_g_v7_state_from_uuid(const void *uuid7_buf);
+static int _raise_g_v7_state_from_uuid(const void* uuid7_buf);
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PRIVATE INLINE FUNCTIONS
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
 /**
  * @brief Raise the internal monotonic state to at least @p floor_state.
- * 
- * This helper is used by initialization-time state import. It is
- * intentionally raise-only: if the current state is already newer, it is left
- * unchanged.
+ *
+ * This helper is used by initialization-time state import. It is intentionally raise-only: if the current state is already newer, it is
+ * left unchanged.
  */
 static inline void _raise_g_v7_state(uint64_t floor_state)
 {
@@ -420,9 +375,7 @@ static inline void _raise_g_v7_state(uint64_t floor_state)
 
     while(cur < floor_state)
     {
-        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &cur, floor_state,
-                                                 memory_order_acq_rel,
-                                                 memory_order_acquire))
+        if(atomic_compare_exchange_weak_explicit(&g_v7_state, &cur, floor_state, memory_order_acq_rel, memory_order_acquire))
         {
             break;
         }
@@ -431,9 +384,8 @@ static inline void _raise_g_v7_state(uint64_t floor_state)
 
 /**
  * @brief Get the current value of the monotonic state word `g_v7_state`
- * 
- * `memory_order_relaxed` is enough for this read because the reservation state
- * itself is the only shared datum that matters here.
+ *
+ * `memory_order_relaxed` is enough for this read because the reservation state itself is the only shared datum that matters here.
  */
 static inline uint64_t _get_g_v7_state(void)
 {
@@ -442,7 +394,7 @@ static inline uint64_t _get_g_v7_state(void)
 
 /**
  * @brief Load the current RNG function pointer atomically.
- * 
+ *
  * @return The currently configured RNG function, or NULL if none is set.
  */
 static inline uuid7_rng_function_t _load_rng_func(void)
@@ -453,9 +405,8 @@ static inline uuid7_rng_function_t _load_rng_func(void)
 /**
  * @brief Ensure an RNG function is installed and return it.
  *
- * The default RNG is installed lazily using compare-exchange so a concurrent
- * explicit call to `uuid7_set_rng_func()` cannot be overwritten by a racy
- * fallback store from `uuid7_gen()`.
+ * The default RNG is installed lazily using compare-exchange so a concurrent explicit call to `uuid7_set_rng_func()` cannot be overwritten
+ * by a racy fallback store from `uuid7_gen()`.
  */
 static inline uuid7_rng_function_t _ensure_rng_func(void)
 {
@@ -463,10 +414,7 @@ static inline uuid7_rng_function_t _ensure_rng_func(void)
     if(fn) return fn;
 
     uuid7_rng_function_t expected = NULL;
-    if(atomic_compare_exchange_strong_explicit(&g_uuid_rng_func, &expected,
-                                               _default_rng,
-                                               memory_order_acq_rel,
-                                               memory_order_acquire))
+    if(atomic_compare_exchange_strong_explicit(&g_uuid_rng_func, &expected, _default_rng, memory_order_acq_rel, memory_order_acquire))
     {
         return _default_rng;
     }
@@ -476,7 +424,7 @@ static inline uuid7_rng_function_t _ensure_rng_func(void)
 
 /**
  * @brief Store a new RNG function pointer atomically.
- * 
+ *
  * @param fn The RNG function to set as the current RNG.
  *           May be NULL to indicate no RNG configured.
  */
@@ -487,14 +435,13 @@ static inline void _set_rng_func(uuid7_rng_function_t fn)
 
 /**
  * @brief Returns current real time in milliseconds since Unix epoch.
- * 
- * @return uint64_t Current time in ms. On failure, return 0. 
+ *
+ * @return uint64_t Current time in ms. On failure, return 0.
  */
 static inline uint64_t _get_realtime_ms(void)
 {
 #ifdef UUID7_TESTING
-    uuid7_time_fn_t fn =
-        atomic_load_explicit(&g_uuid_time_func, memory_order_acquire);
+    uuid7_time_fn_t fn = atomic_load_explicit(&g_uuid_time_func, memory_order_acquire);
     if(fn) return fn();
 #endif
     /* returning 0 is a reasonable fallback since it produces valid UUIDs with
@@ -507,7 +454,7 @@ static inline uint64_t _get_realtime_ms(void)
 }
 
 /**
- * @brief Call the configured with uuid7_set_rng_func RNG function to write to @p buf.
+ * @brief Fill @p buf with random bytes using the currently configured RNG callback.
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  * @return 0 on success, negative on error (only detectable for default RNG).
@@ -517,12 +464,12 @@ static inline int _fill_random(void* buf, size_t n)
     return _ensure_rng_func()(buf, n);
 }
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PUBLIC FUNCTIONS DEFINITIONS
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
-int uuid7_init(uuid7_rng_function_t fn, const void *last_gen_uuid7)
+int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7)
 {
     int rc = uuid7_set_rng_func(fn);
     if(rc != 0) return rc;
@@ -536,126 +483,88 @@ int uuid7_init(uuid7_rng_function_t fn, const void *last_gen_uuid7)
     return 0;
 }
 
-int uuid7_gen(void *out_buf)
+int uuid7_gen(void* out_buf)
 {
-    /* Check input */
+    /* Public contract: the caller owns storage and must provide a writable 16-byte buffer. */
     if(!out_buf) return -1;
 
-    /**
-     * random tail: V7_RB_BYTES bytes of CSPRNG entropy.
-     * 
-     * Fill the random tail before reserving the monotonic state.
-     *
-     * If RNG fails, return without advancing g_v7_state.
-     * This avoids burning sequence numbers on failed generations.
-     */
+    /* Fill the random tail before reserving monotonic state. RNG failure must not burn a sequence value. */
     uint8_t rb[V7_RB_BYTES];
     if(_fill_random(rb, V7_RB_BYTES) != 0) return -2;
 
-    /* Prepare variables */
-    uint64_t use_ms;  /* ms to use in generating uuid7 */
-    uint16_t use_seq; /* sequence to use in generating uuid7 */
+    /* Reserved monotonic state returned by the CAS loop below. */
+    uint64_t use_ms;  /* Millisecond timestamp reserved for this UUID. */
+    uint16_t use_seq; /* rand_a sequence reserved for this UUID. */
     uint64_t candidate = 0;
 
-    /* Reserve strictly increasing (ms,rand_a) using a CAS loop.
+    /* Reserve strictly increasing (ms, rand_a) using a CAS loop.
      *
      * High-level rule:
      * - new real millisecond        -> start seq at 0
      * - same / older logical time   -> increment seq
      * - seq exhausted at 4095       -> advance logical ms, restart seq at 0
      *
-     * The loop exists because another thread may reserve a value between our
-     * load of g_v7_state and our attempt to store the next candidate. In that
-     * case CAS fails, gives us the newer observed state through `prev`, and we
-     * recompute from there.
+     * The loop exists because another thread may reserve a value between our load of g_v7_state and our attempt to store the next
+     * candidate. In that case CAS fails, gives us the newer observed state through `prev`, and we recompute from there.
      */
     for(;;)
     {
-        /* get actual time in ms */
+        /* Sample wall-clock time for this reservation attempt. */
         const uint64_t now_ms = _get_realtime_ms();
 
-        /* Load the last reserved (ms, seq) pair.
-         *
-         * `memory_order_relaxed` is enough for this read because we only need
-         * the atomic value itself. We do not depend on this load to make any
-         * other shared memory visible. */
+        /* Load the last reserved pair. Relaxed ordering is enough because this read depends only on the atomic state word itself. */
         uint64_t       prev     = _get_g_v7_state();
         const uint64_t prev_ms  = V7_UNPACK_MS(prev);
         const uint16_t prev_seq = V7_UNPACK_SEQ(prev);
 
-        /* Clock moved forward */
+        /* Wall clock moved beyond the previous logical state: start a fresh rand_a sequence. */
         if(now_ms > prev_ms)
         {
             /* Start the new (actual) millisecond from rand_a sequence 0. */
             candidate = V7_PACK(now_ms, 0u);
         }
 
-        /**
-         * Same millisecond, clock rollback, or logical time already ahead.
-         * Preserve monotonicity by continuing from previous state.
-         */
+        /* Same millisecond, clock rollback, or logical time already ahead: continue from previous state. */
         else
         {
-            /* rand_a 12 bits sequence is NOT exhausted */
+            /* The 12-bit rand_a sequence still has capacity in this logical millisecond. */
             if(prev_seq < (uint16_t)V7_SEQ_MASK)
             {
-                /**
-                 * Keep the previous ms and increment the sequence by 1
-                 * to get the next candidate. 
-                 * This is the common case when multiple UUIDs are generated within the same ms,
-                 * or when the clock is stable but not advancing (e.g., due to NTP adjustments
-                 * or low-resolution timers).
-                 * By incrementing the sequence, ensure that the next UUID is strictly greater
-                 * than the previous while still using the same timestamp.
-                 */
+                /* Reserve the next rand_a value in the current logical millisecond, preserving strict monotonic order. */
                 candidate = V7_PACK(prev_ms, (prev_seq + 1u));
             }
 
-            /* rand_a 12 bits sequence is exhausted */
+            /* rand_a is exhausted: move logical time forward so generation remains non-blocking. */
             else
             {
-                /**
-                 * Move logical timestamp forward by one millisecond.
-                 * Start the new millisecond from rand_a sequence 0.
-                 */
+                /* Start the next logical millisecond at rand_a zero instead of blocking for wall-clock time to advance. */
                 candidate = V7_PACK((prev_ms + 1ULL), 0u);
             }
         }
 
-        /**
-         * CAS - reserve `candidate` in g_v7_state.
-         */
-        if(!atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate,
-                                                  memory_order_acq_rel,
-                                                  memory_order_relaxed))
+        /* Reserve the candidate. On failure, `prev` is updated with the newer observed state. */
+        if(!atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate, memory_order_acq_rel, memory_order_relaxed))
         {
-            /**
-             * CAS failed because another thread reserved a UUID first.
-             * Retry from the new global state.
-             */
+            /* Another thread reserved first; retry from the newer state now visible through `prev`. */
             continue;
         }
 
-        /**
-         * CAS succeeded:
-         * use_ms and use_seq reserved for this uuid7
-         */
+        /* CAS succeeded: this caller now owns the candidate pair and may encode it. */
         use_ms  = V7_UNPACK_MS(candidate);
         use_seq = V7_UNPACK_SEQ(candidate);
 
-        /* Exit the loop */
         break;
     }
 
-    /* UUIDv7 (RFC4122bis):
+    /* UUIDv7 binary layout (RFC 9562-compatible):
        - bytes 0..5 : 48-bit unix ms (big-endian)
        - byte    6  : version (0b0111) in high nibble | high 4 bits of seq
        - byte    7  : low 8 bits of seq
        - byte    8  : variant (10xxxxxx) | top 6 bits of rb[0]
        - bytes 9..15: remaining 7 bytes from rb[1..7]
     */
-    
-    /* cast to unsigned char the output buffer */
+
+    /* Treat caller storage as the binary UUID output byte array. */
     unsigned char* out = (unsigned char*)out_buf;
 
     for(unsigned int i = 0; i < V7_MS_BYTES; ++i)
@@ -665,8 +574,7 @@ int uuid7_gen(void *out_buf)
 
     /* version 7 in high nibble | top 4 bits of sequence */
     out[6] = (unsigned char)(((V7_VERSION & V7_BYTE_MASK) << V7_VERSION_SHIFT) |
-                             ((unsigned char)((use_seq >> V7_SEQ_HIGH_SHIFT) &
-                                              V7_SEQ_HIGH_MASK)));
+                             ((unsigned char)((use_seq >> V7_SEQ_HIGH_SHIFT) & V7_SEQ_HIGH_MASK)));
     out[7] = (unsigned char)((unsigned char)use_seq & V7_SEQ_LOW_MASK);
 
     /* variant (10xxxxxx) | top 6 bits of rb[0] */
@@ -687,34 +595,32 @@ int uuid7_set_rng_func(uuid7_rng_function_t fn)
     return 0;
 }
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * PRIVATE FUNCTIONS DEFINITIONS
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
-static int _raise_g_v7_state_from_uuid(const void *uuid7_buf)
+static int _raise_g_v7_state_from_uuid(const void* uuid7_buf)
 {
     if(!uuid7_buf) return -1;
 
-    /* cast to unsigned char the input buffer */
+    /* Decode the previously generated UUID supplied by the caller. */
     const unsigned char* in = (const unsigned char*)uuid7_buf;
 
     if(((in[6] >> V7_VERSION_SHIFT) & V7_SEQ_HIGH_MASK) != V7_VERSION) return -2;
     if((in[8] & V7_VARIANT_MASK) != V7_VARIANT_TOP) return -3;
 
-    /* extract ms from bytes 0..5 */
+    /* Extract the 48-bit big-endian Unix millisecond timestamp from bytes 0..5. */
     uint64_t ms = 0;
     for(unsigned int i = 0; i < V7_MS_BYTES; ++i)
     {
         ms = (ms << 8) | (uint64_t)in[i];
     }
 
-    /* extract seq from bytes 6..7 */
-    uint16_t seq =
-        (uint16_t)((((uint16_t)(in[6] & V7_SEQ_HIGH_MASK)) << V7_SEQ_HIGH_SHIFT) |
-                   ((uint16_t)in[7]));
+    /* Extract rand_a from byte 6 low nibble plus byte 7. */
+    uint16_t seq = (uint16_t)((((uint16_t)(in[6] & V7_SEQ_HIGH_MASK)) << V7_SEQ_HIGH_SHIFT) | ((uint16_t)in[7]));
 
-    /* pack and raise g_v7_state */
+    /* Pack the imported floor and raise the process state if it is newer. */
     uint64_t packed = V7_PACK(ms, seq);
 
     _raise_g_v7_state(packed);
@@ -723,7 +629,7 @@ static int _raise_g_v7_state_from_uuid(const void *uuid7_buf)
 
 static int _default_rng(void* out_buf, size_t n)
 {
-    /* cast to unsigned char the output buffer */
+    /* Treat caller storage as a byte buffer for entropy output. */
     unsigned char* out = (unsigned char*)out_buf;
 
 #ifdef UUID7_TESTING
@@ -735,60 +641,59 @@ static int _default_rng(void* out_buf, size_t n)
 #endif /* UUID7_TESTING */
 
 #ifdef __linux__
-    /* Try getrandom(2) in a loop,
-     * letting the kernel fill up random bytes */
+    /* Prefer getrandom(2) so the default path avoids file descriptors on Linux. */
     size_t off = 0;
     while(off < n)
     {
         ssize_t r = getrandom(out + off, n - off, 0);
         if(r < 0)
         {
-            /* consider syscall interrupt as retry */
+            /* EINTR is transient; retry the syscall without treating it as entropy failure. */
             if(errno == EINTR) continue;
-            /* fall back to /dev/urandom */
+            /* Non-interrupt failure falls through to /dev/urandom fallback. */
             break;
         }
-        /* shouldn't happen, but treat as failure if it does */
+        /* A zero-length getrandom() read is unexpected; fall through to the fallback path. */
         if(r == 0) break;
 
-        /* sum written bytes */
+        /* Account for the bytes already produced by this entropy source. */
         off += (size_t)r;
     }
-    /* filled all the necessary bytes */
+    /* getrandom(2) satisfied the complete request. */
     if(off == n) return 0;
 #else
     size_t off = 0;
 #endif /* __linux__*/
 
-    /* Fallback: read from /dev/urandom */
+    /* Fallback: read the remaining bytes from /dev/urandom. */
     int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
     if(fd < 0)
     {
         memset(out + off, 0, n - off);
         return -1;
     }
-    /* Fill remaining bytes */
+    /* Fill only the suffix not already produced by getrandom(2). */
     size_t off2 = 0;
     while(off2 < (n - off))
     {
         ssize_t r = read(fd, out + off + off2, n - off - off2);
         if(r < 0)
         {
-            /* consider syscall interrupt as retry */
+            /* EINTR is transient; retry the syscall without treating it as entropy failure. */
             if(errno == EINTR) continue;
-            /* close fd and set out to zero */
+            /* Do not leave partial entropy-looking output on failure. */
             close(fd);
             memset(out + off + off2, 0, n - off - off2);
             return -1;
         }
         if(r == 0)
         {
-            /* close fd and set out to zero */
+            /* Do not leave partial entropy-looking output on failure. */
             close(fd);
             memset(out + off + off2, 0, n - off - off2);
             return -1;
         }
-        /* sum written bytes */
+        /* Account for the bytes already produced by this entropy source. */
         off2 += (size_t)r;
     }
 
@@ -796,9 +701,9 @@ static int _default_rng(void* out_buf, size_t n)
     return 0;
 }
 
-/****************************************************************************
+/*****************************************************************************************************************************************
  * SANITY CHECKS
- ****************************************************************************
+ *****************************************************************************************************************************************
  */
 
 _Static_assert(CHAR_BIT == 8, "uuid7 requires 8-bit bytes");
@@ -812,10 +717,6 @@ _Static_assert(V7_SEQ_MASK == 0x0FFFu, "UUIDv7 sequence mask mismatch");
 _Static_assert(V7_MS_BYTES == 6u, "UUIDv7 timestamp must be 48 bits");
 _Static_assert(V7_RB_BYTES == 8u, "UUIDv7 rand_b assembly expects 8 bytes");
 
-/* Compile-time sanity check: MS bytes + 2 (version + seq bytes) + remaining
- * RB bytes must equal total UUID size.
- * Note: RB bytes include the first byte used for the variant/top bits, so
- * the number of tail bytes written after out_buf[8] is (V7_RB_BYTES - 1).
- * The check below simplifies the arithmetic. */
-_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE_BYTES,
-               "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");
+/* Compile-time sanity check: timestamp bytes, version/sequence bytes, and random-tail bytes must sum to 16. V7_RB_BYTES includes the byte
+ * carrying variant bits, so only (V7_RB_BYTES - 1) bytes are copied after out_buf[8]. */
+_Static_assert((V7_MS_BYTES + 2u + V7_RB_BYTES) == UUID7_SIZE_BYTES, "UUID layout mismatch: adjust V7_* macros to sum to 16 bytes");

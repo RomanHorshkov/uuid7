@@ -1,11 +1,19 @@
+/**
+ * @file stress.c
+ * @brief Single-thread UUIDv7 throughput benchmark.
+ *
+ * This program measures the steady-state cost of repeated `uuid7_gen()` calls using the benchmark RNG from stress_common.h. It warms the
+ * generator first, then reports per-run latency, per-UUID cost, throughput, and summary statistics.
+ */
+
 #include "stress_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#define STRESS_UUIDS_PER_RUN   1000000u
-#define STRESS_WARMUP_UUIDS    10000u
-#define STRESS_RUNS            10u
+#define STRESS_UUIDS_PER_RUN 1000000u
+#define STRESS_WARMUP_UUIDS  10000u
+#define STRESS_RUNS          10u
 
 int main(void)
 {
@@ -61,19 +69,17 @@ int main(void)
 
         if(rc != 0)
         {
-            fprintf(stderr, "uuid7_gen failed during measured run %zu with rc=%d\n",
-                    run + 1u, rc);
+            fprintf(stderr, "uuid7_gen failed during measured run %zu with rc=%d\n", run + 1u, rc);
             free(out);
             return EXIT_FAILURE;
         }
 
         const uint64_t delta_ns = end_ns - start_ns;
-        elapsed_ns[run] = (double)delta_ns;
-        ns_uuid[run]    = ns_per_uuid(STRESS_UUIDS_PER_RUN, delta_ns);
-        throughput[run] = uuids_per_second(STRESS_UUIDS_PER_RUN, delta_ns);
+        elapsed_ns[run]         = (double)delta_ns;
+        ns_uuid[run]            = ns_per_uuid(STRESS_UUIDS_PER_RUN, delta_ns);
+        throughput[run]         = uuids_per_second(STRESS_UUIDS_PER_RUN, delta_ns);
 
-        printf("run %2zu  elapsed: %12.0f ns  ns/uuid: %9.3f  uuid/s: %12.3f\n",
-               run + 1u, elapsed_ns[run], ns_uuid[run], throughput[run]);
+        printf("run %2zu  elapsed: %12.0f ns  ns/uuid: %9.3f  uuid/s: %12.3f\n", run + 1u, elapsed_ns[run], ns_uuid[run], throughput[run]);
     }
 
     sample_summary_t elapsed_summary;

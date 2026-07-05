@@ -1,33 +1,52 @@
+/**
+ * @file stress_mt.c
+ * @brief Multi-thread UUIDv7 throughput benchmark with synchronized worker start.
+ *
+ * The benchmark coordinates worker threads behind a start gate, measures each thread's UUID generation loop, and reports both per-thread
+ * cost and aggregate wall-clock throughput. It is intended to expose contention in the atomic monotonic reservation path.
+ */
+
 #include "stress_common.h"
 
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define STRESS_MT_THREADS                  10u
-#define STRESS_MT_UUIDS_PER_THREAD         100000u
-#define STRESS_MT_WARMUP_UUIDS_PER_THREAD  5000u
-#define STRESS_MT_RUNS                     5u
+#define STRESS_MT_THREADS                 10u
+#define STRESS_MT_UUIDS_PER_THREAD        100000u
+#define STRESS_MT_WARMUP_UUIDS_PER_THREAD 5000u
+#define STRESS_MT_RUNS                    5u
 
+/**
+ * @brief Start barrier used to align worker measurement windows.
+ *
+ * Workers signal readiness, block on @ref start_cond, then begin generating UUIDs after the coordinator broadcasts the start flag.
+ */
 typedef struct start_gate
 {
-    pthread_mutex_t mutex;
-    pthread_cond_t  ready_cond;
-    pthread_cond_t  start_cond;
-    size_t          ready_count;
-    int             start_flag;
+    pthread_mutex_t mutex;       /**< Protects ready_count and start_flag. */
+    pthread_cond_t  ready_cond;  /**< Signaled when a worker reaches the barrier. */
+    pthread_cond_t  start_cond;  /**< Broadcast by the coordinator to release all workers. */
+    size_t          ready_count; /**< Number of workers waiting at the barrier. */
+    int             start_flag;  /**< Non-zero once the measured round may begin. */
 } start_gate_t;
 
+/**
+ * @brief Per-worker benchmark context and result slot.
+ */
 typedef struct worker_ctx
 {
-    start_gate_t* gate;
-    uint8_t*      out;
-    size_t        uuid_count;
-    size_t        thread_index;
-    uint64_t      elapsed_ns;
-    int           error;
+    start_gate_t* gate;         /**< Shared start barrier. */
+    uint8_t*      out;          /**< Thread-local UUID output buffer. */
+    size_t        uuid_count;   /**< Number of UUIDs this worker generates. */
+    size_t        thread_index; /**< Stable index used only for diagnostics. */
+    uint64_t      elapsed_ns;   /**< Measured generation-loop duration. */
+    int           error;        /**< uuid7_gen() return code or local pthread error marker. */
 } worker_ctx_t;
 
+/**
+ * @brief Initialize a start gate before spawning workers for one measured round.
+ */
 static void start_gate_init(start_gate_t* gate)
 {
     if(pthread_mutex_init(&gate->mutex, NULL) != 0)
@@ -52,6 +71,9 @@ static void start_gate_init(start_gate_t* gate)
     gate->start_flag  = 0;
 }
 
+/**
+ * @brief Destroy synchronization primitives owned by @p gate.
+ */
 static void start_gate_destroy(start_gate_t* gate)
 {
     pthread_cond_destroy(&gate->ready_cond);
@@ -59,6 +81,11 @@ static void start_gate_destroy(start_gate_t* gate)
     pthread_mutex_destroy(&gate->mutex);
 }
 
+/**
+ * @brief Worker body measured by the multi-thread stress benchmark.
+ *
+ * The worker waits at the shared start gate, then measures only the loop of `uuid7_gen()` calls into its private output buffer.
+ */
 static void* stress_worker(void* arg)
 {
     worker_ctx_t* ctx = (worker_ctx_t*)arg;
@@ -93,7 +120,7 @@ static void* stress_worker(void* arg)
         return NULL;
     }
 
-    int rc = 0;
+    int            rc       = 0;
     const uint64_t start_ns = stress_now_ns();
     for(size_t i = 0; i < ctx->uuid_count; ++i)
     {
@@ -103,13 +130,14 @@ static void* stress_worker(void* arg)
     const uint64_t end_ns = stress_now_ns();
 
     ctx->elapsed_ns = end_ns - start_ns;
-    ctx->error = rc;
+    ctx->error      = rc;
     return NULL;
 }
 
-static void run_round(size_t uuid_count,
-                      uint8_t* buffers[STRESS_MT_THREADS],
-                      double thread_elapsed_ns[STRESS_MT_THREADS],
+/**
+ * @brief Run one synchronized benchmark round and collect per-thread and wall-clock timings.
+ */
+static void run_round(size_t uuid_count, uint8_t* buffers[STRESS_MT_THREADS], double thread_elapsed_ns[STRESS_MT_THREADS],
                       uint64_t* wall_elapsed_ns_out)
 {
     start_gate_t gate;
@@ -150,7 +178,7 @@ static void run_round(size_t uuid_count,
     }
 
     const uint64_t wall_start_ns = stress_now_ns();
-    gate.start_flag = 1;
+    gate.start_flag              = 1;
     if(pthread_cond_broadcast(&gate.start_cond) != 0)
     {
         perror("pthread_cond_broadcast");
@@ -200,13 +228,12 @@ int main(void)
     }
 
     /*
-     * Warmup round: initialize thread-local RNG state and touch destination
-     * buffers so the measured rounds focus on steady-state generation.
+     * Warmup round: initialize thread-local RNG state and touch destination buffers so the measured rounds focus on steady-state
+     * generation.
      */
     double   warmup_elapsed_ns[STRESS_MT_THREADS];
     uint64_t warmup_wall_ns = 0u;
-    run_round(STRESS_MT_WARMUP_UUIDS_PER_THREAD, buffers,
-              warmup_elapsed_ns, &warmup_wall_ns);
+    run_round(STRESS_MT_WARMUP_UUIDS_PER_THREAD, buffers, warmup_elapsed_ns, &warmup_wall_ns);
 
     double thread_elapsed_runs[STRESS_MT_RUNS][STRESS_MT_THREADS];
     double wall_elapsed_runs[STRESS_MT_RUNS];
@@ -219,8 +246,7 @@ int main(void)
     printf("  threads:                     %u\n", STRESS_MT_THREADS);
     printf("  uuids per thread per run:    %u\n", STRESS_MT_UUIDS_PER_THREAD);
     printf("  warmup uuids per thread:     %u\n", STRESS_MT_WARMUP_UUIDS_PER_THREAD);
-    printf("  total uuids per measured run:%u\n",
-           STRESS_MT_THREADS * STRESS_MT_UUIDS_PER_THREAD);
+    printf("  total uuids per measured run:%u\n", STRESS_MT_THREADS * STRESS_MT_UUIDS_PER_THREAD);
     printf("  bytes per uuid:              %u\n", UUID7_SIZE_BYTES);
     printf("  rng mode:                    thread-local benchmark RNG\n");
     printf("  measured region:             each thread's loop of uuid7_gen() calls only\n");
@@ -228,31 +254,25 @@ int main(void)
     for(size_t run = 0; run < STRESS_MT_RUNS; ++run)
     {
         uint64_t wall_ns = 0u;
-        run_round(STRESS_MT_UUIDS_PER_THREAD, buffers,
-                  thread_elapsed_runs[run], &wall_ns);
+        run_round(STRESS_MT_UUIDS_PER_THREAD, buffers, thread_elapsed_runs[run], &wall_ns);
 
-        wall_elapsed_runs[run] = (double)wall_ns;
-        aggregate_throughput_runs[run] =
-            uuids_per_second((size_t)STRESS_MT_THREADS * STRESS_MT_UUIDS_PER_THREAD,
-                             wall_ns);
+        wall_elapsed_runs[run]         = (double)wall_ns;
+        aggregate_throughput_runs[run] = uuids_per_second((size_t)STRESS_MT_THREADS * STRESS_MT_UUIDS_PER_THREAD, wall_ns);
 
         printf("run %zu\n", run + 1u);
         for(size_t thread = 0; thread < STRESS_MT_THREADS; ++thread)
         {
             const double elapsed = thread_elapsed_runs[run][thread];
-            const double cost = elapsed / (double)STRESS_MT_UUIDS_PER_THREAD;
-            const double rate =
-                ((double)STRESS_MT_UUIDS_PER_THREAD * 1e9) / elapsed;
+            const double cost    = elapsed / (double)STRESS_MT_UUIDS_PER_THREAD;
+            const double rate    = ((double)STRESS_MT_UUIDS_PER_THREAD * 1e9) / elapsed;
 
             per_thread_ns_per_uuid_all[(run * STRESS_MT_THREADS) + thread] = cost;
 
-            printf("  thread %2zu  elapsed: %12.0f ns  ns/uuid: %9.3f  uuid/s: %12.3f\n",
-                   thread, elapsed, cost, rate);
+            printf("  thread %2zu  elapsed: %12.0f ns  ns/uuid: %9.3f  uuid/s: %12.3f\n", thread, elapsed, cost, rate);
         }
 
         sample_summary_t round_thread_summary;
-        compute_sample_summary(thread_elapsed_runs[run], STRESS_MT_THREADS,
-                               &round_thread_summary);
+        compute_sample_summary(thread_elapsed_runs[run], STRESS_MT_THREADS, &round_thread_summary);
 
         printf("  wall-clock elapsed: %.0f ns\n", wall_elapsed_runs[run]);
         printf("  aggregate uuid/s:   %.3f\n", aggregate_throughput_runs[run]);
@@ -270,19 +290,18 @@ int main(void)
     for(size_t thread = 0; thread < STRESS_MT_THREADS; ++thread)
     {
         double elapsed_sum = 0.0;
-        double cost_sum = 0.0;
-        double rate_sum = 0.0;
+        double cost_sum    = 0.0;
+        double rate_sum    = 0.0;
 
         for(size_t run = 0; run < STRESS_MT_RUNS; ++run)
         {
             const double elapsed = thread_elapsed_runs[run][thread];
-            const double cost = elapsed / (double)STRESS_MT_UUIDS_PER_THREAD;
-            const double rate =
-                ((double)STRESS_MT_UUIDS_PER_THREAD * 1e9) / elapsed;
+            const double cost    = elapsed / (double)STRESS_MT_UUIDS_PER_THREAD;
+            const double rate    = ((double)STRESS_MT_UUIDS_PER_THREAD * 1e9) / elapsed;
 
             elapsed_sum += elapsed;
-            cost_sum += cost;
-            rate_sum += rate;
+            cost_sum    += cost;
+            rate_sum    += rate;
         }
 
         per_thread_mean_elapsed[thread] = elapsed_sum / (double)STRESS_MT_RUNS;
@@ -295,28 +314,20 @@ int main(void)
     sample_summary_t all_thread_cost_summary;
 
     compute_sample_summary(wall_elapsed_runs, STRESS_MT_RUNS, &wall_summary);
-    compute_sample_summary(aggregate_throughput_runs, STRESS_MT_RUNS,
-                           &aggregate_rate_summary);
-    compute_sample_summary(per_thread_ns_per_uuid_all,
-                           STRESS_MT_RUNS * STRESS_MT_THREADS,
-                           &all_thread_cost_summary);
+    compute_sample_summary(aggregate_throughput_runs, STRESS_MT_RUNS, &aggregate_rate_summary);
+    compute_sample_summary(per_thread_ns_per_uuid_all, STRESS_MT_RUNS * STRESS_MT_THREADS, &all_thread_cost_summary);
 
     printf("\nper-thread means across measured runs\n");
     for(size_t thread = 0; thread < STRESS_MT_THREADS; ++thread)
     {
-        printf("  thread %2zu  mean elapsed: %12.3f ns  mean ns/uuid: %9.3f  mean uuid/s: %12.3f\n",
-               thread,
-               per_thread_mean_elapsed[thread],
-               per_thread_mean_ns_uuid[thread],
-               per_thread_mean_rate[thread]);
+        printf("  thread %2zu  mean elapsed: %12.3f ns  mean ns/uuid: %9.3f  mean uuid/s: %12.3f\n", thread,
+               per_thread_mean_elapsed[thread], per_thread_mean_ns_uuid[thread], per_thread_mean_rate[thread]);
     }
 
     printf("\nsummary\n");
     print_summary(stdout, "wall-clock elapsed per run", "ns", &wall_summary);
-    print_summary(stdout, "aggregate throughput per run", "uuid/s",
-                  &aggregate_rate_summary);
-    print_summary(stdout, "all per-thread cost samples", "ns/uuid",
-                  &all_thread_cost_summary);
+    print_summary(stdout, "aggregate throughput per run", "uuid/s", &aggregate_rate_summary);
+    print_summary(stdout, "all per-thread cost samples", "ns/uuid", &all_thread_cost_summary);
 
     for(size_t i = 0; i < STRESS_MT_THREADS; ++i)
     {
