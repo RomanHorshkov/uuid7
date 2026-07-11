@@ -38,10 +38,9 @@
  * no separate public "resume" entry point.
  */
 
-/* Test-only hooks provided by uuid7.c when compiled with -DUUID7_TESTING. */
-int  uuid7_test_set_time_fn(uint64_t (*fn)(void));
-int  uuid7_test_set_default_rng_fail(int enable);
-void uuid7_test_reset_state(void);
+/* Test-only hooks provided by uuid7.c when compiled with -DUUID7_TESTING —
+ * shared prototypes so implementation and tests agree (no -Wmissing-prototypes). */
+#include "uuid7_test.h"
 
 /* Shared constants used across the integration suite. */
 #define TEST_UUID_TIMESTAMP_BYTES         6u
@@ -835,9 +834,57 @@ static void test_heavy_single_thread_uniqueness(void** state)
     free(all);
 }
 
+/*
+ * test_raise_floor_orders_after_import()
+ * --------------------------------------
+ * uuid7_raise_floor() imports a persisted floor WITHOUT touching the RNG, and
+ * the next generated id must sort strictly AFTER it even when the wall clock is
+ * older — the guarantee that keeps time-ordered DBI appends sequential across a
+ * restart / snapshot restore / clock rollback. NULL is rejected.
+ */
+static void test_raise_floor_orders_after_import(void** state)
+{
+    (void)state;
+    reset_state();
+
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    set_fake_time(1000u); /* wall clock is BEHIND the store's newest id */
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t last_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(last_uuid, 5000u, 7u); /* newest id already persisted */
+
+    assert_int_equal(uuid7_raise_floor(NULL), -1);     /* NULL rejected      */
+    assert_int_equal(uuid7_raise_floor(last_uuid), 0); /* floor raised       */
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 5000u); /* not the older 1000 wall clock */
+    assert_int_equal(extract_seq(uuid), 8u);   /* strictly after the floor      */
+}
+
+/*
+ * test_clock_failure_count_healthy_is_zero()
+ * ------------------------------------------
+ * The clock-failure metric is a process-global monotonic tally; on a healthy
+ * system clock_gettime never fails, so it stays zero. Pins the accessor + the
+ * healthy invariant (the failure itself isn't injectable through the test hooks,
+ * which bypass clock_gettime entirely).
+ */
+static void test_clock_failure_count_healthy_is_zero(void** state)
+{
+    (void)state;
+    reset_state();
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0); /* uses the real clock */
+    assert_int_equal(uuid7_clock_failure_count(), 0u);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_raise_floor_orders_after_import),
+        cmocka_unit_test(test_clock_failure_count_healthy_is_zero),
         cmocka_unit_test(test_default_rng_used_when_uninitialized),
         cmocka_unit_test(test_version_variant_and_tail_bytes),
         cmocka_unit_test(test_timestamp_matches_override),

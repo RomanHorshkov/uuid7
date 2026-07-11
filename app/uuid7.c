@@ -296,8 +296,14 @@ static _Atomic uint64_t g_v7_state = 0;
  */
 static _Atomic(uuid7_rng_function_t) g_uuid_rng_func = NULL;
 
+/* Count of clock_gettime() failures. A failure still yields a UNIQUE id (random
+ * tail + monotonic seq), but with a zero timestamp — operationally misleading,
+ * so we expose the count as a metric for the operator to alert on rather than
+ * failing silently. Relaxed: it is a diagnostic tally, not a synchronization point. */
+static _Atomic uint64_t g_clock_failures = 0;
+
 #ifdef UUID7_TESTING
-typedef uint64_t (*uuid7_time_fn_t)(void);
+#    include "uuid7_test.h" /* shared prototypes + uuid7_time_fn_t for the hooks below */
 
 static _Atomic(uuid7_time_fn_t) g_uuid_time_func = NULL;
 static _Atomic int              g_force_rng_fail = 0;
@@ -444,11 +450,16 @@ static inline uint64_t _get_realtime_ms(void)
     uuid7_time_fn_t fn = atomic_load_explicit(&g_uuid_time_func, memory_order_acquire);
     if(fn) return fn();
 #endif
-    /* returning 0 is a reasonable fallback since it produces valid UUIDs with
-     * a known timestamp. The monotonic sequence logic still ensures
-     * uniqueness. */
+    /* On failure fall back to timestamp 0 (still a valid, unique UUID thanks to
+     * the random tail + monotonic sequence) BUT bump the failure metric so the
+     * operator can alert — a silent zero-timestamp id is operationally
+     * misleading. See uuid7_clock_failure_count(). */
     struct timespec ts;
-    if(clock_gettime(CLOCK_REALTIME, &ts) != 0) return (uint64_t)0;
+    if(clock_gettime(CLOCK_REALTIME, &ts) != 0)
+    {
+        atomic_fetch_add_explicit(&g_clock_failures, 1u, memory_order_relaxed);
+        return (uint64_t)0;
+    }
 
     return SEC_TO_MSEC(ts.tv_sec) + NSEC_TO_MSEC(ts.tv_nsec);
 }
@@ -481,6 +492,22 @@ int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7)
     }
 
     return 0;
+}
+
+int uuid7_raise_floor(const void* last_uuid7)
+{
+    /* Raise-only import of a persisted floor WITHOUT touching the RNG selection —
+     * for callers that init the generator early (RNG) but only learn the newest
+     * existing id later (e.g. after opening the database). New ids are then
+     * guaranteed to sort AFTER everything already stored, keeping DBI appends
+     * sequential across restarts / snapshot restores / clock rollbacks. */
+    if(!last_uuid7) return -1;
+    return _raise_g_v7_state_from_uuid(last_uuid7);
+}
+
+uint64_t uuid7_clock_failure_count(void)
+{
+    return atomic_load_explicit(&g_clock_failures, memory_order_relaxed);
 }
 
 int uuid7_gen(void* out_buf)
