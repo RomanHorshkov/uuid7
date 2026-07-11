@@ -15,6 +15,13 @@ cd "$ROOT_DIR"
 VER="$(< VERSION)"
 ARCH="$(dpkg --print-architecture)"
 
+# The deb filename, soname chain, and control file all embed VERSION verbatim.
+# Refuse anything that is not strict MAJOR.MINOR.PATCH.
+if ! [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'error: VERSION must match MAJOR.MINOR.PATCH (digits only), got: %q\n' "$VER" >&2
+    exit 1
+fi
+
 # Split version safely (keep IFS local)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
 
@@ -62,6 +69,10 @@ exit 0
 EOF
 chmod 0755 "$STAGE/DEBIAN/postrm"
 
+# Verify the staged (stripped) payload still carries the release hardening
+# before it gets sealed into a package. A red check kills the build here.
+"${ROOT_DIR}/utils/check_hardening.sh" "$STAGE/usr/local/lib/libuuid7.so.$VER"
+
 # Build .deb
 DEB="${PKG_NAME}_${VER}_${ARCH}.deb"
 fakeroot dpkg-deb --build "$STAGE" "$DEB"
@@ -72,6 +83,10 @@ echo "Built complete"
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/build/debs}"
 mkdir -p "$OUT_DIR"
 mv -f "$DEB" "$OUT_DIR/"
+
+# Refresh checksums next to the deb(s) so consumers can verify what they fetch.
+(cd "$OUT_DIR" && sha256sum -- *.deb > SHA256SUMS)
+echo "checksums refreshed: $OUT_DIR/SHA256SUMS"
 
 echo "see .deb info with dpkg-deb -c $DEB or dpkg-deb -I $DEB"
 echo "moved to $OUT_DIR/"

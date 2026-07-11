@@ -169,6 +169,31 @@ profile_is_known() {
     return 1
 }
 
+# Verify that the artifacts of hardened production profiles actually carry the
+# hardening the catalog promises (PIE-independent checks: full RELRO,
+# non-executable stack, no TEXTREL, ...). Flags drift silently; this turns
+# drift into a loud red build.
+#
+# Only release and native are gated: debug/sanitize deliberately trade
+# hardening for debuggability, and extreme removes hardening on purpose.
+verify_hardened_artifact() {
+    local label="$1"
+    local artifact="$2"
+    local check_script="${ROOT_DIR}/utils/check_hardening.sh"
+
+    case "${label}" in
+        release|native) ;;
+        *) return 0 ;;
+    esac
+
+    [[ -x "${check_script}" ]] \
+        || die "hardening verifier not found or not executable: ${check_script}"
+
+    printf '  verifying hardening:             %s\n' "${artifact}"
+    "${check_script}" "${artifact}" \
+        || die "hardening verification FAILED for ${label} artifact: ${artifact}"
+}
+
 read_project_version() {
     [[ -e "${VERSION_FILE}" ]] || die "VERSION file does not exist: ${ROOT_DIR}/${VERSION_FILE}"
     [[ -f "${VERSION_FILE}" ]] || die "VERSION path is not a file: ${ROOT_DIR}/${VERSION_FILE}"
@@ -207,7 +232,7 @@ create_static_archive() {
 
             [[ -f "${dep_archive_path}" ]] || die "static dependency archive not found: ${dep_archive}"
 
-            dep_index=$((dep_index  1))
+            dep_index=$((dep_index + 1))
             dep_dir="${merge_root}/dep_${dep_index}"
             mkdir -p "${dep_dir}"
 
@@ -216,7 +241,7 @@ create_static_archive() {
             (cd "${dep_dir}" && "${AR}" x "${dep_archive_path}")
 
             while IFS= read -r -d '' member; do
-                archive_members=("${member}")
+                archive_members+=("${member}")
             done < <(find "${dep_dir}" -type f -print0 | sort -z)
         done
 
@@ -324,6 +349,8 @@ build_library_variant() {
 
     printf '  creating static library:         %s\n' "${static_library}"
     create_static_archive "${static_library}" "${static_object}"
+
+    verify_hardened_artifact "${label}" "${shared_library}"
 
     create_release_root_aliases \
         "${label}" \
