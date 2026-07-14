@@ -1,11 +1,6 @@
-UUID7 — Compact C implementation of UUIDv7
-==========================================
+UUID7 — Compact C implementation of UUIDv7 ==========================================
 
-[![Deb Package](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml)
-[![Build + Tests](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml)
-[![Release](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml)
-[![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/UUID7?sort=semver)](https://github.com/RomanHorshkov/UUID7/tags)
-[![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](#stress-benchmarks)
+[![Deb Package](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/ci.yml) [![Build + Tests](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/integration-tests.yml) [![Release](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml) [![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/UUID7?sort=semver)](https://github.com/RomanHorshkov/UUID7/tags) [![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](#stress-benchmarks)
 
 Overview
 
@@ -46,8 +41,7 @@ Build Debian package:
 
 Release process
 
-Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
-merge, tag, and publish flow.
+Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact merge, tag, and publish flow.
 
 Testing (heavy + coverage)
 
@@ -73,8 +67,7 @@ Coverage outputs:
 
 Stress Benchmarks
 
-The stress script builds the library first, links dedicated benchmark binaries
-against the produced static library, and writes human-readable result files.
+The stress script builds the library first, links dedicated benchmark binaries against the produced static library, and writes human-readable result files.
 
 Run:
 
@@ -116,10 +109,7 @@ No license file yet. Add one (MIT/BSD/Apache-2.0) before distributing.
 
 ## Build profiles & hardening
 
-Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared
-catalog `utils/gcc_build_profiles.sh` (synced verbatim from
-`Utils/compilation/`, never edited locally); artifacts land in
-`build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
+Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared catalog `utils/gcc_build_profiles.sh` (synced verbatim from `Utils/compilation/`, never edited locally); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
 
 | Profile | Optimization | Warnings | Instrumentation | Hardened | Use it for |
 |---|---|---|---|---|---|
