@@ -48,7 +48,7 @@ Section: libs
 Priority: optional
 Architecture: $ARCH
 Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
-Description: uuid7 personal library installed under /usr/local
+Description: Thread-safe monotonic binary UUIDv7 generation library
 EOF
 
 # post installation script
