@@ -195,6 +195,25 @@ run_run_stress_stage() {
         "${SCRIPT_DIR}/run_stress.sh"
 }
 
+print_coverage_summary() {
+    local path="${RUN_RESULT_DIR}/coverage/release/coverage-summary.json"
+    printf '\n[coverage]\n'
+    if [[ -f "${path}" ]]; then
+        python3 - "${path}" <<'PY'
+import json, sys
+with open(sys.argv[1]) as fh:
+    d = json.load(fh)
+print(f"  release  line {d['line_percent']:5.1f}% ({d['line_covered']}/{d['line_total']})"
+      f"   branch {d['branch_percent']:5.1f}% ({d['branch_covered']}/{d['branch_total']})"
+      f"   func {d['function_percent']:5.1f}% ({d['function_covered']}/{d['function_total']})")
+for f in d["files"]:
+    print(f"    {f['filename']:<20} line {f['line_percent']:5.1f}%   branch {f['branch_percent']:5.1f}%   func {f['function_percent']:5.1f}%")
+PY
+    else
+        printf '  no coverage-summary.json found (run_ITs may not have completed)\n'
+    fi
+}
+
 print_pipeline_summary() {
     local stage status rc log_file
 
@@ -214,6 +233,8 @@ print_pipeline_summary() {
             "${rc}" \
             "${log_file}"
     done < "${STAGE_STATUS_FILE}"
+
+    print_coverage_summary
 
     if [[ -f "${RUN_RESULT_DIR}/ITs_summary.tsv" ]]; then
         printf '\n[IT result summary]\n'
