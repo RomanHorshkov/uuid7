@@ -12,6 +12,14 @@ name: Quality
 
 on:
   push:
+    # Tag pushes are release cuts: release.yml's quality-gate job already invokes THIS
+    # file via workflow_call for that exact ref. Without this exclusion a tag push fires
+    # Quality twice — once directly, once nested inside Release — and both instances
+    # share the same concurrency group below (workflow name + ref), so cancel-in-progress
+    # kills whichever started second. That silently starves release.yml's quality-gate
+    # dependency, and Build release assets skips with a bare "failure", no readable error.
+    tags-ignore:
+      - "v*.*.*"
   pull_request:
   workflow_dispatch:
   workflow_call:
