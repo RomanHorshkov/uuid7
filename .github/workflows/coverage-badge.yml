@@ -1,0 +1,60 @@
+name: Coverage badge
+
+# Deliberately a SEPARATE workflow, not a job inside quality.yml. quality.yml is invocable
+# via workflow_call (release.yml's quality-gate uses it), and a workflow_call caller can only
+# grant permissions it itself holds — release.yml's top-level permission is `contents: read`,
+# so any job inside quality.yml asking for `contents: write` (needed here to commit the badge
+# back) breaks the reusable-workflow permission contract and fails the ENTIRE calling run at
+# validation time (observed: Release runs failed with `startup_failure`, no readable per-job
+# error, before any job even started). workflow_run fully decouples this: it fires only after
+# the (already-completed, standalone) "Quality" run finishes, is never itself invoked via
+# workflow_call, and so is free to hold its own contents:write without touching quality.yml.
+
+on:
+  workflow_run:
+    workflows: ["Quality"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  update-badge:
+    name: Update coverage badge
+    # Only for a real push that actually succeeded — not PR runs (forks can't push back
+    # anyway) and not a failed Quality run (nothing new/trustworthy to report).
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: it-coverage
+          path: it-coverage
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute badge color + write endpoint JSON
+        run: |
+          SUMMARY="$(find it-coverage -name 'coverage-summary.json' -path '*release*' | head -1)"
+          if [[ -z "${SUMMARY}" ]]; then
+            echo "no coverage-summary.json in the it-coverage artifact" >&2
+            exit 1
+          fi
+          python3 utils/write_coverage_badge.py "${SUMMARY}" .github/badges/coverage.json
+      - name: Commit badge if it changed
+        run: |
+          if git diff --quiet -- .github/badges/coverage.json; then
+            echo "coverage unchanged, nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.json
+          # [skip ci]: this commit must not itself trigger another Quality run.
+          git commit -m "ci: update coverage badge [skip ci]"
+          git push origin "HEAD:${{ github.event.workflow_run.head_branch }}"
