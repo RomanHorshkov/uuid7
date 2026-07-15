@@ -1,0 +1,143 @@
+name: Quality
+
+# Connected graph, not three independent workflows racing each other on every push:
+#
+#   build-libs
+#     +-- it (integration tests + coverage, across every build profile incl. sanitize/tsan)
+#     +-- stress (heavy benchmarks, informational — not a hard gate for package-smoke)
+#   it -> package-smoke
+#
+# Also invocable as a reusable workflow (workflow_call) so release.yml can require it to pass
+# before cutting a release, instead of re-implementing the same gate.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-libs:
+    name: Build libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config
+      - name: Build static and shared libraries
+        run: ./utils/build_libs.sh
+      - name: Upload library build artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: library-build
+          if-no-files-found: error
+          path: |
+            build/*/libuuid7.a
+            build/*/libuuid7.so*
+            build/libuuid7.a
+            build/libuuid7.so*
+
+  it:
+    name: Integration tests + coverage (all profiles, incl. sanitize/tsan)
+    needs: build-libs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr
+      - name: Build integration tests
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh build_ITs
+      - name: Run integration tests
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh run_ITs
+      - name: Upload integration pipeline report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: integration-pipeline-report
+          if-no-files-found: warn
+          path: tests/results/pipeline/runs/**
+      - name: Upload IT coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: it-coverage
+          if-no-files-found: warn
+          path: tests/results/pipeline/runs/**/coverage/**
+
+  stress:
+    name: Stress benchmarks
+    needs: build-libs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      - name: Build stress benchmarks
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-stress"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh build_stress
+      - name: Run stress benchmarks
+        run: |
+          RUN_ID="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-stress"
+          UUID7_RESULTS_RUN_ID="${RUN_ID}" ./utils/run_pipeline.sh run_stress
+      - name: Upload stress results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stress-results
+          if-no-files-found: warn
+          path: tests/results/pipeline/runs/**
+
+  package-smoke:
+    name: Package build + install + smoke test
+    needs: it
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config fakeroot
+      - name: Build .deb
+        run: ./utils/build_deb.sh
+      - name: Install the built .deb
+        run: sudo apt-get install -y "$(ls build/debs/*.deb | head -1)"
+      - name: Smoke test the installed package
+        run: ./utils/smoke_test_package.sh
+      - name: Upload .deb artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: deb-package
+          if-no-files-found: error
+          path: build/debs/*.deb
