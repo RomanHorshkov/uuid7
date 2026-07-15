@@ -1,25 +1,41 @@
-name: release
+name: Release
+
+# Full reusable Quality gate must pass before anything is published — previously this workflow
+# built and released directly with no dependency on the test suite at all. Fires on a v* tag
+# push; validates the tag matches VERSION, builds the release bundle (tarball + .deb), attaches
+# a build-provenance attestation, and creates the GitHub Release.
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false # never cancel a release mid-flight
 
 jobs:
+  quality-gate:
+    name: Quality gate
+    uses: ./.github/workflows/quality.yml
+
   build-release-assets:
     name: Build release assets
+    needs: quality-gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write       # create the GitHub release
+      id-token: write       # OIDC for build provenance attestation
+      attestations: write   # attach the attestation to this repo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -28,8 +44,7 @@ jobs:
 
       - name: Read version
         id: version
-        run: |
-          echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+        run: echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag matches VERSION
         if: startsWith(github.ref, 'refs/tags/')
@@ -42,12 +57,10 @@ jobs:
           fi
 
       - name: Build libraries
-        run: |
-          ./utils/build_libs.sh release
+        run: ./utils/build_libs.sh release
 
       - name: Build Debian package
-        run: |
-          ./utils/build_deb.sh
+        run: ./utils/build_deb.sh
 
       - name: Assemble release bundle
         run: |
@@ -72,9 +85,14 @@ jobs:
             sha256sum * > SHA256SUMS
           )
 
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v2.2.3
+        with:
+          subject-path: build/release-bundle/*
+
       - name: Upload workflow artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-assets
           if-no-files-found: error
