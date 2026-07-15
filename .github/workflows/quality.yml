@@ -86,6 +86,45 @@ jobs:
           if-no-files-found: warn
           path: tests/results/pipeline/runs/**/coverage/**
 
+  coverage-badge:
+    name: Update coverage badge
+    needs: it
+    # Only on a real push to a branch we own (not PRs — a fork's PR can't push
+    # back, and forked-repo runs shouldn't try). The badge is read from README.md
+    # via a raw-content shields.io endpoint, so it only needs to reflect whatever
+    # branch was just pushed.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: it-coverage
+          path: it-coverage
+      - name: Compute badge color + write endpoint JSON
+        run: |
+          SUMMARY="$(find it-coverage -name 'coverage-summary.json' -path '*release*' | head -1)"
+          if [[ -z "${SUMMARY}" ]]; then
+            echo "no coverage-summary.json in the it-coverage artifact" >&2
+            exit 1
+          fi
+          python3 utils/write_coverage_badge.py "${SUMMARY}" .github/badges/coverage.json
+      - name: Commit badge if it changed
+        run: |
+          if git diff --quiet -- .github/badges/coverage.json; then
+            echo "coverage unchanged, nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.json
+          # [skip ci]: this commit must not itself trigger another Quality run.
+          git commit -m "ci: update coverage badge [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
   stress:
     name: Stress benchmarks
     needs: build-libs
