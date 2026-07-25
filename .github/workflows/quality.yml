@@ -55,17 +55,6 @@ jobs:
           sudo apt-get install -y build-essential pkg-config
       - name: Build static and shared libraries
         run: ./utils/build_libs.sh
-      - name: Upload library build artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: library-build
-          if-no-files-found: error
-          path: |
-            build/*/libuuid7.a
-            build/*/libuuid7.so*
-            build/libuuid7.a
-            build/libuuid7.so*
 
   it:
     name: Integration tests + coverage (all profiles, incl. sanitize/tsan)

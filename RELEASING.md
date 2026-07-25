@@ -6,9 +6,7 @@ This project is set up so a Git tag is the release trigger.
 
 1. Make sure the branch you want to release is green locally. Run:
    ```sh
-   ./utils/make_libs.sh
-   ./utils/make_ITs.sh
-   ./utils/make_stress.sh
+   ./utils/run_pipeline.sh
    ```
 
 2. Bump `VERSION` if the release version changed.

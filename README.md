@@ -30,18 +30,18 @@ Build
 Static + shared libraries:
 
 ```sh
-./utils/make_libs.sh
+./utils/build_libs.sh release
 ```
 
 Artifacts:
 
-- `build/libuuid7.a`
-- `build/libuuid7.so.<VERSION>`
+- `build/release/libuuid7.a`
+- `build/release/libuuid7.so.<VERSION>`
 
 Build Debian package:
 
 ```sh
-./utils/make_deb.sh
+./utils/build_deb.sh
 ```
 
 Release process
@@ -50,40 +50,41 @@ Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact merge,
 
 Testing (heavy + coverage)
 
-The integration test script runs the most expensive tests by default and always generates coverage reports.
+The pipeline builds the libraries, runs integration tests with coverage, and runs the stress matrix.
 
 Requirements (Ubuntu/Debian):
 
 ```sh
-sudo apt install libcmocka-dev gcovr
+sudo apt install build-essential pkg-config libcmocka-dev gcovr
 ```
 
 Run:
 
 ```sh
-./utils/make_ITs.sh
+./utils/run_pipeline.sh
 ```
 
-Coverage outputs:
+Coverage outputs are stored under the generated pipeline run directory:
 
-- `tests/results/ITs/ITs_all_coverage.html`
-- `tests/results/ITs/ITs_all_coverage.xml`
-- `tests/results/ITs/coverage-summary.json`
+- `tests/results/pipeline/runs/<run-id>/coverage/release/ITs_release_coverage.html`
+- `tests/results/pipeline/runs/<run-id>/coverage/release/ITs_release_coverage.xml`
+- `tests/results/pipeline/runs/<run-id>/coverage/release/coverage-summary.json`
 
 Stress Benchmarks
 
-The stress script builds the library first, links dedicated benchmark binaries against the produced static library, and writes human-readable result files.
+The stress stages build and run single-threaded and multi-threaded benchmarks against the configured library profiles and linkages.
 
 Run:
 
 ```sh
-./utils/make_stress.sh
+./utils/run_pipeline.sh build_stress
+./utils/run_pipeline.sh run_stress
 ```
 
-Benchmark outputs:
+Benchmark outputs are stored under the generated pipeline run directory:
 
-- `tests/results/stress/stress_result.txt`
-- `tests/results/stress/stress_mt_result.txt`
+- `tests/results/pipeline/runs/<run-id>/stress/<profile>/<linkage>/stress_result.txt`
+- `tests/results/pipeline/runs/<run-id>/stress/<profile>/<linkage>/stress_mt_result.txt
 
 Usage
 
@@ -105,7 +106,7 @@ Compile locally against the built library:
 
 ```sh
 gcc -std=c11 -Iapp -c myprog.c -o myprog.o
-gcc myprog.o -Lbuild -luuid7 -o myprog
+gcc myprog.o -Lbuild/release -Wl,-rpath,'$ORIGIN' -luuid7 -o myprog
 ```
 
 License

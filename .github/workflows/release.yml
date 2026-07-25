@@ -56,9 +56,6 @@ jobs:
             exit 1
           fi
 
-      - name: Build libraries
-        run: ./utils/build_libs.sh release
-
       - name: Build Debian package
         run: ./utils/build_deb.sh
 
