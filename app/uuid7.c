@@ -77,8 +77,7 @@
 #define V7_MS_SHIFT         V7_SEQ_BITS
 
 /**
- * @brief Pack a millisecond timestamp and 12-bit sequence into one 64-bit
- *        monotonic state word.
+ * @brief Pack a millisecond timestamp and 12-bit sequence into one 64-bit monotonic state word.
  *
  * Resulting bit layout:
  *
@@ -87,15 +86,10 @@
  *
  * Expanded form: `(((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))`
  *
- * @param ms
- *     Unix timestamp in milliseconds. It is cast to `uint64_t` before being
- *     shifted into the upper portion of the packed word.
- * @param seq
- *     Sequence / `rand_a` candidate. Only its low 12 bits are preserved; any
- *     higher bits are discarded by `V7_SEQ_MASK`.
+ * @param ms Unix timestamp in milliseconds. It is cast to `uint64_t` before being shifted into the upper portion of the packed word.
+ * @param seq Sequence / `rand_a` candidate. Only its low 12 bits are preserved; any higher bits are discarded by `V7_SEQ_MASK`.
  *
- * @return 64-bit packed value suitable for atomic comparison and storage in
- *         `g_v7_state`.
+ * @return 64-bit packed value suitable for atomic comparison and storage in `g_v7_state`.
  *
  * @note This macro packs the module's internal `(ms, seq)` reservation state.
  *       It does not by itself produce the final 16-byte UUID representation.
@@ -108,29 +102,25 @@
  * This reverses the timestamp portion of `V7_PACK()` by shifting the input right by `V7_MS_SHIFT` bits and discarding the low sequence
  * field.
  *
- * @param word
- *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
+ * @param word Packed 64-bit monotonic state value produced by `V7_PACK()`.
  *
  * @return The unpacked Unix timestamp in milliseconds as `uint64_t`.
  */
 #define V7_UNPACK_MS(word)  ((uint64_t)(word) >> V7_MS_SHIFT)
 
 /**
- * @brief Extract the low 12-bit sequence field from a packed monotonic state
- *        word.
+ * @brief Extract the low 12-bit sequence field from a packed monotonic state word.
  *
  * This reverses the sequence portion of `V7_PACK()` by masking the low `V7_SEQ_BITS` bits and casting the result to `uint16_t`.
  *
- * @param word
- *     Packed 64-bit monotonic state value produced by `V7_PACK()`.
+ * @param word Packed 64-bit monotonic state value produced by `V7_PACK()`.
  *
  * @return The unpacked 12-bit sequence / `rand_a` value as `uint16_t`.
  */
 #define V7_UNPACK_SEQ(word) ((uint16_t)((word) & V7_SEQ_MASK))
 
 /**
- * @brief Generic 8-bit mask used when isolating a single byte from a wider
- *        integer value.
+ * @brief Generic 8-bit mask used when isolating a single byte from a wider integer value.
  *
  * This constant is applied after right-shifting multi-byte fields so the result is truncated to one octet before storing into the output
  * UUID byte array.
@@ -138,8 +128,7 @@
 #define V7_BYTE_MASK        0xFFu
 
 /**
- * @brief Extract one big-endian byte from the 48-bit Unix millisecond
- *        timestamp used in the UUIDv7 output layout.
+ * @brief Extract one big-endian byte from the 48-bit Unix millisecond timestamp used in the UUIDv7 output layout.
  *
  * The UUID stores the timestamp in bytes `0..5` in network order (most-significant byte first). This macro selects byte @p n from a
  * timestamp value by shifting the requested octet into the low 8 bits and masking with `V7_BYTE_MASK`.
@@ -149,10 +138,8 @@
  * - `n = 0`: most-significant timestamp byte
  * - `n = 5`: least-significant timestamp byte
  *
- * @param ms
- *     Unix timestamp in milliseconds.
- * @param n
- *     Byte index in the inclusive range `[0..5]`.
+ * @param ms Unix timestamp in milliseconds.
+ * @param n Byte index in the inclusive range `[0..5]`.
  *
  * @return Selected timestamp byte as `uint8_t`.
  *
@@ -161,8 +148,7 @@
 #define V7_MS_BYTE(ms, n)   ((uint8_t)((((uint64_t)(ms)) >> (8 * (5 - (n)))) & V7_BYTE_MASK))
 
 /**
- * @brief Bit shift used to obtain the high 4 bits of the 12-bit `rand_a`
- *        sequence field.
+ * @brief Bit shift used to obtain the high 4 bits of the 12-bit `rand_a` sequence field.
  *
  * The UUIDv7 layout splits `rand_a` across two bytes:
  *
@@ -174,8 +160,7 @@
 #define V7_SEQ_HIGH_SHIFT   8u
 
 /**
- * @brief Mask for the high 4-bit nibble of the 12-bit `rand_a` sequence field
- *        after it has been shifted down to the low bits.
+ * @brief Mask for the high 4-bit nibble of the 12-bit `rand_a` sequence field after it has been shifted down to the low bits.
  *
  * With the current layout this mask equals `0x0F` and is used when composing UUID byte 6 together with the version nibble.
  */
@@ -199,8 +184,7 @@
 #define V7_SEQ_LOW_MASK     0xFFu
 
 /**
- * @brief Mask for the low 6 payload bits of UUID byte 8 after reserving the
- *        top 2 bits for the RFC variant.
+ * @brief Mask for the low 6 payload bits of UUID byte 8 after reserving the top 2 bits for the RFC variant.
  *
  * UUID byte 8 is formed as:
  *
@@ -225,8 +209,7 @@
 #define V7_VARIANT_TOP      0x80u
 
 /**
- * @brief Number of random-tail bytes stored in the low 64 bits of the UUID
- *        assembly buffer before variant adjustment.
+ * @brief Number of random-tail bytes stored in the low 64 bits of the UUID assembly buffer before variant adjustment.
  *
  * The implementation samples 8 random bytes, then overlays the variant bits in the first of those bytes when constructing bytes `8..15`.
  */
@@ -244,21 +227,18 @@
  *
  * This macro is used when collapsing a `struct timespec` into a single Unix millisecond timestamp.
  *
- * @param sec
- *     Whole-second component to convert.
+ * @param sec Whole-second component to convert.
  *
  * @return Equivalent millisecond count as `uint64_t`.
  */
 #define SEC_TO_MSEC(sec)    ((uint64_t)(sec) * UINT64_C(1000))
 
 /**
- * @brief Convert nanoseconds to milliseconds using truncating integer
- *        division.
+ * @brief Convert nanoseconds to milliseconds using truncating integer division.
  *
  * This preserves the intended millisecond-resolution behavior of the UUIDv7 timestamp encoding.
  *
- * @param nsec
- *     Nanosecond component to convert.
+ * @param nsec Nanosecond component to convert.
  *
  * @return Whole milliseconds extracted from @p nsec as `uint64_t`.
  */
@@ -353,8 +333,8 @@ static int _default_rng(void* buf, size_t n);
  *        buffer.
  *
  * This is used during initialization when a previously generated UUIDv7 value is provided. It extracts the timestamp and sequence from the
- * input UUID and raises `g_v7_state` to at least that value, ensuring that subsequent UUIDs generated by this process remain monotonic with
- * respect to the provided UUID without ever rewinding an already newer in-process state.
+ * input UUID and raises `g_v7_state` to at least that value, ensuring that subsequent UUIDs generated by this process remain monotonic
+ * with respect to the provided UUID without ever rewinding an already newer in-process state.
  *
  * @param uuid7_buf Pointer to a 16-byte buffer containing the previous UUID7.
  * @return 0 on success.

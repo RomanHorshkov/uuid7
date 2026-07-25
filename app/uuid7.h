@@ -98,15 +98,12 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
 int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
 
 /**
- * @brief Raise the monotonic floor from a persisted UUIDv7 WITHOUT touching the
- *        RNG selection.
+ * @brief Raise the monotonic floor from a persisted UUIDv7 WITHOUT touching the RNG selection.
  *
- * For the common server pattern where the generator is initialized early (RNG)
- * but the newest existing id is only known later — e.g. after opening a database
- * and reading the maximum stored key. Importing it guarantees subsequently
- * generated ids sort AFTER everything already persisted, so time-ordered DBI
- * appends stay sequential across restarts, snapshot restores, and clock
- * rollbacks. Raise-only: an older floor never rewinds a newer in-process state.
+ * For the common server pattern where the generator is initialized early (RNG) but the newest existing id is only known later — e.g.
+ * after opening a database and reading the maximum stored key. Importing it guarantees subsequently generated ids sort AFTER everything
+ * already persisted, so time-ordered DBI appends stay sequential across restarts, snapshot restores, and clock rollbacks.
+ * Raise-only: an older floor never rewinds a newer in-process state.
  *
  * @param[in] last_uuid7 A valid 16-byte UUIDv7 (typically the max stored key).
  * @return 0 on success; -1 if NULL; -2/-3 if not a version-7 / RFC-variant UUID.
@@ -116,9 +113,8 @@ int uuid7_raise_floor(const void* last_uuid7);
 /**
  * @brief Number of clock_gettime() failures observed since process start.
  *
- * A failure still produces a unique id (random tail + monotonic sequence) but
- * with a zero timestamp, which is operationally misleading. Poll this as a
- * health metric and alert if it is ever non-zero. Thread-safe.
+ * A failure still produces a unique id (random tail + monotonic sequence) but with a zero timestamp, which is operationally misleading.
+ * Poll this as a health metric and alert if it is ever non-zero. Thread-safe.
  *
  * @return Monotonically increasing failure count.
  */
