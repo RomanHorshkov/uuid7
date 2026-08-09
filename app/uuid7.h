@@ -32,11 +32,6 @@
 #include <stddef.h> /* size_t   */
 #include <stdint.h> /* uint64_t */
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 /*****************************************************************************************************************************************
  * PUBLIC DEFINES
  *****************************************************************************************************************************************
@@ -148,9 +143,5 @@ int uuid7_gen(void* out_buf);
  * @return 0 on success.
  */
 int uuid7_set_rng_func(uuid7_rng_function_t fn);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  // UUID7_H
