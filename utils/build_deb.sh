@@ -73,6 +73,13 @@ chmod 0755 "$STAGE/DEBIAN/postrm"
 # before it gets sealed into a package. A red check kills the build here.
 "${ROOT_DIR}/utils/check_hardening.sh" "$STAGE/usr/local/lib/libuuid7.so.$VER"
 
+# Ship the DEP-5 copyright file (first-party terms + every third-party notice)
+# at /usr/share/doc/<pkg>/copyright (Debian Policy 12.5). A missing file is a
+# build error: a binary must never leave without its notices.
+COPYRIGHT_SRC="${ROOT_DIR}/debian/copyright"
+[[ -f "${COPYRIGHT_SRC}" ]] || { printf 'missing %s — third-party notices must ship in the deb\n' "${COPYRIGHT_SRC}" >&2; exit 1; }
+install -d -m 0755 "${STAGE}/usr/share" "${STAGE}/usr/share/doc" "${STAGE}/usr/share/doc/${PKG_NAME}"
+install -m 0644 "${COPYRIGHT_SRC}" "${STAGE}/usr/share/doc/${PKG_NAME}/copyright"
 # Build .deb
 DEB="${PKG_NAME}_${VER}_${ARCH}.deb"
 fakeroot dpkg-deb --build "$STAGE" "$DEB"

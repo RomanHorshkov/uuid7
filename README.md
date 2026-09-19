@@ -161,7 +161,8 @@ gcc myprog.o -Lbuild/release -Wl,-rpath,'$ORIGIN' -luuid7 -o myprog
 
 License
 
-No license file yet. Add one (MIT/BSD/Apache-2.0) before distributing.
+MIT — see [LICENSE](LICENSE). Every built .deb ships the same terms at
+/usr/share/doc/uuid7/copyright (generated from debian/copyright).
 
 ## Build profiles & hardening
 
