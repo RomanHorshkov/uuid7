@@ -326,9 +326,13 @@ build_library_variant() {
         -o "${shared_object}"
 
     printf '  compiling static-library object: %s\n' "${static_object}"
+    # -fPIC on the ARCHIVE object too: the .a must link into PIE executables and into
+    # consumers' shared objects on any toolchain, not only on one built with
+    # --enable-default-pie (Debian/Ubuntu gcc). Same code as the .so object.
     "${CC}" \
         "${cppflags[@]}" \
         "${library_cflags[@]}" \
+        "${CFLAGS_SHARED[@]}" \
         -c "${SOURCE_FILE}" \
         -o "${static_object}"
 
@@ -337,6 +341,7 @@ build_library_variant() {
         "${LDFLAGS_SHARED[@]}" \
         "${library_ldflags[@]}" \
         -Wl,-soname,"${shared_soname}" \
+        -Wl,--version-script,"${ROOT_DIR}/utils/uuid7.map" \
         -o "${shared_library}" \
         "${shared_object}" \
         "${SHARED_LINK_LIBS[@]}"
