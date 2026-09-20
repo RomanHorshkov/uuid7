@@ -8,10 +8,12 @@
  *
  * The CAS loop reserves one unique `(timestamp, rand_a)` pair per successful call. If real time moves forward, the sequence starts at zero
  * for the new millisecond. If real time stalls, regresses, or the logical clock is already ahead, the generator continues from the last
- * reserved state. Sequence overflow advances the logical millisecond by one and restarts the sequence at zero.
+ * reserved state. Sequence overflow advances the logical millisecond by one and restarts the sequence at zero — but never more than
+ * UUID7_MAX_AHEAD_MS past the wall clock: beyond that bound `uuid7_gen()` refuses (-3) without touching the state, so an abusive caller
+ * cannot date the process's ids arbitrarily into the future, and the 48-bit timestamp field can never wrap.
  *
  * State import is raise-only. A valid persisted UUIDv7 can move the process floor forward during initialization, but no import path can
- * rewind `g_v7_state`.
+ * rewind `g_v7_state`, and a floor dated beyond the same bound is refused (-4) rather than adopted.
  *
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
  * @date    may 2026
@@ -221,6 +223,14 @@
  * UUIDv7 stores a 48-bit timestamp, which corresponds to exactly 6 bytes in the binary output representation.
  */
 #define V7_MS_BYTES         6u
+
+/**
+ * @brief First millisecond value that no longer fits the 48-bit UUIDv7 timestamp field.
+ *
+ * The packed state word holds 52 bits of milliseconds; the encoded UUID holds 48. A reservation at or past this value would be
+ * silently truncated on encode and sort BEFORE every earlier id — the generator refuses it instead.
+ */
+#define V7_MS_LIMIT         (UINT64_C(1) << (8u * V7_MS_BYTES))
 
 /**
  * @brief Convert whole seconds to milliseconds.
@@ -549,6 +559,16 @@ int uuid7_gen(void* out_buf)
             }
         }
 
+        /* Abuse bound (UUID7_MAX_AHEAD_MS): refuse to let logical time run away from the wall clock, and never let the timestamp
+         * leave its 48-bit field. Checked BEFORE the CAS so a refusal leaves the shared state exactly as it was. The wall-clock
+         * comparison is skipped only when the clock itself failed (now_ms == 0, counted in g_clock_failures) — there is no
+         * reference to bound against, and a clock failure must keep yielding unique ids as documented. */
+        {
+            const uint64_t cand_ms = V7_UNPACK_MS(candidate);
+            if(cand_ms >= V7_MS_LIMIT) return -3;
+            if(now_ms != 0u && cand_ms > now_ms + (uint64_t)UUID7_MAX_AHEAD_MS) return -3;
+        }
+
         /* Reserve the candidate. On failure, `prev` is updated with the newer observed state. */
         if(!atomic_compare_exchange_weak_explicit(&g_v7_state, &prev, candidate, memory_order_acq_rel, memory_order_relaxed))
         {
@@ -626,6 +646,14 @@ static int _raise_g_v7_state_from_uuid(const void* uuid7_buf)
 
     /* Extract rand_a from byte 6 low nibble plus byte 7. */
     uint16_t seq = (uint16_t)((((uint16_t)(in[6] & V7_SEQ_HIGH_MASK)) << V7_SEQ_HIGH_SHIFT) | ((uint16_t)in[7]));
+
+    /* Abuse bound (UUID7_MAX_AHEAD_MS): a floor dated beyond the wall clock plus the bound is a poisoned import or a runaway clock —
+     * adopting it would date every later id in the future (and, near the 48-bit limit, wrap the encoded timestamp). Refuse it and
+     * leave the state untouched. Skipped only when the clock itself failed (no reference to bound against). */
+    {
+        const uint64_t now_ms = _get_realtime_ms();
+        if(now_ms != 0u && ms > now_ms + (uint64_t)UUID7_MAX_AHEAD_MS) return -4;
+    }
 
     /* Pack the imported floor and raise the process state if it is newer. */
     uint64_t packed = V7_PACK(ms, seq);

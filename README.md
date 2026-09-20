@@ -152,6 +152,18 @@ if (uuid7_gen(u) != 0) {
 }
 ```
 
+Abuse bounds
+------------
+
+The generator's logical clock may run at most `UUID7_MAX_AHEAD_MS` (10 s by
+default, `-DUUID7_MAX_AHEAD_MS=<ms>` to override) ahead of the wall clock.
+Sustained generation faster than 4096 ids/ms borrows future milliseconds up to
+that bound, then `uuid7_gen()` returns `-3` without touching the state until
+real time catches up. A persisted floor dated beyond the bound — a poisoned
+import or a runaway clock — is refused by `uuid7_raise_floor()`/`uuid7_init()`
+with `-4`. Together these guarantee the 48-bit timestamp field never wraps and
+no caller can date the process's ids arbitrarily into the future.
+
 Compile locally against the built library:
 
 ```sh
