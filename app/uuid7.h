@@ -32,11 +32,6 @@
 #include <stddef.h> /* size_t   */
 #include <stdint.h> /* uint64_t */
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 /*****************************************************************************************************************************************
  * PUBLIC DEFINES
  *****************************************************************************************************************************************
@@ -48,6 +43,22 @@ extern "C"
  * Callers must provide at least this many bytes to `uuid7_gen()`.
  */
 #define UUID7_SIZE_BYTES 16u
+
+/**
+ * @brief How far (milliseconds) the generator's logical clock may run AHEAD of the wall clock.
+ *
+ * Two things can push logical time past real time: sustained generation faster than 4096 ids per millisecond (the 12-bit sequence is
+ * exhausted and the generator borrows the next millisecond rather than block), and a persisted floor imported through uuid7_init() /
+ * uuid7_raise_floor() that carries a future timestamp. Unbounded, either one lets an abusive caller — or a poisoned stored id — date
+ * every subsequent id arbitrarily far into the future, and at the 48-bit limit the encoded timestamp would wrap and break ordering.
+ *
+ * uuid7_gen() refuses (-3, state untouched) rather than reserve a timestamp beyond `now + UUID7_MAX_AHEAD_MS`; uuid7_raise_floor() and
+ * uuid7_init() refuse (-4) a floor beyond it. Ten seconds absorbs any realistic burst (40 million ids) while keeping a poisoned floor
+ * a loud boot error instead of a silent corruption. Override at compile time with -DUUID7_MAX_AHEAD_MS=<ms> if a deployment needs more.
+ */
+#ifndef UUID7_MAX_AHEAD_MS
+#    define UUID7_MAX_AHEAD_MS 10000u
+#endif
 
 /*****************************************************************************************************************************************
  * PUBLIC STRUCTURED VARIABLES
@@ -94,6 +105,8 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
  * @return 0 on success.
  * @return -2 if @p last_gen_uuid7 does not encode UUID version 7.
  * @return -3 if @p last_gen_uuid7 does not encode the RFC variant bits.
+ * @return -4 if @p last_gen_uuid7 is dated more than UUID7_MAX_AHEAD_MS past the wall clock (a poisoned or future-dated id) — the
+ *         floor is NOT raised.
  */
 int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
 
@@ -105,8 +118,12 @@ int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
  * already persisted, so time-ordered DBI appends stay sequential across restarts, snapshot restores, and clock rollbacks.
  * Raise-only: an older floor never rewinds a newer in-process state.
  *
+ * A floor dated more than UUID7_MAX_AHEAD_MS past the wall clock is refused: a stored id can only come from this generator or from an
+ * import path, and a future-dated one is either a poisoned import or a clock that ran away — both must be a loud error at boot, never
+ * a generator that dates everything after it in the future.
+ *
  * @param[in] last_uuid7 A valid 16-byte UUIDv7 (typically the max stored key).
- * @return 0 on success; -1 if NULL; -2/-3 if not a version-7 / RFC-variant UUID.
+ * @return 0 on success; -1 if NULL; -2/-3 if not a version-7 / RFC-variant UUID; -4 if dated beyond `now + UUID7_MAX_AHEAD_MS`.
  */
 int uuid7_raise_floor(const void* last_uuid7);
 
@@ -132,6 +149,8 @@ uint64_t uuid7_clock_failure_count(void);
  * @return 0 on success.
  * @return -1 if @p out_buf is NULL.
  * @return -2 if the active RNG cannot provide entropy.
+ * @return -3 if reserving the next pair would date it more than UUID7_MAX_AHEAD_MS past the wall clock, or beyond the 48-bit
+ *         timestamp field. The monotonic state is NOT advanced; the caller should back off and retry once real time catches up.
  */
 int uuid7_gen(void* out_buf);
 
@@ -148,9 +167,5 @@ int uuid7_gen(void* out_buf);
  * @return 0 on success.
  */
 int uuid7_set_rng_func(uuid7_rng_function_t fn);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  // UUID7_H

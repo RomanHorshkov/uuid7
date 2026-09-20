@@ -2,3 +2,7 @@ build/
 tests/result/
 .clang-format
 tests/results/
+
+*.swp
+*.un~
+

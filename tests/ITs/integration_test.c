@@ -871,6 +871,73 @@ static void test_raise_floor_orders_after_import(void** state)
  * healthy invariant (the failure itself isn't injectable through the test hooks,
  * which bypass clock_gettime entirely).
  */
+/*
+ * test_gen_refuses_beyond_ahead_bound()
+ * -------------------------------------
+ * Abuse bound: with the wall clock frozen, the generator may borrow logical
+ * milliseconds only up to UUID7_MAX_AHEAD_MS past it. Park the state exactly at
+ * the bound (sequence one short of exhaustion), prove the last in-bound id is
+ * minted, then prove the next reservation — which would need bound+1 — is
+ * refused with -3 and leaves the state untouched. Advancing the wall clock by
+ * one millisecond lifts the bound by one and the refused reservation succeeds.
+ */
+static void test_gen_refuses_beyond_ahead_bound(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    const uint64_t bound_ms = 1000u + (uint64_t)UUID7_MAX_AHEAD_MS;
+    uint8_t floor_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(floor_uuid, bound_ms, 0x0FFEu);      /* exactly AT the bound: allowed */
+    assert_int_equal(uuid7_raise_floor(floor_uuid), 0);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);                   /* last in-bound reservation      */
+    assert_int_equal(extract_ms(uuid), bound_ms);
+    assert_int_equal(extract_seq(uuid), 0x0FFFu);
+
+    assert_int_equal(uuid7_gen(uuid), -3);                  /* would need bound+1: refused    */
+    assert_int_equal(uuid7_gen(uuid), -3);                  /* state untouched: still refused */
+
+    set_fake_time(1001u);                                   /* real time catches up by 1 ms   */
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), bound_ms + 1u);
+    assert_int_equal(extract_seq(uuid), 0u);
+}
+
+/*
+ * test_raise_floor_refuses_far_future()
+ * -------------------------------------
+ * A persisted id dated more than UUID7_MAX_AHEAD_MS past the wall clock is a
+ * poisoned import (or a runaway clock): uuid7_raise_floor() and uuid7_init()
+ * must refuse it with -4 and leave the generator exactly where it was. The
+ * 48-bit maximum timestamp is the canonical poison value.
+ */
+static void test_raise_floor_refuses_far_future(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t poison[UUID7_SIZE_BYTES];
+    build_valid_uuid7(poison, 1000u + (uint64_t)UUID7_MAX_AHEAD_MS + 1u, 0u); /* one past the bound */
+    assert_int_equal(uuid7_raise_floor(poison), -4);
+    assert_int_equal(uuid7_init(NULL, poison), -4);
+
+    build_valid_uuid7(poison, UINT64_C(0xFFFFFFFFFFFF), 0x0FFFu);            /* 48-bit maximum      */
+    assert_int_equal(uuid7_raise_floor(poison), -4);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);                                     /* state untouched     */
+    assert_int_equal(extract_ms(uuid), 1000u);
+    assert_int_equal(extract_seq(uuid), 0u);
+}
+
 static void test_clock_failure_count_healthy_is_zero(void** state)
 {
     (void)state;
@@ -884,6 +951,8 @@ int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_raise_floor_orders_after_import),
+        cmocka_unit_test(test_gen_refuses_beyond_ahead_bound),
+        cmocka_unit_test(test_raise_floor_refuses_far_future),
         cmocka_unit_test(test_clock_failure_count_healthy_is_zero),
         cmocka_unit_test(test_default_rng_used_when_uninitialized),
         cmocka_unit_test(test_version_variant_and_tail_bytes),
