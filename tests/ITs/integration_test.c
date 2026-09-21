@@ -18,6 +18,7 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
 
 /*
@@ -852,7 +853,7 @@ static void test_raise_floor_orders_after_import(void** state)
     uuid7_test_set_time_fn(fake_time_now);
 
     uint8_t last_uuid[UUID7_SIZE_BYTES];
-    build_valid_uuid7(last_uuid, 5000u, 7u); /* newest id already persisted */
+    build_valid_uuid7(last_uuid, 5000u, 7u);           /* newest id already persisted */
 
     assert_int_equal(uuid7_raise_floor(NULL), -1);     /* NULL rejected      */
     assert_int_equal(uuid7_raise_floor(last_uuid), 0); /* floor raised       */
@@ -890,19 +891,19 @@ static void test_gen_refuses_beyond_ahead_bound(void** state)
     uuid7_test_set_time_fn(fake_time_now);
 
     const uint64_t bound_ms = 1000u + (uint64_t)UUID7_MAX_AHEAD_MS;
-    uint8_t floor_uuid[UUID7_SIZE_BYTES];
-    build_valid_uuid7(floor_uuid, bound_ms, 0x0FFEu);      /* exactly AT the bound: allowed */
+    uint8_t        floor_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(floor_uuid, bound_ms, 0x0FFEu); /* exactly AT the bound: allowed */
     assert_int_equal(uuid7_raise_floor(floor_uuid), 0);
 
     uint8_t uuid[UUID7_SIZE_BYTES] = {0};
-    assert_int_equal(uuid7_gen(uuid), 0);                   /* last in-bound reservation      */
+    assert_int_equal(uuid7_gen(uuid), 0); /* last in-bound reservation      */
     assert_int_equal(extract_ms(uuid), bound_ms);
     assert_int_equal(extract_seq(uuid), 0x0FFFu);
 
-    assert_int_equal(uuid7_gen(uuid), -3);                  /* would need bound+1: refused    */
-    assert_int_equal(uuid7_gen(uuid), -3);                  /* state untouched: still refused */
+    assert_int_equal(uuid7_gen(uuid), -3); /* would need bound+1: refused    */
+    assert_int_equal(uuid7_gen(uuid), -3); /* state untouched: still refused */
 
-    set_fake_time(1001u);                                   /* real time catches up by 1 ms   */
+    set_fake_time(1001u);                  /* real time catches up by 1 ms   */
     assert_int_equal(uuid7_gen(uuid), 0);
     assert_int_equal(extract_ms(uuid), bound_ms + 1u);
     assert_int_equal(extract_seq(uuid), 0u);
@@ -929,11 +930,11 @@ static void test_raise_floor_refuses_far_future(void** state)
     assert_int_equal(uuid7_raise_floor(poison), -4);
     assert_int_equal(uuid7_init(NULL, poison), -4);
 
-    build_valid_uuid7(poison, UINT64_C(0xFFFFFFFFFFFF), 0x0FFFu);            /* 48-bit maximum      */
+    build_valid_uuid7(poison, UINT64_C(0xFFFFFFFFFFFF), 0x0FFFu); /* 48-bit maximum      */
     assert_int_equal(uuid7_raise_floor(poison), -4);
 
     uint8_t uuid[UUID7_SIZE_BYTES] = {0};
-    assert_int_equal(uuid7_gen(uuid), 0);                                     /* state untouched     */
+    assert_int_equal(uuid7_gen(uuid), 0); /* state untouched     */
     assert_int_equal(extract_ms(uuid), 1000u);
     assert_int_equal(extract_seq(uuid), 0u);
 }
