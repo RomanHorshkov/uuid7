@@ -1,100 +1,147 @@
 #!/usr/bin/env bash
+# =============================================================================
+# build_deb.sh — package the release-profile libuuid7 artifacts into debs
+#
+# author  Roman Horshkov <github.com/RomanHorshkov>
+# date    2026
+# (c) 2026
+# =============================================================================
+#
+# Produces the standard Debian library split:
+#
+#   libuuid7_<ver>_<arch>.deb      runtime: libuuid7.so.<ver> + soname symlink
+#   libuuid7-dev_<ver>_<arch>.deb  development: uuid7.h, libuuid7.a,
+#                                     libuuid7.so linker symlink; depends on
+#                                     the exact-version runtime package
+#
+# plus a SHA256SUMS manifest covering both, in build/debs/.
+#
+# Both packages conflict with and replace the former single package "uuid7",
+# so upgrading a machine that still has it installed is one apt install.
+# =============================================================================
 set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-PKG_NAME="uuid7"
+LIB="uuid7"
+PKG_RUNTIME="libuuid7"
+PKG_DEV="libuuid7-dev"
+PKG_OLD="uuid7"
+DESCRIPTION="Thread-safe monotonic binary UUIDv7 generation library"
 STRIP="${STRIP:-strip}"
+
+die() { printf '%s: %s\n' "${BASH_SOURCE[0]}" "$1" >&2; exit 1; }
 
 cd "$ROOT_DIR"
 
-# Build the library artifacts
+# Read + validate version (packaged versions must be strict semver).
+VER="$(tr -d '[:space:]' < VERSION)"
+[[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "VERSION '${VER}' does not match ^[0-9]+\\.[0-9]+\\.[0-9]+\$"
+
+# Build the release library artifacts (also refreshes the flat build/ symlinks
+# and runs the hardening gate on the freshly linked .so).
 ./utils/build_libs.sh release
 
-
-# Read version + architecture
-VER="$(< VERSION)"
 ARCH="$(dpkg --print-architecture)"
-
-# The deb filename, soname chain, and control file all embed VERSION verbatim.
-# Refuse anything that is not strict MAJOR.MINOR.PATCH.
-if ! [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf 'error: VERSION must match MAJOR.MINOR.PATCH (digits only), got: %q\n' "$VER" >&2
-    exit 1
-fi
 
 # Split version safely (keep IFS local)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
-
-# Prepare package staging dir (kept under build/ so it doesn't pollute the repo root).
-STAGE="${ROOT_DIR}/build/pkgroot"
-rm -rf "$STAGE"
-mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/local/lib" "$STAGE/usr/local/include"
-
-# Install payload into /usr/local (inside the package)
-install -m 0644 app/uuid7.h "$STAGE/usr/local/include/uuid7.h"
-
-install -m 0755 "build/release/libuuid7.so.$VER" "$STAGE/usr/local/lib/libuuid7.so.$VER"
-"$STRIP" --strip-unneeded "$STAGE/usr/local/lib/libuuid7.so.$VER"
-ln -sf "libuuid7.so.$VER" "$STAGE/usr/local/lib/libuuid7.so.$MAJOR"
-ln -sf "libuuid7.so.$VER" "$STAGE/usr/local/lib/libuuid7.so"
-
-install -m 0644 build/release/libuuid7.a "$STAGE/usr/local/lib/libuuid7.a"
-
-# Control file
-cat > "$STAGE/DEBIAN/control" <<EOF
-Package: $PKG_NAME
-Version: $VER
-Section: libs
-Priority: optional
-Architecture: $ARCH
-Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
-Description: Thread-safe monotonic binary UUIDv7 generation library
-EOF
-
-# post installation script
-# ldconfig hooks so runtime linker sees it immediately
-cat > "$STAGE/DEBIAN/postinst" <<'EOF'
-#!/bin/sh
-set -e
-ldconfig
-exit 0
-EOF
-chmod 0755 "$STAGE/DEBIAN/postinst"
-
-cat > "$STAGE/DEBIAN/postrm" <<'EOF'
-#!/bin/sh
-set -e
-ldconfig
-exit 0
-EOF
-chmod 0755 "$STAGE/DEBIAN/postrm"
-
-# Verify the staged (stripped) payload still carries the release hardening
-# before it gets sealed into a package. A red check kills the build here.
-"${ROOT_DIR}/utils/check_hardening.sh" "$STAGE/usr/local/lib/libuuid7.so.$VER"
 
 # Ship the DEP-5 copyright file (first-party terms + every third-party notice)
 # at /usr/share/doc/<pkg>/copyright (Debian Policy 12.5). A missing file is a
 # build error: a binary must never leave without its notices.
 COPYRIGHT_SRC="${ROOT_DIR}/debian/copyright"
-[[ -f "${COPYRIGHT_SRC}" ]] || { printf 'missing %s — third-party notices must ship in the deb\n' "${COPYRIGHT_SRC}" >&2; exit 1; }
-install -d -m 0755 "${STAGE}/usr/share" "${STAGE}/usr/share/doc" "${STAGE}/usr/share/doc/${PKG_NAME}"
-install -m 0644 "${COPYRIGHT_SRC}" "${STAGE}/usr/share/doc/${PKG_NAME}/copyright"
-# Build .deb
-DEB="${PKG_NAME}_${VER}_${ARCH}.deb"
-fakeroot dpkg-deb --build "$STAGE" "$DEB"
-
-echo
-echo "Built complete"
+[[ -f "${COPYRIGHT_SRC}" ]] || die "missing ${COPYRIGHT_SRC} — third-party notices must ship in the deb"
 
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/build/debs}"
-mkdir -p "$OUT_DIR"
-mv -f "$DEB" "$OUT_DIR/"
+# Start clean: stale debs (including ones from before a package rename) must
+# never linger into the SHA256SUMS manifest or a report.
+rm -rf "$OUT_DIR"
+install -d -m 0755 "$OUT_DIR"
 
-# Refresh checksums next to the deb(s) so consumers can verify what they fetch.
-(cd "$OUT_DIR" && sha256sum -- *.deb > SHA256SUMS)
-echo "checksums refreshed: $OUT_DIR/SHA256SUMS"
+# stage_dirs <stage> <subdir>... : explicit 0755 so the shipped paths never
+# depend on the calling shell's umask.
+stage_dirs() {
+    local stage="$1"; shift
+    rm -rf "$stage"
+    install -d -m 0755 "$stage" "$stage/DEBIAN" "$stage/usr" "$stage/usr/local" \
+        "$stage/usr/share" "$stage/usr/share/doc"
+    local d
+    for d in "$@"; do install -d -m 0755 "$stage/usr/local/$d"; done
+}
 
-echo "see .deb info with dpkg-deb -c $DEB or dpkg-deb -I $DEB"
-echo "moved to $OUT_DIR/"
-echo "install with sudo apt install $OUT_DIR/$DEB"
+# ldconfig hooks so the runtime linker sees the library immediately
+write_ldconfig_hooks() {
+    local stage="$1" hook
+    for hook in postinst postrm; do
+        printf '#!/bin/sh\nset -e\nldconfig\nexit 0\n' > "$stage/DEBIAN/$hook"
+        chmod 0755 "$stage/DEBIAN/$hook"
+    done
+}
+
+# --- runtime package -----------------------------------------------------------
+STAGE_RT="${ROOT_DIR}/build/pkgroot/${PKG_RUNTIME}"
+stage_dirs "$STAGE_RT" lib
+LIB_RT="$STAGE_RT/usr/local/lib"
+
+install -m 0755 "build/release/lib${LIB}.so.$VER" "$LIB_RT/lib${LIB}.so.$VER"
+"$STRIP" --strip-unneeded "$LIB_RT/lib${LIB}.so.$VER"
+ln -sf "lib${LIB}.so.$VER" "$LIB_RT/lib${LIB}.so.$MAJOR"
+
+# Gate the staged, stripped shared library: the exact deb payload must carry
+# the hardening the release profile promises. A hard failure aborts the build.
+"${ROOT_DIR}/utils/check_hardening.sh" "$LIB_RT/lib${LIB}.so.$VER"
+
+cat > "$STAGE_RT/DEBIAN/control" <<EOF
+Package: $PKG_RUNTIME
+Version: $VER
+Section: libs
+Priority: optional
+Architecture: $ARCH
+Conflicts: $PKG_OLD
+Replaces: $PKG_OLD
+Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
+Description: $DESCRIPTION
+EOF
+write_ldconfig_hooks "$STAGE_RT"
+
+install -d -m 0755 "${STAGE_RT}/usr/share/doc/${PKG_RUNTIME}"
+install -m 0644 "${COPYRIGHT_SRC}" "${STAGE_RT}/usr/share/doc/${PKG_RUNTIME}/copyright"
+DEB_RT="${PKG_RUNTIME}_${VER}_${ARCH}.deb"
+fakeroot dpkg-deb --build "$STAGE_RT" "$OUT_DIR/$DEB_RT"
+
+# --- development package --------------------------------------------------------
+STAGE_DEV="${ROOT_DIR}/build/pkgroot/${PKG_DEV}"
+stage_dirs "$STAGE_DEV" lib include
+LIB_DEV="$STAGE_DEV/usr/local/lib"
+
+install -m 0644 "app/${LIB}.h" "$STAGE_DEV/usr/local/include/${LIB}.h"
+install -m 0644 "build/release/lib${LIB}.a" "$LIB_DEV/lib${LIB}.a"
+ln -sf "lib${LIB}.so.$VER" "$LIB_DEV/lib${LIB}.so"
+
+cat > "$STAGE_DEV/DEBIAN/control" <<EOF
+Package: $PKG_DEV
+Version: $VER
+Section: libdevel
+Priority: optional
+Architecture: $ARCH
+Depends: $PKG_RUNTIME (= $VER)
+Conflicts: $PKG_OLD
+Replaces: $PKG_OLD
+Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
+Description: Development files for $PKG_RUNTIME (header, static library, linker symlink)
+EOF
+
+install -d -m 0755 "${STAGE_DEV}/usr/share/doc/${PKG_DEV}"
+install -m 0644 "${COPYRIGHT_SRC}" "${STAGE_DEV}/usr/share/doc/${PKG_DEV}/copyright"
+DEB_DEV="${PKG_DEV}_${VER}_${ARCH}.deb"
+fakeroot dpkg-deb --build "$STAGE_DEV" "$OUT_DIR/$DEB_DEV"
+
+# --- manifest ----------------------------------------------------------------
+(
+    cd "$OUT_DIR"
+    sha256sum -- *.deb > SHA256SUMS
+)
+
+printf '\nBuilt:\n  %s\n  %s\n' "$OUT_DIR/$DEB_RT" "$OUT_DIR/$DEB_DEV"
+printf 'checksums: %s/SHA256SUMS\n' "$OUT_DIR"
+printf 'install with: sudo apt install %s/%s %s/%s\n' "$OUT_DIR" "$DEB_RT" "$OUT_DIR" "$DEB_DEV"

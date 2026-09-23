@@ -95,7 +95,8 @@ Releases are tag-driven.
 Each GitHub Release publishes:
 
 - `uuid7-<version>-linux-x86_64.tar.gz`
-- `uuid7_<version>_<arch>.deb`
+- `libuuid7_<version>_<arch>.deb` — runtime: `libuuid7.so.<version>` + soname symlink
+- `libuuid7-dev_<version>_<arch>.deb` — development: `uuid7.h`, `libuuid7.a`, `libuuid7.so` linker symlink; depends on `libuuid7 (= <version>)`. Both replace the former `uuid7` package.
 - `SHA256SUMS`
 
 Testing (heavy + coverage)

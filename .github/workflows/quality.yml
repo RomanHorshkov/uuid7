@@ -147,20 +147,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config fakeroot
-      - name: Build .deb
+      - name: Build .debs
         run: ./utils/build_deb.sh
-      - name: Install the built .deb
+      - name: Install the built .debs (runtime + dev)
         run: |
-          DEB_FILE="$(find build/debs -maxdepth 1 -name '*.deb' -print -quit)"
-          if [[ -z "${DEB_FILE}" ]]; then
-            echo "no .deb found under build/debs/" >&2
-            exit 1
-          fi
-          # apt-get only treats an argument as a local file path if it starts with ./ or /;
-          # a bare relative path like "build/debs/foo.deb" (even though it contains slashes)
-          # is parsed as a REPOSITORY PACKAGE NAME instead and fails with a confusing
-          # "Unable to locate package build/debs" error.
-          sudo apt-get install -y "./${DEB_FILE}"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          ARCH="$(dpkg --print-architecture)"
+          DEB_RT="build/debs/libuuid7_${VERSION}_${ARCH}.deb"
+          DEB_DEV="build/debs/libuuid7-dev_${VERSION}_${ARCH}.deb"
+          for f in "${DEB_RT}" "${DEB_DEV}"; do
+            if [[ ! -f "${f}" ]]; then
+              echo "expected package not found: ${f}" >&2
+              exit 1
+            fi
+          done
+          sudo apt-get install -y "./${DEB_RT}" "./${DEB_DEV}"
       - name: Smoke test the installed package
         run: ./utils/smoke_test_package.sh
       - name: Upload .deb artifact
