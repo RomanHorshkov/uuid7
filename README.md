@@ -179,7 +179,7 @@ MIT — see [LICENSE](LICENSE). Every built .deb ships the same terms at
 
 ## Build profiles & hardening
 
-Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared catalog `utils/gcc_build_profiles.sh` (synced verbatim from `Utils/compilation/`, never edited locally); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
+Builds go through `utils/build_libs.sh [profile ...]`, driven by the profile catalog of the pinned `kyr-build` package (`deps.txt`; `utils/gcc_build_profiles.sh` and `utils/check_hardening.sh` are thin wrappers over `build/sysroot/share/kyr-build/`, never copies); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
 
 | Profile | Optimization | Warnings | Instrumentation | Hardened | Use it for |
 |---|---|---|---|---|---|
@@ -202,3 +202,5 @@ Release hardening by stage:
 | `-Wl,-z,relro -Wl,-z,now` | link | GOT/PLT read-only after load — full RELRO |
 | `-Wl,-z,noexecstack` | link | non-executable stack asserted |
 | `-Wl,-z,defs` | link .so | undefined symbols fail the build not the load |
+
+Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
