@@ -175,6 +175,16 @@ run_build_stage() {
         "${SCRIPT_DIR}/build_libs.sh"
 }
 
+run_abi_stage() {
+    run_stage_with_log abi "${RUN_RESULT_DIR}/abi.log" \
+        "${SCRIPT_DIR}/check_abi.sh"
+}
+
+run_abi_exports_stage() {
+    run_stage_with_log abi_exports "${RUN_RESULT_DIR}/abi_exports.log" \
+        "${SCRIPT_DIR}/check_abi.sh" --exports "${ROOT_DIR}/build/release/libuuid7.so"
+}
+
 run_build_its_stage() {
     run_stage_with_log build_ITs "${RUN_RESULT_DIR}/build_ITs.log" \
         "${SCRIPT_DIR}/build_ITs.sh"
@@ -289,7 +299,13 @@ PIPELINE_RC=0
 
 case "${COMMAND}" in
     all)
-        run_build_stage || PIPELINE_RC=$?
+        run_abi_stage || PIPELINE_RC=$?
+        if ((PIPELINE_RC == 0)); then
+            run_build_stage || PIPELINE_RC=$?
+        fi
+        if ((PIPELINE_RC == 0)); then
+            run_abi_exports_stage || PIPELINE_RC=$?
+        fi
         if ((PIPELINE_RC == 0)); then
             run_build_its_stage || PIPELINE_RC=$?
         fi

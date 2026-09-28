@@ -1,26 +1,14 @@
-# uuid7 — which functions libuuid7.so exposes to the outside
-#
-# This file is given to the linker when libuuid7.so is built
-# (-Wl,--version-script). It is a plain allowlist:
-#
-#   global:  names a consumer program may call or link against
-#   local:   everything else — still inside the library, still used
-#            internally, but invisible from outside
-#
-# Without this file the linker exports EVERY non-static function in every .c
-# file, so internal helpers become part of the library's public interface by
-# accident. With it, the public interface is exactly the list below.
-#
-# It only affects the .so. The .a archive is a bag of object files with no
-# notion of "exported", so it is unchanged.
-#
-# Rule: a function is public when it is declared in the public header AND
-# matches a line under global:. Forgetting the second half is caught at link
-# time (the consumer's link fails with "undefined reference"), never at run
-# time.
-{
+# uuid7.map — the functions libuuid7.so exports, under the version node UUID7_<major> (the soname major): exactly the
+# functions app/uuid7.h declares (the `function` lines of abi/layout.txt; utils/check_abi.sh --exports refuses any difference).
+# The test hooks are exported only from a library built with them. Everything else stays local. The .a is unaffected.
+UUID7_1 {
   global:
-    uuid7_*;
+    uuid7_clock_failure_count;
+    uuid7_gen;
+    uuid7_init;
+    uuid7_raise_floor;
+    uuid7_set_rng_func;
+    uuid7_test_*;   /* the test hooks: compiled only with -DUUID7_TESTING (ENABLE_TEST_HOOKS=1), never in a release */
   local:
     *;
 };

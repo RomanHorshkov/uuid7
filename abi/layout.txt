@@ -1,0 +1,11 @@
+# uuid7 public ABI, written by check_abi.sh --update (kyr-build): a changed line needs a major, a new name a minor.
+major 1
+data_model pointer 8 long 8
+callback uuid7_rng_function_t returns int params 2 (void *, size_t)
+function uuid7_clock_failure_count returns uint64_t params 0 ()
+function uuid7_gen returns int params 1 (void *)
+function uuid7_init returns int params 2 (uuid7_rng_function_t, const void *)
+function uuid7_raise_floor returns int params 1 (const void *)
+function uuid7_set_rng_func returns int params 1 (uuid7_rng_function_t)
+constant UUID7_MAX_AHEAD_MS 10000
+constant UUID7_SIZE_BYTES 16
