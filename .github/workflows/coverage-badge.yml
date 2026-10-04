@@ -41,14 +41,18 @@ jobs:
           path: integration-results
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Bootstrap the pinned kyr-build (its coverage_badge.py writes the badge)
+        env:
+          GH_TOKEN: ${{ secrets.SIBLING_REPOS_PAT || secrets.GITHUB_TOKEN }}
+        run: ./utils/deps.sh apt-list > /dev/null
       - name: Compute badge color + write endpoint JSON
         run: |
-          SUMMARY="$(find integration-results -name 'coverage-summary.json' -path '*release*' | head -1)"
+          SUMMARY="$(find integration-results -name 'coverage-summary.json' -path '*ITs/coverage*' | head -1)"
           if [[ -z "${SUMMARY}" ]]; then
             echo "no coverage-summary.json in the it-coverage artifact" >&2
             exit 1
           fi
-          python3 utils/write_coverage_badge.py "${SUMMARY}" .github/badges/coverage.json
+          python3 build/sysroot/share/kyr-build/coverage_badge.py "${SUMMARY}" .github/badges/coverage.json
       - name: Commit badge if it changed
         run: |
           if git diff --quiet -- .github/badges/coverage.json; then

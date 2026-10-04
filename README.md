@@ -20,30 +20,21 @@ Project layout
 
 - `app/uuid7.h` — Public header for the library.
 - `app/uuid7.c` — UUIDv7 generator implementation.
-- `utils/` — Build, packaging, test, and coverage scripts.
+- `utils/` — kyr-build's wrappers and `uuid7_project.sh` (the declarations).
 - `tests/ITs/` — Integration tests.
 - `tests/stress/` — Single-thread and multi-thread stress benchmarks.
+- `tests/package/smoke.c` — the installed-package test.
 - `build/` — Build output directory.
 
 Build
 
-Static + shared libraries:
+`utils/` holds the pinned kyr-build's wrappers and `utils/uuid7_project.sh`, which declares what is built, tested and packaged (the steps are kyr-build's, its README "Wrapper contract"). No sudo; every pin of `deps.txt` lands in `build/sysroot/`.
 
 ```sh
-./utils/build_libs.sh release
+./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh   # every gate
+./utils/build_libs.sh release          # build/<profile>/libuuid7.{a,so.<VERSION>} (no argument: every profile)
+./utils/build_deb.sh                   # build/debs: libuuid7, libuuid7-dev, SHA256SUMS, one .buildinfo per deb
 ```
-
-Artifacts:
-
-- `build/release/libuuid7.a`
-- `build/release/libuuid7.so.<VERSION>`
-
-Build Debian package:
-
-```sh
-./utils/build_deb.sh
-```
-
 
 ## Release process
 
@@ -101,41 +92,14 @@ Each GitHub Release publishes:
 
 Testing (heavy + coverage)
 
-The pipeline builds the libraries, runs integration tests with coverage, and runs the stress matrix.
-
-Requirements (Ubuntu/Debian):
-
 ```sh
-sudo apt install build-essential pkg-config libcmocka-dev gcovr
+./utils/build_ITs.sh                   # the integration suite against every profile's archive and shared object, test hooks
+                                       # (-DUUID7_TESTING) in its libraries only, then coverage: tests/results/ITs/coverage
+./utils/build_stress.sh && ./utils/run_stress.sh   # every profile x static/shared: tests/results/stress/stress_summary.tsv
+./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-Run:
-
-```sh
-./utils/run_pipeline.sh
-```
-
-Coverage outputs are stored under the generated pipeline run directory:
-
-- `tests/results/pipeline/runs/<run-id>/coverage/release/ITs_release_coverage.html`
-- `tests/results/pipeline/runs/<run-id>/coverage/release/ITs_release_coverage.xml`
-- `tests/results/pipeline/runs/<run-id>/coverage/release/coverage-summary.json`
-
-Stress Benchmarks
-
-The stress stages build and run single-threaded and multi-threaded benchmarks against the configured library profiles and linkages.
-
-Run:
-
-```sh
-./utils/run_pipeline.sh build_stress
-./utils/run_pipeline.sh run_stress
-```
-
-Benchmark outputs are stored under the generated pipeline run directory:
-
-- `tests/results/pipeline/runs/<run-id>/stress/<profile>/<linkage>/stress_result.txt`
-- `tests/results/pipeline/runs/<run-id>/stress/<profile>/<linkage>/stress_mt_result.txt
+The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The coverage badge is the integration coverage number, written by kyr-build's `coverage_badge.py`.
 
 Usage
 
