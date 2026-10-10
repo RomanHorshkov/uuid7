@@ -90,6 +90,11 @@ if (( ! DOCS_ONLY )); then
         -fstack-usage -c app/uuid7.c -o build/ecss/evidence/stack/uuid7.o' > "${EV}/stack/build.txt" 2>&1 || rc=1
 fi
 
+# the diagrams: PlantUML (java -jar) renders every .puml to SVG; without java or the jar the pages embed the sources
+export PLANTUML_JAR="${PLANTUML_JAR:-/home/rh/plantuml/plantuml-mit-1.2025.10.jar}"
+if ! command -v java > /dev/null 2>&1; then say "diagrams: CANNOT RENDER: java not found (sudo apt install default-jre-headless); the pages embed the PlantUML sources"
+elif [[ ! -f "${PLANTUML_JAR}" ]]; then say "diagrams: CANNOT RENDER: no PlantUML jar at ${PLANTUML_JAR} (set PLANTUML_JAR); the pages embed the PlantUML sources"
+else say "diagrams: PlantUML ${PLANTUML_JAR}, java $(java -version 2>&1 | head -n 1 | cut -d'"' -f2)"; fi
 say "documents: ecss/tools/ecss.py"
 rm -rf "${OUT}/md" "${OUT}/html" "${OUT}/svg" "${OUT}/xml_api" "${OUT}/rms"
 python3 ecss/tools/ecss.py components-dox || exit 1
@@ -124,8 +129,9 @@ print("   evidence: commit %s (%s), %s; release tag %s" % (s["evidence_commit"][
 for f in s["config_flags"]:
     print("   configuration flag: " + f)
 print("   claim: %s (open items: %d)" % (s["claim"], s["open_items"]))
+print("   diagrams: %d of %d rendered to SVG%s" % (s["svg"], s["diagrams"], (" (%s)" % s["render_tool"]) if s["render_tool"] else ""))
 if s["render_note"]:
-    print("   " + s["render_note"])
+    print("   diagrams: " + s["render_note"].upper()[:1] + s["render_note"][1:])
 PY
 printf 'markdown: %s\nsite:     %s\nopen it:  bash ecss/make.sh --serve   (then http://127.0.0.1:8790/)\n' "${OUT}/md" "${OUT}/html/index.html"
 exit "${rc}"

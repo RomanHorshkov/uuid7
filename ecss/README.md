@@ -12,7 +12,7 @@ ecss/make.sh --docs-only   # keep the last run's results, regenerate the documen
 ecss/make.sh --serve       # serve the built site on http://127.0.0.1:8790/ (a sandboxed browser cannot follow file:// links)
 ```
 
-Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.html` (one doxygen site: the package's front page with its claim, the documents, the API reference, the traceability, the diagrams, the evidence). Needs python3, doxygen and graphviz; renders the PlantUML diagrams to SVG when java is installed (`sudo apt install default-jre-headless`; jar: `PLANTUML_JAR`, default `/home/rh/plantuml/plantuml-mit-1.2025.10.jar`), else embeds their sources. Set `CLANG_FORMAT` to a clang-format 18 for the format stage. Exit 1 if a gate failed; the documents say which.
+Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.html` (one doxygen site: the package's front page with its claim, the documents, the API reference, the traceability, the diagrams, the evidence). Needs python3, doxygen and graphviz; java and the PlantUML jar (`PLANTUML_JAR`, default `/home/rh/plantuml/plantuml-mit-1.2025.10.jar`) render every diagram to SVG (`-nometadata`, the title moved to the caption; the same source gives the same bytes); without them make.sh says CANNOT RENDER and the pages embed the sources. Set `CLANG_FORMAT` to a clang-format 18 for the format stage. Exit 1 if a gate failed; the documents say which.
 
 ## From requirement to evidence
 

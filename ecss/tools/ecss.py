@@ -918,21 +918,40 @@ def gen_diagrams(M):
 
 
 def render(M):
-    """SVG with PlantUML when java is installed; the .puml sources either way."""
-    java = shutil.which("java")
-    M.render_note = ""
-    if not java:
-        M.render_note = "java is not installed: the diagrams stay PlantUML sources (sudo apt install default-jre-headless renders them)."
-        return False
-    if not os.path.exists(PLANTUML_JAR):
-        M.render_note = "PlantUML jar %s not found: the diagrams stay PlantUML sources." % PLANTUML_JAR
-        return False
+    """Every PlantUML source to SVG with java -jar PLANTUML_JAR (-tsvg -nometadata), from a copy without its title line: the
+    figure's caption carries the title. The same source gives the same bytes. Without java or the jar, or for a source PlantUML
+    refuses, the pages embed the source and M.render_note says why."""
+    names = sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(PUML, "*.puml")))
+    M.render_note, M.render_tool, M.rendered = "", "", 0
+    shutil.rmtree(SVG, ignore_errors=True)
     os.makedirs(SVG, exist_ok=True)
-    rc, out = run([java, "-Djava.awt.headless=true", "-jar", PLANTUML_JAR, "-tsvg", "-o", SVG] + sorted(glob.glob(os.path.join(PUML, "*.puml"))))
-    write(os.path.join(EVID, "plantuml.txt"), out)
-    if rc != 0:
-        M.render_note = "PlantUML failed (evidence/plantuml.txt): the diagrams without an SVG stay PlantUML sources."
-    return rc == 0
+    java = shutil.which("java")
+    if not java:
+        M.render_note = "cannot render the diagrams: java not found (sudo apt install default-jre-headless); the pages embed the PlantUML sources"
+        return False
+    if not os.path.isfile(PLANTUML_JAR):
+        M.render_note = "cannot render the diagrams: no PlantUML jar at %s (set PLANTUML_JAR); the pages embed the PlantUML sources" % PLANTUML_JAR
+        return False
+    src = os.path.join(OUT, "puml_render")
+    shutil.rmtree(src, ignore_errors=True)
+    os.makedirs(src)
+    for n in names:
+        write(os.path.join(src, n + ".puml"), re.sub(r"^title .*\n", "", read(os.path.join(PUML, n + ".puml")), count=1, flags=re.M))
+    jv = (re.findall(r'version "([^"]+)"', run([java, "-version"])[1]) or ["?"])[0]
+    pv = (re.findall(r"PlantUML version (\S+)", run([java, "-Djava.awt.headless=true", "-jar", PLANTUML_JAR, "-version"])[1]) or ["?"])[0]
+    M.render_tool = "PlantUML %s (%s), java %s" % (pv, os.path.basename(PLANTUML_JAR), jv)
+    rc, out = run([java, "-Djava.awt.headless=true", "-jar", PLANTUML_JAR, "-tsvg", "-nometadata", "-o", SVG] +
+                  [os.path.join(src, n + ".puml") for n in names])
+    write(os.path.join(EVID, "plantuml.txt"), "%s\n%s\n" % (M.render_tool, out))
+    refused = {os.path.basename(x) for x in re.findall(r"^Error line \d+ in file: (.+)\.puml", out, re.M)}
+    bad = [n for n in names if n in refused or not os.path.exists(os.path.join(SVG, n + ".svg"))]
+    for n in bad:
+        if os.path.exists(os.path.join(SVG, n + ".svg")):
+            os.remove(os.path.join(SVG, n + ".svg"))
+    M.rendered = len(names) - len(bad)
+    if bad:
+        M.render_note = "PlantUML refused %s (evidence/plantuml.txt): those pages embed the source" % ", ".join(bad)
+    return not bad
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------
@@ -1435,7 +1454,7 @@ def tool_version(M, spec):
     if name == "graphviz":
         return (re.findall(r"version (\S+)", tool(["dot", "-V"])) or ["-"])[0] + " (workstation)"
     if name == "plantuml":
-        return "%s; %s" % (os.path.basename(PLANTUML_JAR), "java present" if shutil.which("java") else "java absent: not rendered")
+        return (M.render_tool + " (workstation)") if M.render_tool else M.render_note
     if name == "git":
         return (tool(["git", "--version"]).split() or ["-"])[-1] + " (workstation)"
     return "-"
@@ -1930,7 +1949,8 @@ def gen_index(M):
          "Open items: %d (\\ref UUID7_DOC_SDP \"SDP\" <4.6>)." % len([o for o in M.open_items if o["status"] == "open"]), "",
          "## Identification", "", h_configuration(M, {}), "", table(["Item", "Value"], [
              ["Generated", M.generated], ["Criticality", "category D (ECSS-Q-ST-80 Table D-1), \\ref UUID7_DOC_TAILORING \"tailoring\""],
-             ["Diagrams", "%d PlantUML sources; %s" % (len(M.diagrams), M.render_note or "rendered to SVG")]]), "",
+             ["Diagrams", "%d PlantUML sources, %d rendered to SVG%s" % (len(M.diagrams), M.rendered, (": " + md_escape(M.render_note))
+                                                                           if M.render_note else " by " + md_escape(M.render_tool))]]), "",
          h_source(M, {}), "", "## Status", "", h_summary(M, {}), "", "## Documents by ECSS file", ""]
     for f, name in FILES:
         docs = [d for d in M.docs if d.notes.get("file") == f]
@@ -2032,7 +2052,7 @@ def summary(M):
           "verified": len([r for r in M.reqs if M.req_status[r.id] == "verified"]), "cases": len(M.cases),
           "tests": len([t for t in M.tests if t["exe"]]), "scenarios": len([t for t in M.tests if t["suite"] == "SD"]),
           "documents": len([d for d in M.docs if d.applicability != "N"]), "tailored_out": len([d for d in M.docs if d.applicability == "N"]),
-          "diagrams": len(M.diagrams), "svg": len(glob.glob(os.path.join(SVG, "*.svg"))), "render_note": M.render_note,
+          "diagrams": len(M.diagrams), "svg": M.rendered, "render_note": M.render_note, "render_tool": M.render_tool,
           "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0], "evidence_commit": M.ev_commit,
           "evidence_state": M.ev.get("state", ""), "environment": M.env_text, "config_flags": M.config_flags, "tag": M.tag_text,
           "open_items": len([o for o in M.open_items if o["status"] == "open"]), "refusal": M.refusal}
