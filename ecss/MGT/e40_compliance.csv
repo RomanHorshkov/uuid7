@@ -35,7 +35,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.2.4.9c,Integrity and authenticity requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
 5.2.4.10a,Security constraints for the development and integration environments,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
 5.2.4.11a,Secure software delivery requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
-5.2.5a,SRR,Y,C,MGT/SRevP.md,SRR held as the first part of the combined SRR/PDR.
+5.2.5a,SRR,Y,PC,MGT/SRevP.md; DJF/JRR.md,"Recorded in the rms by a scripted cast (JRR), not held by people; no customer. Closes with OI-01."
 5.3.2.1a,Software life cycle definition,Y,C,MGT/SDP.md <5.1> to <5.4>,
 5.3.2.1b,Software life cycle definition,Y,C,MGT/SDP.md <5.1> to <5.4>,
 5.3.2.1c,"Development strategy, standards, techniques, development and testing environment",Y,C,MGT/SDP.md <5.1> to <5.4>,
@@ -48,24 +48,24 @@ clause,expected_output,category_D,compliance,reference,remark
 5.3.2.4d,Automatic code generation management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
 5.3.2.4e,Automatic code generation configuration management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
 5.3.2.5a,Changes to baseline procedures,Y,C,MGT/SCMP.md; MF/SMP.md <10>,
-5.3.3.1a,Joint review reports,Y,C,DJF/JRR.md,Generated from the rms reviews.
+5.3.3.1a,Joint review reports,Y,PC,DJF/JRR.md,"The JRR is generated from the rms record of each review, which a scripted cast played. Closes with OI-01."
 5.3.3.1b,Security specific sessions,Y,C,MGT/SRevP.md <6>,Security is an agenda item of every review.
-5.3.3.2a,Software project reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.3.2a,Software project reviews included in the software life cycle definition,Y,PC,MGT/SRevP.md; MGT/SDP.md <5.2.3>; DJF/JRR.md,"Reviews defined and recorded with a baseline each; the baselines were frozen in a scripted demonstration and no customer approved them. Closes with OI-01, OI-02."
 5.3.3.2b,Review Plan,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
 5.3.3.3a,Software technical reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
 5.3.3.3b,Technical reviews process,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
 5.3.3.3c,Software technical reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
 5.3.4.1a,Approved requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline (RB tailored out).
-5.3.4.2a,"Approved technical specification and interface, architecture and plans",Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
-5.3.4.2b,Approved technical specification and interface,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
-5.3.4.3a,Approved design definition file and design justification file,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
-5.3.4.3b,"Approved detailed design, interface design and budget",Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
-5.3.4.4a,Qualified software product,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
-5.3.4.5a,Accepted software product,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.2a,"Approved technical specification and interface, architecture and plans",Y,PC,MGT/SRevP.md; DJF/JRR.md,"PDR recorded in the rms by a scripted cast; the TS, architecture and plans are approved only in that demonstration. Closes with OI-01."
+5.3.4.2b,Approved technical specification and interface,Y,PC,MGT/SRevP.md; DJF/JRR.md,PDR recorded in the rms by a scripted cast; the TS and ICD are approved only in that demonstration. Closes with OI-01.
+5.3.4.3a,Approved design definition file and design justification file,Y,PC,MGT/SRevP.md; DJF/JRR.md,CDR recorded in the rms by a scripted cast; the DDF and DJF are approved only in that demonstration. Closes with OI-01.
+5.3.4.3b,"Approved detailed design, interface design and budget",Y,PC,MGT/SRevP.md; DJF/JRR.md,CDR recorded in the rms by a scripted cast. Closes with OI-01.
+5.3.4.4a,Qualified software product,Y,NY,MGT/SRevP.md; DJF/JRR.md,Not qualified: the QR in the rms was played by a scripted cast and its configuration is not a release. Closes with OI-01 and a QR on the released configuration.
+5.3.4.5a,Accepted software product,Y,NY,MGT/SRevP.md; DJF/JRR.md,Not accepted: the AR has not been held and there is no customer. Closes with OI-03.
 5.3.5.1a,Confirmation of readiness of test activities,Validation and acceptance tests only,C,DJF/SValP.md <4.3>,Test readiness: the pipeline green on the commit under review.
 5.3.5.2a,Approved test results,Validation and acceptance tests only,C,DJF/SValP.md <4.3>,Test readiness: the pipeline green on the commit under review.
-5.3.5.3a,Software delivery review board,Y,C,MGT/SRevP.md; MGT/SDP.md <5.5.3>,The delivery review is part of QR/AR.
-5.3.5.4a,Software validation specification review,Y,C,MGT/SRevP.md,SVS reviewed at CDR.
+5.3.5.3a,Software delivery review board,Y,NY,MGT/SRevP.md; MGT/SDP.md <5.5.3>,"The delivery review board sits within QR and AR, neither of which has been held by people. Closes with OI-01, OI-03."
+5.3.5.4a,Software validation specification review,Y,PC,MGT/SRevP.md; DJF/JRR.md,SVS reviewed at a CDR played by a scripted cast. Closes with OI-01.
 5.3.6.1a,Flight software review phasing,Y,NA,-,Not flight software.
 5.3.6.1b,Flight software review phasing,Y,NA,-,Not flight software.
 5.3.6.2a,Ground software review phasing,Y,NA,-,Not ground segment software.
@@ -88,7 +88,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.4.2.3a,Software logical model,N,NA,-,Not applicable to category D (Annex R).
 5.4.2.3b,Software logical model method,N,NA,-,Not applicable to category D (Annex R).
 5.4.2.3c,Behavioural view in software logical model,N,NA,-,Not applicable to category D (Annex R).
-5.4.2.4a,SWRR,Y,C,MGT/SRevP.md,SWRR combined with the PDR.
+5.4.2.4a,SWRR,Y,PC,MGT/SRevP.md; DJF/JRR.md,"SWRR combined with the PDR, which a scripted cast played. Closes with OI-01."
 5.4.3.1a,Software architectural design,Y,C,DDF/SDD.md,
 5.4.3.2a,Software architectural design method,Y,C,DDF/SDD.md,
 5.4.3.2b,Vulnerability analysis of the design,Y,C,SF/SSAR.md,
@@ -101,7 +101,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.4.3.6c,Software architectural design with configuration data,Y,C,DDF/SDD.md <4.1>,
 5.4.3.7a,Justification of reuse with respect to requirements baseline,Y,C,DJF/SRF.md,
 5.4.3.8a,Software integration strategy,N,NA,-,Not applicable to category D (Annex R).
-5.4.4a,PDR,Y,C,MGT/SRevP.md,
+5.4.4a,PDR,Y,PC,MGT/SRevP.md; DJF/JRR.md,PDR recorded in the rms by a scripted cast. Closes with OI-01.
 5.5.2.1a,Software components design tba documents,Y,C,DDF/SDD.md; app/,
 5.5.2.1b,Software components design tba documents,Y,C,DDF/SDD.md; app/,
 5.5.2.1c,Software components design tba documents,Y,C,DDF/SDD.md; app/,
@@ -120,7 +120,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.5.2.7a,Compatibility of real-time design methods with the computational model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
 5.5.2.8a,Software user manual,Y,C,DDF/SUM.md,
 5.5.2.9a,Software unit test plan,"Y except Annex K sections 9, 10 and 11",C,DJF/SUITP.md,Sections 9 to 11 omitted as Annex R allows.
-5.5.2.10a,DDR,Y,C,MGT/SRevP.md,DDR combined with the CDR.
+5.5.2.10a,DDR,Y,PC,MGT/SRevP.md; DJF/JRR.md,"DDR combined with the CDR, which a scripted cast played. Closes with OI-01."
 5.5.3.1a eo a,Software component design tba documents and code (update),Y,C,DDF/SDD.md; app/,
 5.5.3.1a eo b,Software configuration file - build procedures,Y,C,DDF/SCF.md,
 5.5.3.2a eo a,Software component design document tba and code (update),Y,C,DDF/SDD.md; app/,
@@ -141,18 +141,18 @@ clause,expected_output,category_D,compliance,reference,remark
 5.6.3.1c,Software validation specification with respect to the technical specification,Y,C,DJF/SVS.md,
 5.6.3.2a,Software validation report with respect to the technical specification,Y,C,DJF/SValR.md,
 5.6.3.3a,Software user manual (update),Y,C,DDF/SUM.md,
-5.6.3.4a,CDR,Y,C,MGT/SRevP.md,
+5.6.3.4a,CDR,Y,PC,MGT/SRevP.md; DJF/JRR.md,CDR recorded in the rms by a scripted cast. Closes with OI-01.
 5.6.4.1a,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
 5.6.4.1b,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
 5.6.4.1c,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
 5.6.4.2a,Software validation report with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
 5.6.4.2b,Software validation report with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
 5.6.4.3a,Software user manual (update),Y,C,DDF/SUM.md,
-5.6.4.4a,QR,Y,C,MGT/SRevP.md,
+5.6.4.4a,QR,Y,NY,MGT/SRevP.md; DJF/JRR.md,The QR in the rms was played by a scripted cast. Closes with OI-01.
 5.6.5a,Software validation control,Y,C,DJF/SValP.md <8>,
 5.7.2.1a eo a,Software product,Y,C,DDF/SCF.md,The debs built by utils/build_deb.sh.
 5.7.2.1a eo b,Software release document,Y,C,DDF/SRelD.md,
-5.7.2.1b,Secured software delivery,Y,C,DDF/SCF.md; SF/SSAR.md,SHA256SUMS published with the release; consumers pin the sha256.
+5.7.2.1b,Secured software delivery,Y,NY,DDF/SCF.md; SF/SSAR.md,"No release of this configuration is published, so no SHA256SUMS is; the sums in the SCF are of development builds. Closes with the release of the configuration."
 5.7.2.2a,Training material,Y,C,DDF/SUM.md <11>,
 5.7.2.3a,Installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
 5.7.2.3b,Secured installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
@@ -162,11 +162,11 @@ clause,expected_output,category_D,compliance,reference,remark
 5.7.2.4d,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
 5.7.3.1a,Acceptance test plan,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
 5.7.3.2a,Acceptance test report,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
-5.7.3.3a,Software product,Y,C,DDF/SCF.md,Packages built from the tagged source in the pinned build root.
-5.7.3.4a,Joint review report,Y,C,DJF/JRR.md,
-5.7.3.4b,Joint review report,Y,C,DJF/JRR.md,
+5.7.3.3a,Software product,Y,NY,DDF/SCF.md,"The packages of this package's evidence are development builds, not built from a release tag. Closes with the release of the configuration and OI-03."
+5.7.3.4a,Joint review report,Y,NY,-,No customer acceptance has taken place to support. Closes with OI-03.
+5.7.3.4b,Joint review report,Y,NY,-,No customer acceptance has taken place to support. Closes with OI-03.
 5.7.3.5a,Traceability of acceptance tests to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline.
-5.7.3.6a,AR,Y,C,MGT/SRevP.md,
+5.7.3.6a,AR,Y,NY,MGT/SRevP.md,AR not held. Closes with OI-03.
 5.8.2.1a,Software verification plan - verification process identification,Y,C,DJF/SVerP.md,
 5.8.2.1b,Software verification plan - software products identification,Y,C,DJF/SVerP.md,
 5.8.2.1c,"Software verification plan - activities, methods and tools",Y,C,DJF/SVerP.md,

@@ -2,7 +2,7 @@
 
 <!-- ecss:docinfo id=UUID7-DOC-SVALR -->
 
-The validation of uuid7 against its technical specification, as the \ref UUID7_DOC_SVALP "SValP" plans and the \ref UUID7_DOC_SVS "SVS" specifies, for the commit above (ECSS-E-ST-40 5.6.3.2a; no DRD). It is also the certificate of conformance of the reusable component on its one platform, Linux x86-64 (ECSS-Q-ST-80 7.3.7).
+The validation of uuid7 against its technical specification, as the \ref UUID7_DOC_SVALP "SValP" plans and the \ref UUID7_DOC_SVS "SVS" specifies, for the commit above (ECSS-E-ST-40 5.6.3.2a; no DRD). It is not a certificate of conformance (ECSS-Q-ST-80 7.3.7): that is issued for a released version after its AR (\ref UUID7_DOC_SDP "SDP" <4.6>, OI-03).
 
 ## Summary
 

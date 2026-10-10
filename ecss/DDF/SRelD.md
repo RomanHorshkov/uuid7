@@ -23,6 +23,9 @@ This SRelD describes the version of uuid7 this package is generated for: what it
 
 3. Status of problem reports, change requests and waivers: see <5.2>.
 4. Advice for use: see <6>.
+5. Status of the package: its claim, and what it rests on:
+
+<!-- ecss:claim -->
 
 ## 5 Status of the software configuration item
 

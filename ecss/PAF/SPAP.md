@@ -178,4 +178,4 @@ Adherence is ensured by the gates of the pipeline (each named in the coding stan
 
 ## 8 Compliance matrix to software product assurance requirements
 
-The matrix is \ref UUID7_DOC_Q80_COMPLIANCE "the ECSS-Q-ST-80 compliance matrix" (requirement identifier, compliance C/NC/NA, reference, remarks).
+The matrix is \ref UUID7_DOC_Q80_COMPLIANCE "the ECSS-Q-ST-80 compliance matrix" (requirement identifier, compliance C/PC/NY/NC/NA, reference, remarks).

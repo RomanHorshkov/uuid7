@@ -38,7 +38,7 @@ Build
 ./utils/build_deb.sh                   # build/debs: libuuid7, libuuid7-dev, SHA256SUMS, one .buildinfo per deb
 ```
 
-ECSS qualification package (category D): `ecss/make.sh` runs every gate and writes the documents to `build/ecss/md` and one site to `build/ecss/html/index.html`; see `ecss/README.md`.
+ECSS package (category D; documented and self-verified, not independently reviewed, not accepted): `ecss/make.sh` runs every gate and writes the documents to `build/ecss/md` and one site to `build/ecss/html/index.html`; see `ecss/README.md`.
 
 ## Release process
 

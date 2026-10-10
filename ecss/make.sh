@@ -83,6 +83,7 @@ w = sum(1 for l in open(sys.argv[1] + "/doxygen_warnings.txt") if l.strip())
 print("   %d requirements (%d SRS, %d ICD), %d verified; %d tests, %d scenarios; %d documents; doxygen warnings: %d"
       % (s["requirements"], s["srs"], s["icd"], s["verified"], s["tests"], s["scenarios"], s["documents"], w))
 print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] else "FAILED") if s["pipeline_ran"] else "not run", s["mode"]))
+print("   claim: %s (open items: %d)" % (s["claim"], s["open_items"]))
 if s["render_note"]:
     print("   " + s["render_note"])
 PY

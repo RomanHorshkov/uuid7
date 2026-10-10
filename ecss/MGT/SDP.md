@@ -29,7 +29,7 @@ uuid7 follows the platform's release train (REFACTORING_PLAN.md, the platform's 
 1. Assumptions: the consumers keep using the binary interface; Linux x86-64 stays the only target.
 2. External dependencies: the pinned kyr-build (tooling), the distribution's gcc, cmocka and gcovr; the rms for requirements management.
 3. Constraints: one maintainer; no customer contract; the platform's rules (NAMING.md, DEPENDENCIES.md, the kyr-build template) are not negotiable per repository.
-4. Technical issues: none open.
+4. Technical issues: the open items of <4.6>; what the package claims while they are open is on its front page.
 
 ### 4.4 Work breakdown structure
 
@@ -49,6 +49,12 @@ The software engineering contribution is the identification of technical risks a
 ### 4.6 Monitoring and controlling mechanisms
 
 The pipeline result on every commit, the regenerated SPAMR metrics at every milestone, and the rms gaps report (requirements without passing verification) are the monitoring. Action items are rms change requests.
+
+Open items: what the package does not yet achieve, with what closes each one, who and which rms feature it needs (the action item list of this plan). The package's claim is computed from them:
+
+<!-- ecss:claim -->
+
+<!-- ecss:open-items -->
 
 ### 4.7 Staffing plan
 
@@ -86,7 +92,7 @@ The platform has no ECSS system life cycle. A uuid7 release precedes the platfor
 
 #### 5.2.3 Reviews and milestones identification and associated documentation {#sdp_interfaces}
 
-The reviews (SRR with SWRR and PDR, CDR with DDR, QR, AR) are defined in the \ref UUID7_DOC_SREVP "SRevP": scope, data package, entry and success criteria, roles. Formalism: a review is the maintainer's walk-through of the data package against the SRevP checklists, recorded as an rms review artifact and closed by an rms baseline. Interface management: the ABI gate (`abi/layout.txt`, `utils/check_abi.sh`) refuses any interface change that the version does not announce; an interface change is a change request reviewed with its consumers.
+The reviews (SRR with SWRR and PDR, CDR with DDR, QR, AR) are defined in the \ref UUID7_DOC_SREVP "SRevP": scope, data package, entry and success criteria, roles. Formalism: a review is the maintainer's walk-through of the data package against the SRevP checklists, recorded as an rms review artifact and closed by an rms baseline. The reviews in the rms so far are a scripted demonstration of that workflow (\ref UUID7_DOC_JRR "JRR"), not reviews held under this plan (<4.6>, OI-01). Interface management: the ABI gate (`abi/layout.txt`, `utils/check_abi.sh`) refuses any interface change that the version does not announce; an interface change is a change request reviewed with its consumers.
 
 <!-- ecss:reviews -->
 
@@ -131,7 +137,7 @@ Every document is a Markdown source under `ecss/<file>/`, following its DRD, wit
 
 #### 5.5.3 Deliverable items
 
-Delivered: the two Debian packages, SHA256SUMS, one .buildinfo per package, the tagged source, and this qualification package (the site). Internal: the rms database and its export, the pipeline logs. Each delivery is from the maintainer (supplier) to the consuming repositories (customers): purpose, functionality and maturity are stated in the \ref UUID7_DOC_SRELD "SRelD" (verification status, known problems); the delivery review is part of QR/AR.
+Delivered: the two Debian packages, SHA256SUMS, one .buildinfo per package, the tagged source, and this ECSS package (the site). Internal: the rms database and its export, the pipeline logs. Each delivery is from the maintainer (supplier) to the consuming repositories (customers): purpose, functionality and maturity are stated in the \ref UUID7_DOC_SRELD "SRelD" (verification status, known problems); the delivery review is part of QR/AR.
 
 #### 5.5.4 Software documentation standards
 

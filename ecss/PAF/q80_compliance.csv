@@ -1,7 +1,7 @@
 clause,subject,category_D,compliance,reference,remark
-5.1.1,Organization,Y,C,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms records who did what.
-5.1.2.1,Responsibility and authority,Y,C,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms records who did what.
-5.1.2.2,Responsibility and authority,Y,C,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms records who did what.
+5.1.1,Organization,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
+5.1.2.1,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
+5.1.2.2,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
 5.1.2.3,Responsibility and authority,Y,NA,-,No delegation to a lower-level supplier.
 5.1.3.1,Resources,Y,C,PAF/SPAP.md <5.3>,
 5.1.3.2,Resources,N,NA,-,Not applicable to category D (Table D-2).
@@ -21,12 +21,12 @@ clause,subject,category_D,compliance,reference,remark
 5.2.2.3,Software product assurance reporting,Y,C,PAF/SPAMR.md,
 5.2.3,Audits,Audits planned and performed only when necessary,C,PAF/SPAP.md <5.4>,No audit planned (category D: only when necessary).
 5.2.4,Alerts,Y,C,PAF/SPAP.md <6.9>,No alert issued or received.
-5.2.5.1,Software problems,Y,C,"MF/SMP.md <10>, <14>; DJF/SPR.md",
-5.2.5.2,Software problems,Y,C,"MF/SMP.md <10>, <14>; DJF/SPR.md",
-5.2.5.3,Software problems,Y,C,"MF/SMP.md <10>, <14>; DJF/SPR.md",
-5.2.5.4,Software problems,Y,C,"MF/SMP.md <10>, <14>; DJF/SPR.md",
-5.2.6.1,Nonconformances,Y,C,PAF/SPAP.md <6.5>,
-5.2.6.2,Nonconformances,Y,C,PAF/SPAP.md <6.5>,
+5.2.5.1,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record with the fields of 5.2.5.2. Closes with an rms problem-report kind.
+5.2.5.2,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md","Change-requests lack the disposition, modification and re-executed-test fields of 5.2.5.2. Closes with an rms problem-report kind."
+5.2.5.3,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with an rms problem-report kind.
+5.2.5.4,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with an rms problem-report kind.
+5.2.6.1,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,No nonconformance record exists (the deviation from rule N3 is unrecorded) and the NRB is the maintainer alone. Closes with an rms nonconformance kind and an NRB that includes PA.
+5.2.6.2,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,No nonconformance record exists. Closes with an rms nonconformance kind.
 5.2.7.1,Quality requirements and quality models,Y,C,PAF/SPAP.md <5.5>,
 5.2.7.2,Quality requirements and quality models,Relevant characteristics only (e.g. suitability for safety is not relevant for cat. D software),C,PAF/SPAP.md <5.5>,Relevant characteristics only (no suitability for safety).
 5.3.1,Risk management,Y,C,MGT/SDP.md <4.5>,
@@ -117,9 +117,9 @@ clause,subject,category_D,compliance,reference,remark
 6.2.6.6,Verification,N,NA,-,Not applicable to category D (Table D-2).
 6.2.6.7,Verification,Y,C,PAF/SPAMR.md <4>,
 6.2.6.8,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md,
-6.2.6.9,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md <6>,
-6.2.6.10,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md <6>,
-6.2.6.11,Verification,Y,C,DJF/JRR.md; DJF/SVR.md,
+6.2.6.9,Verification,Y,PC,MGT/SRevP.md; DJF/SVerP.md <6>,The SRevP is the written review procedure; the inspection checklists the SVerP and SRevP point to are not written.
+6.2.6.10,Verification,Y,PC,MGT/SRevP.md; DJF/SVerP.md <6>,"The SRevP names items, person in charge, participants and the nature of the report; the checklists (means of inspection) are not written."
+6.2.6.11,Verification,Y,PC,DJF/JRR.md; DJF/SVR.md,"The JRR identifies the reviewed items and findings from the rms, but the reviewers were a scripted cast and the inspections have no report of their own. Closes with OI-01."
 6.2.6.12,Verification,Y,C,PAF/SPAMR.md <4>,
 6.2.6.13,Verification,N,NA,-,Not applicable to category D (Table D-2).
 6.2.7.1,General,Y,C,MGT/SDP.md <5.4>,Tools fall under 5.6.
@@ -207,14 +207,14 @@ clause,subject,category_D,compliance,reference,remark
 6.3.5.31,Testing and validation,N,NA,-,Not applicable to category D (Table D-2).
 6.3.5.32,Testing and validation,Y,C,DJF/SVS.md,
 6.3.5.33,Testing and validation,Y,C,DJF/SValR.md,
-6.3.6.1,Software delivery and installation,Y,C,MGT/SRevP.md,
+6.3.6.1,Software delivery and installation,Y,NY,MGT/SRevP.md,"The delivery review board sits within QR and AR, neither held by people. Closes with OI-01, OI-03."
 6.3.6.2,Software delivery and installation,Y,C,DDF/SUM.md <9.2>,
 6.3.6.3,Software delivery and installation,Y,NA,-,Customer activity.
 6.3.6.4,Software delivery and installation,Y,C,DDF/SUM.md <9.2>,
 6.3.7.1,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
 6.3.7.2,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
-6.3.7.3,Software acceptance,Y,C,DDF/SRelD.md; DDF/SCF.md,
-6.3.7.5,Software acceptance,Y,C,DJF/SPR.md,
+6.3.7.3,Software acceptance,Y,NY,DDF/SRelD.md; DDF/SCF.md,No customer acceptance yet; three approved change requests are not implemented. Closes with OI-03.
+6.3.7.5,Software acceptance,Y,NY,DJF/SPR.md,"No acceptance has taken place, so no acceptance problem is documented. Closes with OI-03."
 6.3.7.6,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
 6.3.7.7,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
 6.3.8.1,Operations,Y,NA,PAF/TAILORING.md,No operation of its own.
@@ -252,7 +252,7 @@ clause,subject,category_D,compliance,reference,remark
 7.3.4,Requirements for intended reuse,Y,C,"TS/SRS.md <5.9>, <5.12>",
 7.3.5,Configuration management for intended reuse,Y reuse,C,MGT/SCMP.md,
 7.3.6,Testing on different platforms,Y,C,DJF/SValR.md,One platform: Linux x86-64 (the platform's only target).
-7.3.7,Certificate of conformance,Y,C,DJF/SValR.md,The validation report is the certificate.
+7.3.7,Certificate of conformance,Y,NY,DJF/SValR.md,No certificate of conformance is issued: it follows the release and the AR. Closes with OI-03.
 7.4.1,Hardware procurement,Y,NA,-,"No ground hardware, no programmable device."
 7.4.2,Service procurement,Y,NA,-,"No ground hardware, no programmable device."
 7.4.3,Constraints,Y,NA,-,"No ground hardware, no programmable device."

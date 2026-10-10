@@ -27,7 +27,7 @@ MD = os.path.join(OUT, "md")
 PUML = os.path.join(OUT, "puml")
 SVG = os.path.join(OUT, "svg")
 EVID = os.path.join(OUT, "evidence")
-RMS_EXPORT = os.path.join(ECSS, "rms_export")
+RMS_EXPORT = os.environ.get("ECSS_RMS_EXPORT") or os.path.join(ECSS, "rms_export")   # another export directory: ECSS_RMS_EXPORT
 PROJECT_KEY = "UUID7"
 
 # The rms vocabulary, in the order of kyr_rms's enums (app/include/kyr/rms/domain/model/types.h): the package export carries
@@ -124,6 +124,7 @@ class Art:
         self.origin = origin
         self.revision = row.get("revision")
         self.uuid = row.get("uuid")
+        self.revs = []
 
     def row(self):
         return [self.id, self.kind, self.title, self.body, self.rationale, self.criteria, self.method, self.status, self.owner,
@@ -164,6 +165,9 @@ def load_rms():
                "source_ref": r.get("source_ref", ""), "applicability": r.get("applicability", ""), "notes": r.get("notes", ""),
                "revision": r.get("number"), "uuid": a.get("uuid")}
         art = Art(row, "rms")
+        art.revs = [{"n": x.get("number"), "at_ms": x.get("changed_at_ms", 0), "reason": x.get("reason", ""),
+                     "status": STATUSES[x.get("status", 0)] if x.get("status", 0) < len(STATUSES) else "draft",
+                     "by": x.get("changed_by_name") or x.get("changed_by") or ""} for x in revs]
         by_uuid[a.get("uuid")] = art
         arts.append(art)
     links = []
@@ -173,9 +177,11 @@ def load_rms():
             t = LINKS[e["type"]] if e.get("type", -1) < len(LINKS) else str(e.get("type"))
             links.append((s.id, t, d.id, "rms"))
     baselines = []
-    for b in pkg.get("baselines", []):
-        baselines.append({"name": b.get("name", ""), "created_at_ms": b.get("created_at_ms", 0),
-                          "by": b.get("created_by_name") or b.get("created_by") or "unrecorded",
+    for b in sorted(pkg.get("baselines", []), key=lambda b: b.get("created_at_ms", 0)):
+        baselines.append({"name": b.get("name", ""), "created_at_ms": b.get("created_at_ms", 0), "description": b.get("description", ""),
+                          "by": b.get("created_by_name") or b.get("created_by") or "",
+                          "approved_by": b.get("approved_by_name") or b.get("approved_by") or "",
+                          "approved_at_ms": b.get("approved_at_ms", 0), "approval_exported": "approved_by" in b,
                           "members": len(b.get("members", []))})
     verdicts = {}
     vpath = os.path.join(RMS_EXPORT, "verification.csv")
@@ -186,6 +192,7 @@ def load_rms():
                     verdicts[r["case_id"]] = {"result": r.get("latest_result", ""), "at_ms": r.get("latest_result_at_ms", ""),
                                               "by": r.get("latest_result_by", ""), "suspect": r.get("claim_suspect", "")}
     return {"project": pkg.get("project", {}), "arts": arts, "links": links, "baselines": baselines, "verdicts": verdicts,
+            "exported_by": pkg.get("exported_by_name") or pkg.get("exported_by") or "",
             "path": rel(pkg_path), "sha256": hashlib.sha256(read(pkg_path).encode()).hexdigest()}
 
 
@@ -547,6 +554,7 @@ def build_model():
     rms_keys = {key(l) for l in M.links}
     M.drift = [l for l in M.repo_links if key(l) not in rms_keys] if M.rms else []
     M.baselines = M.rms["baselines"] if M.rms else []
+    M.open_items = load_open_items()
     # Results
     M.stages, M.green, M.pipeline_ran = pipeline_summary()
     M.checks = evidence_checks(M.stages)
@@ -838,6 +846,15 @@ def diagram_md(M, name, caption=None):
     return ("**%s** (%s). Rendering waits for java; the PlantUML source:\n\n~~~{.txt}\n%s~~~" % (md_escape(caption), link, src))
 
 
+def status_text(M, d, rev=""):
+    """An rms status with who set it, and, when the reviews were a scripted demonstration, that the status belongs to it."""
+    if not d.revs or d.status not in ("approved", "baselined", "implemented", "verified", "validated", "rejected"):
+        return d.status + rev
+    r = next((x for x in reversed(d.revs) if x["status"] == d.status), d.revs[-1])
+    demo = M.mode == "rms" and any(review_facts(M, rv)["scripted"] for rv in REVIEWS)
+    return "%s%s by %s%s" % (d.status, rev, who(r["by"]), " in the scripted rms demonstration (\\ref UUID7_DOC_JRR \"JRR\")" if demo else "")
+
+
 def h_docinfo(M, a):
     d = M.by_id.get(a.get("id"))
     if not d:
@@ -848,9 +865,10 @@ def h_docinfo(M, a):
         ["Document", "%s — %s" % (d.id, md_escape(d.title))], ["ECSS file", d.notes.get("file", "")],
         ["DRD", md_escape(d.notes.get("drd", "-"))], ["Called from", md_escape(d.rationale)],
         ["Reviews (ECSS-E-ST-40 Table A-1)", d.notes.get("reviews", "").replace(",", ", ")],
-        ["Status", d.status + rev], ["Product", "uuid7 %s, commit %s%s" % (M.version, M.short, " (uncommitted changes)" if M.dirty else "")],
+        ["Status", status_text(M, d, rev)], ["Product", "uuid7 %s, commit %s%s" % (M.version, M.short, " (uncommitted changes)" if M.dirty else "")],
         ["Generated", "%s by ecss/make.sh from %s" % (M.generated, src)],
-        ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\""]])
+        ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\""],
+        ["Claim", "%s (basis: \\ref index \"the front page\")" % md_escape(claim(M)[0])]])
 
 
 REFS = [
@@ -902,8 +920,8 @@ def req_block(M, r, level):
     lines = ["%s %s %s {#%s}" % ("#" * level, r.id, md_escape(r.title), anchor("req_" + r.id)), "", md_escape(r.body), "",
              "- Rationale: " + md_escape(r.rationale),
              "- Verification: %s (%s) — %s" % (ECSS_METHOD.get(r.method, r.method), r.method, md_escape(r.criteria)),
-             "- Source: %s · Criticality: %s · Status: %s%s" % (md_escape(r.source_ref), md_escape(r.applicability), r.status,
-                                                                  (" (rms revision %s)" % r.revision) if r.revision else ""),
+             "- Source: %s · Criticality: %s · Status: %s" % (md_escape(r.source_ref), md_escape(r.applicability),
+                                                                status_text(M, r, (" (rms revision %s)" % r.revision) if r.revision else "")),
              "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id])), ""]
     return "\n".join(lines)
 
@@ -1262,16 +1280,136 @@ def h_review_docs(M, a):
     return table(["File", "Document", "Disposition", "Status"], rows)
 
 
-def review_status(M, rv):
-    b = [x for x in M.baselines if x["name"].upper().startswith(rv)]
+def ms_time(ms, fmt="%Y-%m-%d %H:%M:%S"):
+    return datetime.datetime.fromtimestamp(ms / 1000).strftime(fmt) if ms else "-"
+
+
+def who(actor):
+    return md_escape(actor) if actor else "**unrecorded**"
+
+
+# A review recorded as opened and closed within this many seconds was not held by people: no meeting reads a data package,
+# raises and dispositions RIDs that fast. The JRR states the measured time with the verdict.
+SCRIPTED_REVIEW_S = 600
+
+
+def cast_declared(M):
+    """The rms project's own statement that its cast is scripted (its name or description), or ""."""
+    p = M.rms["project"] if M.rms else {}
+    text = "%s %s" % (p.get("name", ""), p.get("description", ""))
+    return text.strip() if "scripted" in text.lower() else ""
+
+
+def review_facts(M, rv):
+    """What the rms export says about one review: its revisions, opening and closing, the baseline, the RIDs, the actors, and
+    whether the record shows a scripted cast (the project says so, or the review was opened and closed in under
+    SCRIPTED_REVIEW_S)."""
     a = M.by_id.get("UUID7-REV-" + rv)
+    revs = a.revs if a else []
+    opened = next((r for r in revs if r["status"] == "in-review"), None)
+    closed = next((r for r in revs if opened and r["at_ms"] >= opened["at_ms"] and r["status"] in ("approved", "needs-rework", "rejected")), None)
+    bl = [x for x in M.baselines if x["name"].upper().startswith(rv)]
+    b = bl[-1] if bl else None
+    rids = sorted([x for x in M.arts if x.kind == "review-comment" and x.id.startswith("UUID7-RID-%s-" % rv)], key=lambda x: x.id)
+    actors = [r["by"] for r in revs if opened and r["at_ms"] >= opened["at_ms"]] + [r["by"] for x in rids for r in x.revs]
     if b:
-        x = b[-1]
-        return "held: baseline %s frozen %s by %s, %d members" % (x["name"], datetime.datetime.fromtimestamp(
-            x["created_at_ms"] / 1000).strftime("%Y-%m-%d"), x["by"] or "?", x["members"])
+        actors += [b["by"]] + ([b["approved_by"]] if b["approval_exported"] else [])
+    seconds = (closed["at_ms"] - opened["at_ms"]) / 1000.0 if opened and closed else None
+    declared = cast_declared(M)
+    scripted = bool(declared) or (seconds is not None and seconds < SCRIPTED_REVIEW_S)
+    return {"art": a, "revs": revs, "opened": opened, "closed": closed, "baseline": b, "rids": rids, "seconds": seconds,
+            "held": bool(closed and closed["status"] == "approved"), "scripted": scripted, "declared": declared,
+            "named": sorted({x for x in actors if x}), "unnamed": len([x for x in actors if not x])}
+
+
+def review_status(M, rv):
+    f = review_facts(M, rv)
+    a, b = f["art"], f["baseline"]
+    if f["held"] or b:
+        cast = " (scripted cast, \\ref UUID7_DOC_JRR \"JRR\")" if f["scripted"] else ""
+        txt = "recorded in the rms%s: closed %s by %s" % (cast, ms_time(f["closed"]["at_ms"], "%Y-%m-%d") if f["closed"] else "-",
+                                                          who(f["closed"]["by"]) if f["closed"] else "-")
+        if b:
+            txt += "; baseline %s frozen by %s, %d members" % (md_escape(b["name"]), who(b["by"]), b["members"])
+        return txt
     if a:
-        return "planned (%s%s); no rms baseline" % (a.status, (", rms revision %s" % a.revision) if a.revision else "")
+        return "not held (%s%s); no rms baseline" % (a.status, (", rms revision %s" % a.revision) if a.revision else "")
     return "not planned"
+
+
+def load_open_items():
+    path = os.path.join(ECSS, "MGT", "open_items.csv")
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def open_claims(M, place):
+    out = []
+    for o in M.open_items:
+        if o.get("status") == "open" and o.get("claim", "").startswith(place + ":"):
+            out.append((o["claim"].split(":", 1)[1].strip(), o["id"]))
+    return out
+
+
+def claim(M):
+    """The package's claim, from its own facts: the verification of this refresh, the open items of the SDP <4.6>, the rms
+    record of the reviews, the AR. Returns (sentence, [(phrase, basis)])."""
+    basis = []
+    n_ver = len([r for r in M.reqs if M.req_status[r.id] == "verified"])
+    green = M.green if M.pipeline_ran else False
+    if n_ver == len(M.reqs) and M.reqs and green:
+        basis.append(("documented and self-verified after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D",
+                      "%d of %d requirements verified; pipeline GREEN; every verification performed by the developer" % (n_ver, len(M.reqs))))
+    else:
+        basis.append(("documented after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D, self-verification "
+                      "incomplete", "%d of %d requirements verified; pipeline %s" % (n_ver, len(M.reqs), (
+                          "GREEN" if green else "not green") if M.pipeline_ran else "not run in this refresh")))
+    for phrase, oi in open_claims(M, "scope"):
+        basis.append((phrase, "open item %s" % oi))
+    facts = [review_facts(M, rv) for rv in REVIEWS]
+    held = [(rv, f) for rv, f in zip(REVIEWS, facts) if f["held"] or f["baseline"]]
+    if M.mode != "rms":
+        basis.append(("no review recorded", "no rms export: the reviews live in the rms"))
+    elif not held:
+        basis.append(("no review held", "the rms export records no closed review"))
+    elif any(f["scripted"] for _, f in held):
+        sec = ", ".join("%s %.1f s" % (rv, f["seconds"]) for rv, f in held if f["seconds"] is not None)
+        basis.append(("the review workflow demonstrated in kyr rms with a scripted cast",
+                      "%s recorded in the rms export; %s" % (", ".join(rv for rv, _ in held),
+                                                            ("the project declares it: '%s'" % facts[0]["declared"]) if facts[0]["declared"]
+                                                            else "opened to closed: " + sec)))
+    else:
+        basis.append(("reviews %s recorded in kyr rms" % ", ".join(rv for rv, _ in held), "the rms export, \\ref UUID7_DOC_JRR \"JRR\""))
+    for phrase, oi in open_claims(M, "review"):
+        basis.append((phrase, "open item %s" % oi))
+    ar = facts[REVIEWS.index("AR")]
+    if ar["held"] and ar["baseline"] and not ar["scripted"]:
+        basis.append(("accepted at the AR", "AR closed and baseline %s frozen in the rms" % ar["baseline"]["name"]))
+    else:
+        basis.append(("not accepted (AR not held)" if not (ar["held"] or ar["baseline"]) else "not accepted (AR scripted)",
+                      "the rms export: UUID7-REV-AR %s" % (ar["art"].status if ar["art"] else "absent")))
+    for phrase, oi in open_claims(M, "end"):
+        basis.append((phrase, "open item %s" % oi))
+    return "uuid7 %s: %s." % (M.version, "; ".join(p for p, _ in basis)), basis
+
+
+def h_claim(M, a):
+    text, basis = claim(M)
+    return ("**%s**\n\n" % md_escape(text) + table(["Claim", "Basis"], [[md_escape(p), b] for p, b in basis]) +
+            "\n\nThe claim is computed at every refresh from the results, the rms export and the open items of the "
+            "\\ref UUID7_DOC_SDP \"SDP\" <4.6>; what it does not claim is listed there with what closes it.")
+
+
+def h_open_items(M, a):
+    if not M.open_items:
+        return "No open item."
+    rows = [[o["id"], md_escape(o["finding"]), md_escape(o["title"]), o["status"], md_escape(o["now"]), md_escape(o["closes_with"]),
+             md_escape(o["who"]), md_escape(o["rms_feature"]), md_escape(o["clauses"])] for o in M.open_items]
+    n = len([o for o in M.open_items if o["status"] == "open"])
+    return ("%d open item(s) of %d. Source: `ecss/MGT/open_items.csv`; the finding is the review's of 2026-10-10.\n\n" % (n, len(M.open_items)) +
+            table(["Item", "Finding", "Title", "Status", "True now", "Closed by", "Who", "rms feature needed", "Clauses"], rows))
 
 
 def h_reviews(M, a):
@@ -1358,12 +1496,55 @@ def h_spr(M, a):
 
 
 def h_jrr(M, a):
-    rows = [[rv, review_status(M, rv)] for rv in REVIEWS]
-    comments = [x for x in M.arts if x.kind == "review-comment"]
-    out = table(["Review", "Outcome"], rows)
-    if comments:
-        out += "\n\nReview items (RIDs):\n\n" + table(["RID", "Title", "Status"], [[c.id, md_escape(c.title), c.status] for c in comments])
-    return out
+    if M.mode != "rms":
+        return "No joint review report: the reviews are recorded in the rms and no rms export is present."
+    declared = cast_declared(M)
+    rows = []
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        b = f["baseline"]
+        rows.append([rv, "closed: approved" if f["held"] else (f["art"].status if f["art"] else "not planned"),
+                     who(f["closed"]["by"]) if f["closed"] else "-", ("%s by %s" % (md_escape(b["name"]), who(b["by"]))) if b else "none",
+                     (who(b["approved_by"]) if b["approval_exported"] else "not exported") if b else "-",
+                     ("%.1f s" % f["seconds"]) if f["seconds"] is not None else "-",
+                     ("scripted" if f["scripted"] else "not shown scripted") if (f["held"] or b) else "-"])
+    out = [table(["Review", "Outcome", "Closed by", "Baseline frozen by", "Baseline approved by", "Opened to closed", "Cast"], rows), "",
+           "Cast: %s. A review the export shows opened and closed in under %d s is reported as scripted: no group of people reads "
+           "a data package and raises, discusses and dispositions RIDs in that time." % (
+               ("the rms project declares it: '%s'" % md_escape(declared)) if declared else "the rms project does not declare it",
+               SCRIPTED_REVIEW_S), ""]
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        if not f["art"]:
+            continue
+        out += ["## %s %s {#jrr_%s}" % (rv, md_escape(f["art"].title), rv.lower()), ""]
+        if not (f["held"] or f["baseline"]):
+            out += ["Not held: the review artifact is %s; no baseline." % f["art"].status, ""]
+            continue
+        out += ["- Participants named by the export: %s%s" % (", ".join(md_escape(x) for x in f["named"]) or "none",
+                                                            ("; %d record(s) without an actor" % f["unnamed"]) if f["unnamed"] else ""),
+                "- Recorded: opened %s, closed %s by %s (%s)" % (ms_time(f["opened"]["at_ms"]) if f["opened"] else "-",
+                                                         ms_time(f["closed"]["at_ms"]) if f["closed"] else "-",
+                                                         who(f["closed"]["by"]) if f["closed"] else "-",
+                                                         "scripted cast" if f["scripted"] else "cast not shown scripted"),
+                "- Decision: %s" % (md_escape(f["closed"]["reason"]) if f["closed"] else "none recorded"),
+                "- Baseline: %s" % (("%s, frozen %s by %s, %d members; approved %s" % (
+                    md_escape(f["baseline"]["name"]), ms_time(f["baseline"]["created_at_ms"]), who(f["baseline"]["by"]),
+                    f["baseline"]["members"], ("by %s %s" % (who(f["baseline"]["approved_by"]), ms_time(f["baseline"]["approved_at_ms"])))
+                    if f["baseline"]["approved_by"] else ("(not in this export)" if not f["baseline"]["approval_exported"] else "**no**")))
+                    if f["baseline"] else "none"), ""]
+        if f["revs"]:
+            out += [table(["Revision", "Status", "At", "By", "Reason"], [[r["n"], r["status"], ms_time(r["at_ms"]), who(r["by"]),
+                                                                         md_escape(r["reason"])] for r in f["revs"]]), ""]
+        if f["rids"]:
+            rr = []
+            for x in f["rids"]:
+                raised = x.revs[0] if x.revs else {"by": "", "at_ms": 0}
+                last = x.revs[-1] if x.revs else {"by": "", "status": x.status, "reason": ""}
+                rr.append([x.id, md_escape(x.title), who(raised["by"]), x.status, who(last["by"]) if len(x.revs) > 1 else "-",
+                           md_escape(last.get("reason", ""))])
+            out += ["RIDs:", "", table(["RID", "Discrepancy", "Raised by", "Disposition", "Dispositioned by", "Reason"], rr), ""]
+    return "\n".join(out)
 
 
 def h_metrics(M, a):
@@ -1417,6 +1598,7 @@ HANDLERS = {
     "doc-plan": h_doc_plan, "drl": h_drl, "review-docs": h_review_docs, "reviews": h_reviews, "baselines": h_baselines,
     "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
     "spr": h_spr, "jrr": h_jrr, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
+    "claim": h_claim, "open-items": h_open_items,
 }
 DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
 
@@ -1448,11 +1630,13 @@ def gen_docs(M):
 
 def gen_index(M):
     n_sd = len([t for t in M.tests if t["suite"] == "SD"])
-    L = ["# uuid7 %s — ECSS qualification package" % M.version, "",
+    L = ["# uuid7 %s — ECSS package (category D)" % M.version, "",
          "The time-ordered UUIDv7 library of the kyr platform, documented as software of criticality category D after ECSS-E-ST-40C "
          "Rev.1 and ECSS-Q-ST-80C Rev.2. Every page is generated by `ecss/make.sh` from the rms (or, without an export, the "
          "repository's CSVs) and from the repository's own facts; nothing here is edited by hand. The pipeline is explained in "
          "\\ref UUID7_DOC_README \"the ECSS pipeline\".", "",
+         "## Claim", "", h_claim(M, {}), "",
+         "Open items: %d (\\ref UUID7_DOC_SDP \"SDP\" <4.6>)." % len([o for o in M.open_items if o["status"] == "open"]), "",
          "## Identification", "", table(["Item", "Value"], [
              ["Product", "uuid7 %s (libuuid7, libuuid7-dev)" % M.version],
              ["Commit", "%s on %s%s" % (M.commit, M.branch, " (uncommitted changes)" if M.dirty else "")],
@@ -1560,7 +1744,8 @@ def summary(M):
           "tests": len([t for t in M.tests if t["exe"]]), "scenarios": len([t for t in M.tests if t["suite"] == "SD"]),
           "documents": len([d for d in M.docs if d.applicability != "N"]), "tailored_out": len([d for d in M.docs if d.applicability == "N"]),
           "diagrams": len(M.diagrams), "svg": len(glob.glob(os.path.join(SVG, "*.svg"))), "render_note": M.render_note,
-          "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran}
+          "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0],
+          "open_items": len([o for o in M.open_items if o["status"] == "open"])}
     write(os.path.join(OUT, "summary.json"), json.dumps(js, indent=1) + "\n")
     return js
 

@@ -2,6 +2,8 @@
 
 uuid7 documented as category D software after ECSS-E-ST-40C Rev.1 and ECSS-Q-ST-80C Rev.2 (the owner's "level 4", see `PAF/TAILORING.md`). The standards are cited, never copied.
 
+Claim: documented and self-verified at category D; tailoring proposed, not agreed; the review workflow demonstrated in kyr rms with a scripted cast; not independently reviewed; not accepted (AR not held). The front page recomputes it at every run; `MGT/open_items.csv` (SDP <4.6>) says what closes each part.
+
 ## One click
 
 ```sh
@@ -10,16 +12,16 @@ ecss/make.sh --docs-only   # keep the last run's results, regenerate the documen
 ecss/make.sh --serve       # serve the built site on http://127.0.0.1:8790/ (a sandboxed browser cannot follow file:// links)
 ```
 
-Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.html` (one doxygen site: the qualification package's front page, the documents, the API reference, the traceability, the diagrams, the evidence). Needs python3, doxygen and graphviz; renders the PlantUML diagrams to SVG when java is installed (`sudo apt install default-jre-headless`; jar: `PLANTUML_JAR`, default `/home/rh/plantuml/plantuml-mit-1.2025.10.jar`), else embeds their sources. Set `CLANG_FORMAT` to a clang-format 18 for the format stage. Exit 1 if a gate failed; the documents say which.
+Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.html` (one doxygen site: the package's front page with its claim, the documents, the API reference, the traceability, the diagrams, the evidence). Needs python3, doxygen and graphviz; renders the PlantUML diagrams to SVG when java is installed (`sudo apt install default-jre-headless`; jar: `PLANTUML_JAR`, default `/home/rh/plantuml/plantuml-mit-1.2025.10.jar`), else embeds their sources. Set `CLANG_FORMAT` to a clang-format 18 for the format stage. Exit 1 if a gate failed; the documents say which.
 
-## From requirement to qualification
+## From requirement to evidence
 
 1. A requirement is an rms artifact (`UUID7-SRS-nnn`, `UUID7-ICD-nnn`) with rationale, criteria, method (test, analysis, inspection, review) and source. Seed and fallback: `TS/requirements.csv`.
 2. The code names what it implements: `@ingroup uuid7_cmp_*` (the SDD component) and `@satisfies UUID7-SRS-nnn` on every documented symbol of `app/`.
 3. Every test names what it verifies: `@verifies UUID7-SRS-nnn` (`tests/ITs`, `tests/plantuml`, `tests/stress/stress.c`, `tests/package/smoke.c`); the other verification cases (analyses, inspections, reviews, pipeline gates) are `DJF/verification_cases.csv`.
 4. `tests/plantuml` holds scenario tests: real tests that assert, and through `puml_trace.h` write one sequence diagram each to `build/ecss/puml/`. They run in the integration matrix like the other suite.
 5. `ecss/make.sh` runs `utils/deps.sh sysroot` and `utils/run_pipeline.sh` (tiers, template, format, ABI, six profiles, both suites in every profile x linkage, coverage, stress, packages, package smoke), rebuilds the packages to prove reproducibility, runs the hardening gate, then `tools/ecss.py`: the model (rms export or CSVs, plus the tags and every result), the class, package and component diagrams, the Markdown documents (each source here, with `<!-- ecss:... -->` directives filled in), the rms loader; then doxygen (`Doxyfile`; `tools/doxy_filter.py` turns the requirement ids of the tags into links).
-6. The documents are reviewed at the milestones; a review closes with an rms baseline.
+6. The documents are reviewed at the milestones; a review closes with an rms baseline. The reviews in the rms so far are a scripted demonstration (`DJF/JRR.md` names who the export says held them).
 
 ## Documents
 

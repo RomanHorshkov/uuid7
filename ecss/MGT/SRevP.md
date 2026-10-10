@@ -32,7 +32,7 @@ No ORR: the library has no operation of its own (\ref UUID7_DOC_TAILORING "tailo
 
 ### 4.2 System or product subject to review
 
-The uuid7 library (libuuid7, libuuid7-dev) at the commit proposed for the next release tag, with its qualification package regenerated on that commit.
+The uuid7 library (libuuid7, libuuid7-dev) at the commit proposed for the next release tag, with its ECSS package regenerated on that commit.
 
 ## 5 Reference documents
 
@@ -105,6 +105,8 @@ AR:
 1. Decision making authority: the maintainer, Roman Horshkov.
 2. Review group: the maintainer as chair, secretary and member; the supplier project team is the same person; a consumer's maintainer when invited.
 3. Independence: none (not required at category D).
+
+Status: no review has yet been held under this plan. The reviews recorded in the rms were played by a scripted cast to demonstrate the workflow; the \ref UUID7_DOC_JRR "JRR" shows it from the export, and the \ref UUID7_DOC_SDP "SDP" <4.6> (OI-01) says what closes it.
 
 ## 12 Logistics
 

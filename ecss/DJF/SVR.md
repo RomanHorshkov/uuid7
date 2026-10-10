@@ -4,7 +4,9 @@
 
 ## 1 Introduction
 
-This SVR gathers the results of every verification activity the \ref UUID7_DOC_SVERP "SVerP" plans, for the commit it is generated from, organised by process as the DRD asks, with the budgets in <5> (ECSS-E-ST-40 5.8.3). Every result below was measured by `ecss/make.sh` on that commit; the evidence files are linked.
+This SVR gathers the results of every verification activity the \ref UUID7_DOC_SVERP "SVerP" plans, for the commit it is generated from, organised by process as the DRD asks, with the budgets in <5> (ECSS-E-ST-40 5.8.3). Every result below was measured by `ecss/make.sh` on that commit; the evidence files are linked. Every verification here was performed by the developer; none was witnessed or repeated by anyone else. The package's claim:
+
+<!-- ecss:claim -->
 
 ## 2 Applicable and reference documents
 

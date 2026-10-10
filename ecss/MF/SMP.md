@@ -107,7 +107,7 @@ The full regression (every suite, every cell), the analyses and the regenerated 
 
 ### 10.6 Delivery phase
 
-Fast-forward `master`, tag `v<VERSION>`, publish the packages; the previous release stays available for rollback; the qualification package of the release is the backup of the documentation.
+Fast-forward `master`, tag `v<VERSION>`, publish the packages; the previous release stays available for rollback; the ECSS package of the release is the backup of the documentation.
 
 ## 11 Training Requirements
 
@@ -115,7 +115,7 @@ None: the maintainer is the developer.
 
 ## 12 Software Product Assurance Activities
 
-The SPAP's activities apply unchanged; qualification status is maintained by regenerating and reviewing the package for every release.
+The SPAP's activities apply unchanged; the package's claim (its front page) is recomputed at every refresh and the package is reviewed for every release.
 
 ## 13 Software Configuration Management
 
