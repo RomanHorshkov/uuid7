@@ -8,4 +8,4 @@ The outcome of every review of the \ref UUID7_DOC_SREVP "SRevP" as the rms expor
 
 ## Baselines
 
-<!-- ecss:baselines -->
+<!-- ecss:baselines anchors=yes -->

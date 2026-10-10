@@ -22,13 +22,12 @@ RID: review item discrepancy, recorded as an rms review-comment.
 
 | Review | Exact name | Combined with |
 |---|---|---|
-| SRR | uuid7 software requirements review | SWRR and PDR (one meeting, three decisions) |
-| PDR | uuid7 preliminary design review | SRR, SWRR |
-| CDR | uuid7 critical design review | DDR, software validation specification review |
-| QR | uuid7 qualification review | software delivery review board |
-| AR | uuid7 acceptance review | software delivery review board |
-
-No ORR: the library has no operation of its own (\ref UUID7_DOC_TAILORING "tailoring").
+| \anchor rev_srr <span class="ecss-def">SRR</span> | uuid7 software requirements review | SWRR and PDR (one meeting, three decisions) |
+| \anchor rev_pdr <span class="ecss-def">PDR</span> | uuid7 preliminary design review | SRR, SWRR |
+| \anchor rev_cdr <span class="ecss-def">CDR</span> | uuid7 critical design review | DDR, software validation specification review |
+| \anchor rev_qr <span class="ecss-def">QR</span> | uuid7 qualification review | software delivery review board |
+| \anchor rev_ar <span class="ecss-def">AR</span> | uuid7 acceptance review | software delivery review board |
+| \anchor rev_orr <span class="ecss-def">ORR</span> | not held: the library has no operation of its own (\ref UUID7_DOC_TAILORING "tailoring" <4>) | - |
 
 ### 4.2 System or product subject to review
 

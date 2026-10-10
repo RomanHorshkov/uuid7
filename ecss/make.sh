@@ -4,7 +4,7 @@
 # deps.txt are cached. --docs-only keeps the last run's test results and evidence and regenerates the documents and the site.
 # The gates and the packages run inside the pinned release root when it exists (ECSS_HOST=1: on the host); the evidence records
 # the commit it is of and the toolchain that produced it.
-# Exit 1 when a gate failed (the documents are written anyway and say what failed).
+# Exit 1 when a gate failed (the documents are written anyway and say what failed), the links gate included.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}" || exit 1
@@ -113,6 +113,15 @@ cp -r "${EV}/." "${OUT}/html/evidence/" 2> /dev/null
 [[ -d tests/results/ITs/coverage ]] && cp -r tests/results/ITs/coverage "${OUT}/html/evidence/coverage"
 cp "${OUT}"/puml/*.puml "${OUT}/html/diagrams/" 2> /dev/null
 cp "${OUT}"/svg/*.svg "${OUT}/html/diagrams/" 2> /dev/null
+
+# the links gate: every reference the reader meets in the site is a link (links_gate.py says what counts); RED lists each bare one
+say "links: ecss/tools/links_gate.py"
+if python3 ecss/tools/links_gate.py "${OUT}/html" "${OUT}/links.json" "${OUT}/doxygen_warnings.txt" > "${OUT}/links.txt"; then
+    tail -n 1 "${OUT}/links.txt"
+else
+    cat "${OUT}/links.txt"; rc=1
+fi
+cp "${OUT}/links.txt" "${OUT}/html/evidence/links.txt"
 
 python3 - "${OUT}" << 'PY'
 import json, sys

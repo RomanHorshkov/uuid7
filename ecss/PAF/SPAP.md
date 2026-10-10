@@ -69,7 +69,7 @@ No supplier.
 
 The methods and tools of the \ref UUID7_DOC_SDP "SDP" <5.3> and <5.4>, identified and justified below (ECSS-Q-ST-80 5.6.1.1, 5.6.1.2): the version each one had in this refresh, its use, its prior use (the category D condition of 5.6.1.1: used successfully in at least one project before), how its output is checked (5.6.1.3) and its availability. Two do not meet the prior-use condition: `ecss/tools/ecss.py`, written for this package, and kyr_rms as the source of truth of an ECSS package; their outputs are cross-checked instead (drift, refusal, review). No customer has agreed the list (5.6.1.1a; \ref UUID7_DOC_SDP "SDP" <4.6>).
 
-<!-- ecss:tools -->
+<!-- ecss:tools anchors=yes -->
 
 ### 5.9 Process assessment and improvement
 

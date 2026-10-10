@@ -1,4 +1,5 @@
 clause,expected_output,category_D,compliance,reference,remark
+4.2.9,Software operation process (informative): operations determined at system level,informative,NA,PAF/TAILORING.md <4>,"A library has no operation of its own: it runs inside its consumers' processes, whose operation process covers it; the tailoring of 5.9 rests on this clause."
 5.2.2.1a,Specification of system requirements allocated to software,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline: a customer process (""the customer shall"", 5.2.2.1a) that nobody performs; the TS cites its upper-level sources instead. Closes with OI-02."
 5.2.2.1a eo a,Functions and performance system requirements allocated to software,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline: a customer process (""the customer shall"", 5.2.2.1a) that nobody performs; the TS cites its upper-level sources instead. Closes with OI-02."
 5.2.2.1a eo b,Verification and validation product requirements,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline: a customer process (""the customer shall"", 5.2.2.1a) that nobody performs; the TS cites its upper-level sources instead. Closes with OI-02."

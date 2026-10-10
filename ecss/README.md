@@ -23,6 +23,10 @@ Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.htm
 5. `ecss/make.sh` runs `utils/deps.sh sysroot` and `utils/run_pipeline.sh` (tiers, template, format, ABI, six profiles, both suites in every profile x linkage, coverage, stress, packages, package smoke), rebuilds the packages to prove reproducibility, runs the hardening gate, then `tools/ecss.py`: the model (rms export or CSVs, plus the tags and every result), the class, package and component diagrams, the Markdown documents (each source here, with `<!-- ecss:... -->` directives filled in), the rms loader; then doxygen (`Doxyfile`; `tools/doxy_filter.py` turns the requirement ids of the tags into links).
 6. The documents are reviewed at the milestones; a review closes with an rms baseline. The reviews in the rms so far are a scripted demonstration (`DJF/JRR.md` names who the export says held them).
 
+## Links
+
+Every reference is a link (`tools/refs.py`): a section (`<9.7>`, `SRS <5.2>`), a document name or id, a requirement, component, verification case, review, RID, change request, open item or baseline, an ECSS clause (its row of the compliance matrix), a tool (its row of the tools register), an evidence or source file, an API symbol, a test. The links gate (`tools/links_gate.py`) reads the built HTML and turns make.sh RED on any reference left bare and any anchor doxygen cannot resolve, each listed with its page (`build/ecss/links.txt`). Headings, the anchored cell of a register row and code blocks are definitions or code, not references.
+
 ## Documents
 
 | File | Documents | Directory |

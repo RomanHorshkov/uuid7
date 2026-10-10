@@ -21,6 +21,9 @@ import shutil
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True   # no __pycache__ in the repository
+import refs  # noqa: E402  (ecss/tools/refs.py: sections, figures, tables, links)
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 ECSS = os.path.join(ROOT, "ecss")
 OUT = os.path.join(ROOT, "build", "ecss")
@@ -990,6 +993,11 @@ def status_word(s):
     return {"verified": "verified", "failed": "**FAILED**", "no case": "**no verification case**", "not run": "not run"}.get(s, s)
 
 
+def defn(label, text):
+    """A definition in a table cell: the anchor others link to, the text marked as the definition (not a reference)."""
+    return '\\anchor %s <span class="ecss-def">%s</span>' % (label, text)
+
+
 def table(head, rows):
     out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
     for r in rows:
@@ -999,14 +1007,16 @@ def table(head, rows):
 
 def diagram_md(M, name, caption=None):
     caption = caption or M.diagrams.get(name, name)
-    svg = os.path.join(SVG, name + ".svg")
     src = read(os.path.join(PUML, name + ".puml"))
     if not src:
         return "> Diagram %s: no PlantUML source (the producing step did not run)." % name
-    link = '<a href="diagrams/%s.puml">%s.puml</a>' % (name, name)
-    if os.path.exists(svg):
-        return '\\image html %s.svg "%s"\n\nSource: %s' % (name, md_escape(caption), link)
-    return ("**%s** (%s). Rendering waits for java; the PlantUML source:\n\n~~~{.txt}\n%s~~~" % (md_escape(caption), link, src))
+    if os.path.exists(os.path.join(SVG, name + ".svg")):
+        body = ('<a href="diagrams/%s.svg" title="the diagram alone"><img class="ecss-img" src="diagrams/%s.svg" alt="%s"></a>'
+                % (name, name, html.escape(caption, quote=True)))
+    else:
+        body = "<pre>%s</pre>" % html.escape(src)
+    return ('<div class="ecss-figure">\n%s\n<div class="ecss-caption">%s. Source: <a href="diagrams/%s.puml">%s.puml</a>.</div>\n</div>'
+            % (body, md_escape(caption).rstrip("."), name, name))
 
 
 def product_text(M):
@@ -1469,7 +1479,9 @@ def h_tools(M, a):
     cols = a.get("columns", "tool,version,class,use,prior_use,output_checked_by,availability").split(",")
     head = {"tool": "Tool", "version": "Version in this refresh", "class": "Class", "use": "Use", "prior_use": "Prior use (5.6.1.1)",
             "output_checked_by": "How its output is checked (5.6.1.3)", "availability": "Availability (5.6.1.2)"}
-    body = [[md_escape(tool_version(M, r["version"])) if c == "version" else md_escape(r[c]) for c in cols] for r in rows]
+    body = [[md_escape(tool_version(M, r["version"])) if c == "version" else
+             (defn(tool_anchor(r["tool"]), md_escape(r[c])) if c == "tool" and a.get("anchors") == "yes" else md_escape(r[c])) for c in cols]
+            for r in rows]
     return "Source: `ecss/PAF/tools.csv`.\n\n" + table([head[c] for c in cols], body)
 
 
@@ -1556,7 +1568,7 @@ def h_drl(M, a):
     rows = []
     for f, _ in FILES:
         for d in [d for d in M.docs if d.notes.get("file") == f]:
-            rows.append([f, md_escape(d.title), md_escape(d.notes.get("drd", "-")), d.notes.get("reviews", "").replace(",", ", "),
+            rows.append([f, defn(anchor("drl_" + d.id), md_escape(d.title)), md_escape(d.notes.get("drd", "-")), d.notes.get("reviews", "").replace(",", ", "),
                          ("produced: " + dref(d.id, M)) if d.applicability != "N" else "tailored out",
                          md_escape(d.rationale)])
     return table(["File", "DRL item", "DRD", "Reviews", "Disposition", "Clause / justification"], rows)
@@ -1695,7 +1707,7 @@ def h_claim(M, a):
 def h_open_items(M, a):
     if not M.open_items:
         return "No open item."
-    rows = [[o["id"], md_escape(o["finding"]), md_escape(o["title"]), o["status"], md_escape(o["now"]), md_escape(o["closes_with"]),
+    rows = [[defn(anchor("oi_" + o["id"]), o["id"]), md_escape(o["finding"]), md_escape(o["title"]), o["status"], md_escape(o["now"]), md_escape(o["closes_with"]),
              md_escape(o["who"]), md_escape(o["rms_feature"]), md_escape(o["clauses"])] for o in M.open_items]
     n = len([o for o in M.open_items if o["status"] == "open"])
     return ("%d open item(s) of %d. Source: `ecss/MGT/open_items.csv`; the finding is the review's of 2026-10-10.\n\n" % (n, len(M.open_items)) +
@@ -1714,7 +1726,8 @@ def h_baselines(M, a):
     return ("Each rms baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description); the "
             "members are counted by the status they were frozen at.\n\n" +
             table(["Baseline", "Frozen", "By", "Approved by", "uuid7 commit", "Members by status"],
-                  [[md_escape(b["name"]), ms_time(b["created_at_ms"], "%Y-%m-%d %H:%M"), who(b["by"]),
+                  [[defn(anchor("bl_" + b["name"]), md_escape(b["name"])) if a.get("anchors") == "yes" else md_escape(b["name"]),
+                    ms_time(b["created_at_ms"], "%Y-%m-%d %H:%M"), who(b["by"]),
                     (who(b["approved_by"]) if b["approved_by"] else "**no**") if b["approval_exported"] else "not in this export", b["check"],
                     ", ".join("%d %s" % (v, k) for k, v in sorted(b["member_status"].items()))] for b in M.baselines]))
 
@@ -1742,11 +1755,13 @@ def h_matrix_csv(M, a):
         out = []
         for part in [p.strip() for p in s.split(";")]:
             m = re.match(r"^(\w+)/(\w+)\.md(.*)$", part)
-            out.append("%s%s" % ('\\ref %s "%s"' % (page_label(m.group(2) + ".md"), m.group(1) + "/" + m.group(2)) if m else md_escape(part),
+            name = {"TAILORING": "tailoring", "CODING_STANDARD": "coding standard"}.get(m.group(2), m.group(2)) if m else ""
+            out.append("%s%s" % ('\\ref %s "%s"' % (page_label(m.group(2) + ".md"), name) if m else md_escape(part),
                                  md_escape(m.group(3)) if m else ""))
         return "; ".join(out)
     return ("%d clauses: %s. Source: `ecss/%s`.\n\n" % (len(body), ", ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), a["file"]) +
-            table([h.replace("_", " ") for h in head], [[md_escape(r[0]), md_escape(r[1]), md_escape(r[2]), r[3], refl(r[4]), md_escape(r[5])]
+            table([h.replace("_", " ") for h in head], [[defn(anchor(("e40" if "e40" in a["file"] else "q80") + "_" + r[0]), md_escape(r[0])), md_escape(r[1]), md_escape(r[2]), r[3],
+                                                         refl(r[4]), md_escape(r[5])]
                                                         for r in body]))
 
 
@@ -1801,7 +1816,8 @@ def h_spr(M, a):
     if not M.crs:
         return ("No software problem report or nonconformance is recorded: %s." %
                 ("the rms export holds no change-request" if M.mode == "rms" else "problem reports are rms change-requests and no rms export is present"))
-    return table(["Report", "Title", "Status"], [[c.id, md_escape(c.title), c.status] for c in M.crs])
+    return table(["Report", "Title", "Status"], [[defn(anchor("cr_" + c.id), c.id) if a.get("anchors") == "yes" else c.id, md_escape(c.title),
+                                                  c.status] for c in M.crs])
 
 
 def h_jrr(M, a):
@@ -1851,7 +1867,7 @@ def h_jrr(M, a):
             for x in f["rids"]:
                 raised = x.revs[0] if x.revs else {"by": "", "at_ms": 0}
                 last = x.revs[-1] if x.revs else {"by": "", "status": x.status, "reason": ""}
-                rr.append([x.id, md_escape(x.title), who(raised["by"]), x.status, who(last["by"]) if len(x.revs) > 1 else "-",
+                rr.append([defn(anchor("rid_" + x.id), x.id), md_escape(x.title), who(raised["by"]), x.status, who(last["by"]) if len(x.revs) > 1 else "-",
                            md_escape(last.get("reason", ""))])
             out += ["RIDs:", "", table(["RID", "Discrepancy", "Raised by", "Disposition", "Dispositioned by", "Reason"], rr), ""]
     return red + "\n".join(out)
@@ -1924,18 +1940,115 @@ def expand(M, text, where):
     return DIRECTIVE.sub(one, text)
 
 
+def doc_target(d):
+    """The anchor a document id or name links to: its page or section when produced, its DRL row when tailored out."""
+    if d.applicability == "N" or not d.notes.get("path", "-").endswith((".md",)) and "#" not in d.notes.get("path", ""):
+        return anchor("drl_" + d.id)
+    page, _, sec = d.notes["path"].partition("#")
+    return sec or page_label(page)
+
+
+def link_registry(M):
+    """Every target a reference in the text can link to (refs.Index)."""
+    ids, abbr = {}, {}
+    for r in M.reqs:
+        ids[r.id] = anchor("req_" + r.id)
+    for c in M.cases:
+        ids[c.id] = anchor("tc_" + c.id)
+    for c in M.comps:
+        ids[c.id] = anchor("cmp_" + c.id)
+    for d in M.docs:
+        ids[d.id] = doc_target(d)
+    for d in sorted(M.docs, key=lambda d: d.applicability == "Y"):   # a produced document wins an abbreviation
+        m = re.search(r"\(([A-Za-z]{2,8})\)$", d.title)
+        if m:
+            abbr[m.group(1)] = doc_target(d)
+    for d in M.docs:   # whole documents without one: SValR, UTR, JRR; TAILORING as the data names it
+        path = d.notes.get("path", "")
+        base = os.path.basename(path)[:-3]
+        if d.applicability == "Y" and path.endswith(".md") and re.fullmatch(r"[A-Z][A-Za-z]{1,5}|[A-Z0-9_]+", base):
+            abbr.setdefault(base, doc_target(d))
+    if "SPR" in abbr:
+        abbr["NCR"] = abbr["SPR"]
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        ids["UUID7-REV-" + rv] = ("jrr_" + rv.lower()) if (M.mode == "rms" and f["art"]) else "rev_" + rv.lower()
+    for x in M.arts:
+        if x.kind == "review-comment":
+            ids[x.id] = anchor("rid_" + x.id)
+    for c in M.crs:
+        ids[c.id] = anchor("cr_" + c.id)
+    for o in M.open_items:
+        ids[o["id"]] = anchor("oi_" + o["id"])
+    tools = []
+    with open(os.path.join(ECSS, "PAF", "tools.csv"), newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            for name in re.findall(r"[\w./-]+(?: root| rms)?", r["tool"].replace("ecss/tools/", "")):
+                if name not in ("and",):
+                    tools.append((name, tool_anchor(r["tool"])))
+    tools.append(("kyr rms", tool_anchor("kyr_rms (kyr-rms-cli)")))
+    clauses = {}
+    for std, path in (("e40", "MGT/e40_compliance.csv"), ("q80", "PAF/q80_compliance.csv")):
+        with open(os.path.join(ECSS, path), newline="", encoding="utf-8") as f:
+            clauses[std] = {r["clause"]: anchor(std + "_" + r["clause"]) for r in csv.DictReader(f)}
+    std_pages = {"e40": "UUID7_DOC_E40_COMPLIANCE", "q80": "UUID7_DOC_Q80_COMPLIANCE", "m40": "UUID7_DOC_SCMP"}
+    std_parts = {("e40", "Annex A"): "tailoring_6", ("e40", "Table A-1"): "tailoring_6", ("e40", "Figure A-1"): "tailoring_6",
+                 ("e40", "Annex R"): std_pages["e40"], ("e40", "Table R-1"): std_pages["e40"], ("e40", "Annex S"): "tailoring_4",
+                 ("q80", "Annex D"): "tailoring_3", ("q80", "Table D-1"): "tailoring_3", ("q80", "Annex D.1"): "tailoring_3",
+                 ("q80", "Annex D.2"): std_pages["q80"], ("q80", "Table D-2"): std_pages["q80"]}
+    for d in sorted(M.docs, key=lambda d: d.applicability != "N"):
+        m = re.match(r"ECSS-([EQM])-ST-(\d+) (Annex [A-Z])$", d.notes.get("drd", ""))
+        if m:
+            std_parts[({"E": "e40", "Q": "q80", "M": "m40"}[m.group(1)], m.group(3))] = doc_target(d)
+    sources = {}
+    for d in ("app", "tests/ITs", "tests/plantuml", "tests/stress", "tests/package"):
+        for p in glob.glob(os.path.join(ROOT, d, "*.[ch]")):
+            sources[rel(p)] = sources[os.path.basename(p)] = os.path.basename(p)
+    symbols = sorted([n for n, x in M.symbols.items() if x["kind"] != "file" and n != "_Static_assert"] + [t["name"] for t in M.tests if t["exe"]])
+    return {"ids": ids, "abbr": abbr, "reviews": {rv: "rev_" + rv.lower() for rv in REVIEWS}, "sources": sources, "symbols": symbols,
+            "baselines": {b["name"]: anchor("bl_" + b["name"]) for b in M.baselines}, "files": {f: "files_" + f.lower() for f, _ in FILES},
+            "tools": tools, "clauses": clauses, "std_pages": std_pages, "std_parts": std_parts}
+
+
+def tool_anchor(name):
+    return "tool_" + anchor(re.sub(r"\s*\(.*\)$", "", name).split(" and ")[0]).lower()
+
+
 def gen_docs(M):
+    """The documents: directives expanded, sections labelled, every reference linked (refs.py), written to build/ecss/md."""
     os.makedirs(MD, exist_ok=True)
+    texts = {}
     for path in sorted(glob.glob(os.path.join(ECSS, "*", "*.md"))):
         if os.path.basename(os.path.dirname(path)) in ("tools", "rms_export", "common"):
             continue
-        out = os.path.join(MD, os.path.relpath(path, ECSS))
-        write(out, expand(M, read(path), rel(path)))
+        texts[os.path.relpath(path, ECSS)] = expand(M, read(path), rel(path))
     readme = read(os.path.join(ECSS, "README.md"))
     readme = re.sub(r"^# (.*)$", r"# \1 {#UUID7_DOC_README}", readme, count=1, flags=re.M)
-    write(os.path.join(MD, "README.md"), expand(M, readme, "ecss/README.md"))
-    gen_index(M)
+    texts["README.md"] = expand(M, readme, "ecss/README.md")
+    texts["index.md"] = gen_index(M)
+    X = refs.Index(link_registry(M))
+    for r, t in texts.items():
+        X.add(r, t)
+    for r in texts:
+        texts[r] = X.structure(r, texts[r])
+    for r, t in texts.items():
+        write(os.path.join(MD, r), X.link(r, t))
+    M.refs = X
     components_dox(M.comps)
+    # what the links gate (links_gate.py) reads: the pages, the names a reference can take, the references left unresolved
+    reg = X.reg
+    sources = sorted(rel(p) for d in ("app", "tests/ITs", "tests/plantuml", "tests/stress", "tests/package")
+                     for p in glob.glob(os.path.join(ROOT, d, "*.[ch]")))
+    html_pages = sorted(("index" if p.label == "index" else p.label) + ".html" for p in X.pages.values())
+    html_pages += sorted("group__%s.html" % c.notes["group"].replace("_", "__") for c in M.comps if c.notes.get("group"))
+    html_pages += ["satisfies.html", "verifies.html"]
+    write(os.path.join(OUT, "links.json"), json.dumps({
+        "html": html_pages, "abbr": sorted(reg["abbr"]), "reviews": sorted(reg["reviews"]), "files": sorted(reg["files"]),
+        "tools": sorted({t for t, _ in reg["tools"]}), "clauses": sorted(set(reg["clauses"]["e40"]) | set(reg["clauses"]["q80"])),
+        "sources": sources + sorted({os.path.basename(x) for x in sources}),
+        "symbols": sorted(n for n, x in M.symbols.items() if x["kind"] != "file" and n != "_Static_assert"),
+        "tests": sorted(t["name"] for t in M.tests if t["exe"]), "unresolved": sorted(set(X.unresolved)),
+        "links_written": X.count["links"]}, indent=1) + "\n")
 
 
 def gen_index(M):
@@ -1962,19 +2075,19 @@ def gen_index(M):
                          d.notes.get("reviews", "").replace(",", ", "),
                          ("%s%s" % (d.status, " (generated)" if d.notes.get("gen") == "yes" else "")) if d.applicability != "N"
                          else "tailored out"])
-        L += ["### %s (%s)" % (f, name), "", table(["Document", "DRD", "Reviews", "Status"], rows), ""]
+        L += ["### %s (%s) {#files_%s}" % (f, name, f.lower()), "", table(["Document", "DRD", "Reviews", "Status"], rows), ""]
     L += ["## Documents by review", "", h_reviews(M, {}), ""]
     for rv in REVIEWS:
         docs = [d for d in M.docs if rv in d.notes.get("reviews", "").split(",") and d.applicability != "N"]
         L += ["**%s**: %s" % (rv, ", ".join(dref(d.id, M) for d in docs) or "none"), ""]
-    L += ["## Diagrams", "", "Scenario sequence diagrams (generated by the %d scenario tests of `tests/plantuml`): \\ref UUID7_DOC_SUM "
-          "\"SUM <11>\"; class, package and component diagrams: \\ref UUID7_DOC_SDD \"SDD\"." % n_sd, "",
+    L += ["## Diagrams", "", "Scenario sequence diagrams (generated by the %d scenario tests of `tests/plantuml`): SUM <11>; class, "
+          "package and component diagrams: SDD." % n_sd, "",
           table(["Diagram", "Title", "Rendered"], [[n, md_escape(t), "SVG" if os.path.exists(os.path.join(SVG, n + ".svg")) else "PlantUML source"]
                                                     for n, t in sorted(M.diagrams.items())]), "",
           "## Code", "", "The API reference (Files, Topics) is generated from the doc comments of `app/`; the `@satisfies` and `@verifies` "
           "tags of the code and the tests become the \\ref satisfies \"implementation trace\" and \\ref verifies \"verification trace\" "
           "lists.", ""]
-    write(os.path.join(MD, "index.md"), "\n".join(L))
+    return "\n".join(L)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------
@@ -2100,7 +2213,7 @@ def components_dox(comps):
         g = c.notes.get("group")
         if g:
             dox += ["/**", " * @defgroup %s %s" % (g, c.title), " * @brief %s" % c.body.replace("*/", "* /"), " *",
-                    " * SDD component %s: \\ref %s \"its description\"." % (c.id, anchor("cmp_" + c.id)), " */", ""]
+                    " * Component \\ref %s \"%s\" of the \\ref UUID7_DOC_SDD \"SDD\"." % (anchor("cmp_" + c.id), c.id), " */", ""]
     write(os.path.join(MD, "components.dox"), "\n".join(dox))
 
 

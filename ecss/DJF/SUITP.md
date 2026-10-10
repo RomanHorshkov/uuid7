@@ -104,3 +104,15 @@ Cases are selected per requirement and per error path (each return value of the 
 #### 8.2.4 Test case identifier
 
 <!-- ecss:case-matrix -->
+
+## 9 Software unit and integration test case specification
+
+Omitted at category D (Annex R on 5.5.2.9a): the test cases are specified in the SVS <7>.
+
+## 10 Software unit and integration test procedures
+
+Omitted at category D (Annex R on 5.5.2.9a): the procedures are in the SVS <8>.
+
+## 11 Software test plan additional information
+
+Omitted at category D (Annex R on 5.5.2.9a).
