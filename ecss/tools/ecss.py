@@ -42,7 +42,7 @@ KINDS = ["requirement", "document", "component", "verification-case", "verificat
          "evidence", "hazard", "failure-mode", "mitigation", "fault-tree-event", "fdir-rule", "review", "review-comment", "document-node",
          "assumption", "rationale", "source-reference", "test-procedure", "test-step", "configuration-item", "user", "role"]
 STATUSES = ["draft", "candidate", "proposed", "in-review", "needs-rework", "approved", "baselined", "implemented", "verified",
-            "validated", "rejected", "obsolete", "superseded", "withdrawn"]
+            "validated", "rejected", "obsolete", "superseded", "withdrawn", "closed"]
 METHODS = ["none", "test", "analysis", "inspection", "review", "demonstration", "simulation"]
 CRITICALITIES = ["none", "low", "medium", "high", "safety"]
 LINKS = ["derives-from", "refines", "allocates-to", "satisfies", "verifies", "validated-by", "references", "impacts", "duplicates",
@@ -2033,7 +2033,7 @@ def h_spr(M, a):
         return ("No software problem report or nonconformance is recorded: %s." %
                 ("the rms export holds no change-request" if M.mode == "rms" else "problem reports are rms change-requests and no rms export is present"))
     return table(["Report", "Title", "Status"], caption="Change requests", rows= [[defn(anchor("cr_" + c.id), c.id) if a.get("anchors") == "yes" else c.id, md_escape(c.title),
-                                                  "closed (rms status obsolete)" if c.status == "obsolete" else c.status] for c in M.crs])
+                                                  c.status] for c in M.crs])
 
 
 def h_jrr(M, a):
