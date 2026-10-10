@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make.sh [--docs-only] — the one click of the ECSS pipeline (ecss/README.md): every gate of the repository, the evidence ECSS asks
+# make.sh [--docs-only | --serve [port]] — the one click of the ECSS pipeline (ecss/README.md): every gate of the repository, the evidence ECSS asks
 # for, the diagrams, the documents (build/ecss/md) and one site (build/ecss/html/index.html). Idempotent; no network once the pins of
 # deps.txt are cached. --docs-only keeps the last run's test results and evidence and regenerates the documents and the site.
 # Exit 1 when a gate failed (the documents are written anyway and say what failed).
@@ -11,6 +11,14 @@ OUT="${ROOT}/build/ecss"
 EV="${OUT}/evidence"
 DOCS_ONLY=0
 [[ "${1:-}" == --docs-only ]] && DOCS_ONLY=1
+# --serve: the built site over http on loopback (a sandboxed browser, such as the Flatpak Firefox, cannot follow file:// links
+# out of the one file it was handed; over http every link works)
+if [[ "${1:-}" == --serve ]]; then
+    [[ -f "${OUT}/html/index.html" ]] || { printf 'make.sh: no site yet: run ecss/make.sh first\n' >&2; exit 1; }
+    port="${2:-8790}"
+    printf 'serving %s on http://127.0.0.1:%s/  (Ctrl-C stops)\n' "${OUT}/html" "${port}"
+    exec python3 -m http.server --bind 127.0.0.1 --directory "${OUT}/html" "${port}"
+fi
 say() { printf '== %s\n' "$*"; }
 need() { command -v "$1" > /dev/null 2>&1 || { printf 'make.sh: %s not found (%s)\n' "$1" "$2" >&2; exit 1; }; }
 need python3 "the generator"
@@ -78,5 +86,5 @@ print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] 
 if s["render_note"]:
     print("   " + s["render_note"])
 PY
-printf 'markdown: %s\nsite:     %s\n' "${OUT}/md" "${OUT}/html/index.html"
+printf 'markdown: %s\nsite:     %s\nopen it:  bash ecss/make.sh --serve   (then http://127.0.0.1:8790/)\n' "${OUT}/md" "${OUT}/html/index.html"
 exit "${rc}"
