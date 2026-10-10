@@ -1,0 +1,84 @@
+# A snapshot of the rms export (ecss/rms_export/package.json) written by ecss/tools/ecss.py snapshot: the items live in the rms and are changed there
+human_id,kind,title,body,rationale,criteria,method,status,owner,source_ref,applicability,notes,criticality
+UUID7-ASM-001,assumption,Order is per process,"Identifiers are ordered within one process and, through the floor, across its restarts; identifiers of two processes or hosts are distinct with overwhelming probability (62 random bits) but not ordered between them. A consumer that needs one order across processes generates in one process.",,,none,approved,Roman Horshkov,,,,none
+UUID7-ASM-002,assumption,The consumer imports its newest identifier at start,The order across restarts assumes the consumer imports the newest identifier it stored before it generates the next one (kyr_core raises the floor from its newest key at boot).,,,none,approved,Roman Horshkov,,,,none
+UUID7-ASM-003,assumption,The clock at start is within the bound,At start the wall clock is not more than UUID7_MAX_AHEAD_MS behind the newest stored identifier; otherwise the import is refused (-4) and the consumer decides what to do.,,,none,approved,Roman Horshkov,,,,none
+UUID7-ASM-004,assumption,A caller-supplied source is thread-safe,"A caller-supplied entropy source may be called from several threads at once, fills exactly the bytes it is asked for or reports a failure, and draws from a cryptographically secure generator if the identifiers are to stay unguessable.",,,none,approved,Roman Horshkov,,,,none
+UUID7-ASM-005,assumption,64-bit atomics are lock-free,The target performs a 64-bit atomic compare-and-swap without a lock (x86-64 does); where the compiler emulates it with a lock the order and the uniqueness hold but uuid7_gen() is no longer free of locks.,,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-001,decision,One atomic word holds the order,"The order state is one 64-bit word, the millisecond shifted left by 12 bits or-ed with the sequence, reserved by compare-and-swap; no lock.
+
+Alternatives considered: A lock around a (millisecond, sequence) pair (SDD <4.7>).
+
+Consequences: uuid7_gen() never blocks and some caller always completes; under contention callers retry the compare-and-swap (tests/stress measures the cost with ten threads); the word holds 52 bits of milliseconds, so the 48-bit range of the identifier is checked apart (V7_MS_LIMIT); the order is one per process.","Every caller races on one question, which pair is next, and one atomic word answers it without a lock a consumer's own lock could deadlock with (app/uuid7.c, g_v7_state).",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-002,decision,The 12-bit rand_a is a counter,"rand_a carries a counter that restarts at 0 in each new millisecond (RFC 9562 6.2, method 1: a fixed-length dedicated counter); rand_b alone is random.
+
+Alternatives considered: The other methods of RFC 9562 6.2: rand_a random, with no order inside a millisecond, or a monotonic random increment.
+
+Consequences: Identifiers of one millisecond sort by issue and 4096 fit in one millisecond; each identifier carries 62 random bits instead of 74; the counter tells how many identifiers the process issued earlier in that millisecond, so rand_a is guessable and the unpredictability rests on rand_b.","Order inside a millisecond by construction, with the fewest moving parts (the requirement it replaces, UUID7-SRS-004, cited RFC 9562 6.2 method 1).",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-003,decision,Borrow the next millisecond instead of waiting,"When the counter of the current logical millisecond is exhausted, or the wall clock stalls or steps back, the generator continues from its own state (the next sequence value, or the next logical millisecond at sequence 0) instead of waiting for the clock.
+
+Alternatives considered: Waiting for the wall clock to advance, which the comment of uuid7_gen() names as what the design avoids.
+
+Consequences: uuid7_gen() never waits; timestamps can run ahead of the clock, which UUID7-DEC-004 bounds; after the clock steps back the timestamps stay at the last reserved millisecond until the clock passes it again.","Callers generate on request paths: a stall of up to a millisecond per 4096 identifiers, or an unbounded one when the clock steps back, costs them more than a timestamp a few milliseconds ahead.",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-004,decision,Bound the run-ahead at UUID7_MAX_AHEAD_MS,"The logical clock may run at most UUID7_MAX_AHEAD_MS (10 s by default) ahead of the wall clock: uuid7_gen() refuses beyond it (-3) and the imports refuse a floor dated beyond it (-4), the state untouched; the check is skipped while the clock cannot be read.
+
+Alternatives considered: No bound, as before version 1.1.0 (commit 2ff1214): an abusive caller or a poisoned floor could date every later identifier arbitrarily far in the future, and at the 48-bit limit the encoded timestamp would wrap.
+
+Consequences: The 48-bit field can never wrap; a poisoned or future-dated floor is a loud error at start; a burst beyond 4096 x UUID7_MAX_AHEAD_MS identifiers ahead gets -3 and the caller must back off; the bound is fixed when the library is built.",See UUID7-RAT-001 for the value.,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-005,decision,Draw the entropy before the reservation,"uuid7_gen() fills the 8 random bytes before it reserves the (millisecond, sequence) pair.
+
+Alternatives considered: Reserving first and drawing the entropy after: a failed source would leave a reserved pair unused.
+
+Consequences: A failed entropy source consumes no sequence value and changes no state; a call that the bound then refuses (-3) has drawn 8 bytes of entropy for nothing; the entropy source runs outside the compare-and-swap loop.","A failure of the entropy source must not burn a sequence value (app/uuid7.c, uuid7_gen(); SDD <4.7>).",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-006,decision,Binary identifiers only,"The interface exchanges identifiers only as 16 bytes; the library neither formats nor parses the text form.
+
+Alternatives considered: Text formatting and parsing functions in the library.
+
+Consequences: A small interface without buffer-size, case or separator choices; each consumer that needs text writes its own conversion (kyr_lmdb names its files from the text form).","app/uuid7.h: the public API is intentionally binary-only; callers own formatting, storage and transport encoding.",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-007,decision,"One generator per process, in static state","The generator's state is process-wide static data, three atomics, with no handle or context passed by the caller.
+
+Alternatives considered: A generator object the caller allocates and passes to every call.
+
+Consequences: Nothing to set up and nothing allocated; all identifiers of a process share one order, and a process cannot keep two independent orders; the tests reset the state through a seam compiled into test builds only (UUID7-DEC-013).","The order the consumers need is the process's (one key space per database), and a foundation library allocates nothing.",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-008,decision,Built-in entropy installed on first use,"When no source was installed, the first uuid7_gen() installs the built-in source by a compare-and-swap from NULL, so a source installed concurrently is never overwritten.
+
+Alternatives considered: Requiring uuid7_init() before the first identifier; a plain store of the built-in source, which a racing uuid7_set_rng_func() could lose to.
+
+Consequences: Initialisation is optional; one atomic load more per call; the lost installation race is a path the tests cannot reach, verified by analysis (UUID7-AN-012).","app/uuid7.c, _ensure_rng_func(): a concurrent explicit call to uuid7_set_rng_func() cannot be overwritten by a racy fallback store from uuid7_gen().",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-009,decision,"getrandom(2) first, /dev/urandom as the fallback","The built-in source reads getrandom(2) on Linux, retrying on EINTR, and reads what it could not get from /dev/urandom, opened close-on-exec and closed on every path; elsewhere it reads /dev/urandom only.
+
+Alternatives considered: /dev/urandom alone, the first implementation (May 2026): a descriptor opened and closed for every identifier.
+
+Consequences: On Linux the normal path opens no descriptor and holds nothing between calls; one system call per identifier, outside the time budget of UUID7-SRS-040; the fallback is slower and runs only when getrandom(2) fails; the library keeps no generator state of its own to seed.","app/uuid7.c, _default_rng(): prefer getrandom(2) so that the default path avoids file descriptors on Linux.",,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-010,decision,Survive a clock failure and count it,"A failed clock_gettime() reads as 0: the reservation continues from the state, the ahead bound is skipped for that call, and the failure is counted for uuid7_clock_failure_count().
+
+Alternatives considered: The behaviour before version 0.1.0: zero timestamps without any trace; a log call, which a foundation library cannot make (commit 3d3d4d0: a counter, not a log call).
+
+Consequences: A server keeps issuing unique, ordered identifiers without a clock; their timestamps stop advancing, which is misleading, so the count is exposed for the operator to alert on; the path is out of the test seams' reach and verified by inspection (UUID7-IN-002).",Losing the clock must neither stop generation nor pass silently (commit 3d3d4d0).,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-011,decision,Raise-only import of the newest stored identifier,"The order across restarts comes from the consumer's newest stored identifier, imported as a floor that can only raise the state; uuid7_raise_floor() imports it without touching the entropy source.
+
+Alternatives considered: Importing at uuid7_init() only, as before version 0.1.0 (commit 3d3d4d0); the library keeping its own state in a file, which a library without I/O cannot do.
+
+Consequences: No file and no I/O in the library; the order across restarts holds only if the consumer imports its newest key (UUID7-ASM-002); an older import never rewinds the state; a consumer that opens its database after choosing the entropy source imports later through uuid7_raise_floor().",Callers choose the entropy source early but learn their newest stored identifier only after opening their database (commit 3d3d4d0).,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-012,decision,"Negative return codes, per function","Each function returns 0 or a negative code of its own; nothing goes through errno, a log, a thread-local flag or abort().
+
+Alternatives considered: A thread-local error flag of the built-in source (removed in May 2026, commit 557b4db); errno.
+
+Consequences: The library depends on nothing to report; callers must check every return; the codes are per function, so -3 means a variant mismatch from uuid7_init() but a bound refusal from uuid7_gen().",Callers decide what a failure means; a library never takes the process down.,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-013,decision,Test seams in test builds only,"The deterministic clock, the forced entropy failure and the state reset are compiled only with -DUUID7_TESTING, declared in app/uuid7_test.h; the integration suites link libraries built with them, apart from the delivered ones.
+
+Alternatives considered: Testing the delivered library through its interface only, where clock stalls, steps back and the bounds cannot be produced on demand.
+
+Consequences: Deterministic tests of the clock behaviour, the bounds and the entropy failure; the suites test a build that differs from the delivered one by the seams, and the delivered binaries carry none (UUID7-AN-004); the clock-failure path and the entropy fallback stay out of the seams' reach and are verified by inspection.",The order and the bounds depend on the clock: they are tested only if the clock can be driven.,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-014,decision,Versioned exports gated against a committed ABI,"libuuid7.so exports exactly the five functions as <name>@@UUID7_<major> (utils/uuid7.map); abi/layout.txt is the committed public ABI, and the pipeline's abi stages refuse a change without the version bump it needs.
+
+Alternatives considered: An unversioned export list, before version 1.1.3 (commit bb824e6).
+
+Consequences: Consumers linked against one major keep working across its minor releases; any change to a committed line needs a new major; no internal symbol can leak into the exports.",Consumers pin exact versions; the soname and the symbol versions must say what an upgrade means.,,none,approved,Roman Horshkov,,,,none
+UUID7-DEC-015,decision,"One position-independent object, two packages","One -fPIC object feeds both libuuid7.a and libuuid7.so; the runtime package libuuid7 carries the shared object, libuuid7-dev the header, the archive and the linker symlink; both build byte for byte reproducibly.
+
+Alternatives considered: Separate objects for the archive and the shared library (before commit eb792bc); one uuid7 package (before version 1.1.2, commit 7853bf4).
+
+Consequences: The static and the shared library hold the same code, which the integration matrix tests in both linkages; static consumers get position-independent code; a runtime-only installation carries no header.","One build of the code, delivered the way the platform's packages are.",,none,approved,Roman Horshkov,,,,none
+UUID7-RAT-001,rationale,Ten seconds of run-ahead,"UUID7_MAX_AHEAD_MS defaults to 10000 ms: ten seconds absorb a burst of 40,960,000 identifiers beyond the clock, far beyond any realistic burst, while a stored identifier dated more than ten seconds ahead of the clock still fails the start loudly instead of dating every later identifier in the future (app/uuid7.h, UUID7_MAX_AHEAD_MS).",,,none,approved,Roman Horshkov,,,,none
+UUID7-RAT-002,rationale,Budgets above the measured values,"Each budget sits above what the release root measured on 2026-10-10 (SVR <5>): stack 256 bytes for 144 measured, code 4096 bytes (one page) for 1599, time 100 ns for about 37 with the benchmark's entropy source; static data 24 bytes for 24, without margin, because the three atomics are the design and a fourth is a design change.",,,none,approved,Roman Horshkov,,,,none
