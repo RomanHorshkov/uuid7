@@ -32,7 +32,6 @@ FILE_PATTERNS          = *.md *.dox *.h *.c
 RECURSIVE              = YES
 EXCLUDE_PATTERNS       = */rms_export/*
 USE_MDFILE_AS_MAINPAGE = build/ecss/md/index.md
-IMAGE_PATH             = build/ecss/svg
 FILTER_PATTERNS        = "*.c=python3 ecss/tools/doxy_filter.py" "*.h=python3 ecss/tools/doxy_filter.py"
 FILTER_SOURCE_FILES    = NO
 SOURCE_BROWSER         = YES
@@ -46,6 +45,7 @@ ALPHABETICAL_INDEX     = YES
 GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 HTML_DYNAMIC_SECTIONS  = YES
+HTML_EXTRA_STYLESHEET  = ecss/tools/site.css
 GENERATE_TREEVIEW      = YES
 FULL_SIDEBAR           = NO
 SEARCHENGINE           = YES

@@ -18,7 +18,7 @@ This SDD describes the architectural and the detailed design of uuid7 and its in
 
 ### 4.1 Software static architecture
 
-One translation unit, `app/uuid7.c`, behind one header, `app/uuid7.h`, built into a static archive and a versioned shared object. Inside, seven components (doxygen groups) around one shared datum, the reservation state:
+One translation unit, `app/uuid7.c`, behind one header, `app/uuid7.h`, built into a static archive and a versioned shared object. Inside, seven components (doxygen groups) around one shared datum, the reservation state ({{fig:component_uuid7}}):
 
 <!-- ecss:diagram name=component_uuid7 -->
 
@@ -32,17 +32,21 @@ The library has no thread, no timer and no interrupt of its own: it is passive, 
 
 ### 4.3 Software behaviour
 
-The behaviour of one generation is the reservation rule:
+The behaviour of one generation is the reservation rule ({{fig:reservation_state}}):
 
 <!-- ecss:diagram name=reservation_state -->
 
-(The software behaviour model of 5.4.3.4a is not required at category D; this diagram documents the rule the requirements of the SRS <5.2> specify.)
+(The software behaviour model of 5.4.3.4a is not required at category D; {{fig:reservation_state}} documents the rule the requirements of the SRS <5.2> specify.)
 
 ### 4.4 Interfaces context
 
-The only external interface is the C interface to the caller (\ref UUID7_DOC_ICD "ICD"); below it, the library calls the C library for the clock (`clock_gettime`), the entropy (`getrandom`, `open`, `read`, `close`) and `memset`. The package view of the library and what it depends on:
+The only external interface is the C interface to the caller (\ref UUID7_DOC_ICD "ICD"); below it, the library calls the C library for the clock (`clock_gettime`), the entropy (`getrandom`, `open`, `read`, `close`) and `memset`. The package view of the library and what it depends on ({{fig:package_uuid7}}):
 
 <!-- ecss:diagram name=package_uuid7 -->
+
+The exported symbols are held to the header by the ABI gate ({{fig:abi_exports}}):
+
+<!-- ecss:diagram name=abi_exports -->
 
 ### 4.5 Long lifetime software
 
@@ -70,19 +74,33 @@ The architecture of <4.1>: the components, their hierarchy (all children of the 
 
 ### 5.2 Overall architecture
 
-Static view: <4.1>; the public interface as a class diagram:
+Static view: <4.1> ({{fig:component_uuid7}}); the public interface as a class diagram ({{fig:class_uuid7}}):
 
 <!-- ecss:diagram name=class_uuid7 -->
 
-Dynamic view: the computational model is the caller's: any number of threads, pre-emptive, no priorities of the library's own. Components taking part in the real-time behaviour: the reservation state (a protected object without a lock: compare-and-swap). Communication and synchronisation: the reservation word (acquire-release compare-and-swap), the RNG pointer (release store, acquire load), the clock-failure counter (relaxed increments). Time management: the wall clock read once per reservation attempt. Concurrent generation, recorded by a scenario test:
+Dynamic view: the computational model is the caller's: any number of threads, pre-emptive, no priorities of the library's own. Components taking part in the real-time behaviour: the reservation state (a protected object without a lock: compare-and-swap). Communication and synchronisation: the reservation word (acquire-release compare-and-swap), the RNG pointer (release store, acquire load), the clock-failure counter (relaxed increments). Time management: the wall clock read once per reservation attempt. Concurrent generation, recorded by a scenario test ({{fig:sd_concurrent_generation}}):
 
 <!-- ecss:diagram name=sd_concurrent_generation -->
 
-Behaviour: the state diagram of <4.3>; one generation as the scenario test records it:
+Behaviour: the state diagram of <4.3> ({{fig:reservation_state}}); one generation as the scenario test records it ({{fig:sd_generate_one}}):
 
 <!-- ecss:diagram name=sd_generate_one -->
 
-Error handling and fault tolerance: errors are detected at the boundary (NULL arguments, invalid imported identifiers, bounds) and reported by the return value before any state changes; the RNG is called before the reservation so its failure consumes nothing; a failed clock read is counted and survived (timestamp 0, ordering kept by the state); the built-in RNG zeroes what it could not fill. Fault containment: the library writes only into the caller's buffer and its own static state.
+Error handling and fault tolerance: errors are detected at the boundary (NULL arguments, invalid imported identifiers, bounds) and reported by the return value before any state changes; the RNG is called before the reservation so its failure consumes nothing ({{fig:sd_entropy_failure}}); a clock that stalls or steps back leaves the order to the state ({{fig:sd_clock_backwards}}); a failed clock read is counted and survived (timestamp 0, ordering kept by the state); the built-in RNG zeroes what it could not fill; a poisoned floor and the ahead bound are refused before the state moves ({{fig:sd_abuse_bounds}}). Fault containment: the library writes only into the caller's buffer and its own static state.
+
+<!-- ecss:diagram name=sd_entropy_failure -->
+
+<!-- ecss:diagram name=sd_clock_backwards -->
+
+<!-- ecss:diagram name=sd_abuse_bounds -->
+
+The remaining behaviours the scenario tests record: the sequence within one millisecond ({{fig:sd_same_millisecond}}), the floor imported after a restart ({{fig:sd_restart_with_floor}}) and the replaceable RNG ({{fig:sd_configuration}}).
+
+<!-- ecss:diagram name=sd_same_millisecond -->
+
+<!-- ecss:diagram name=sd_restart_with_floor -->
+
+<!-- ecss:diagram name=sd_configuration -->
 
 ### 5.3 Software components design — General
 

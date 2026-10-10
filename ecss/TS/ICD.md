@@ -47,7 +47,7 @@ Data items:
 | clock failure count | `uint64_t` | 0 to 2^64 - 1, never decreasing | 0 | failures |
 | RNG callback | `uuid7_rng_function_t` | any function filling `n` bytes, or NULL | NULL (built-in on first use) | - |
 
-The class diagram of the interface:
+The class diagram of the interface ({{fig:class_uuid7}}):
 
 <!-- ecss:diagram name=class_uuid7 -->
 

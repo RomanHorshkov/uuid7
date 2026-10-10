@@ -64,6 +64,10 @@ Deactivated and configurable code (ECSS-Q-ST-80 6.2.6.5, 6.2.6.6: N at D): the o
 
 The validation specification to the RB (5.8.3.8a eo a): not applicable.
 
+The scenario runs, each recorded as a sequence diagram in the SVS:
+
+<!-- ecss:scenario-results -->
+
 2. Feasibility: the validation report w.r.t. the TS is evaluated in the \ref UUID7_DOC_SVALR "SValR"; the requirements not covered by testing (ECSS-Q-ST-80 7.2.3.6) are verified by the analyses, inspections and reviews of the \ref UUID7_DOC_SVS "SVS" <9>, whose results are above.
 
 ### 4.7 Software quality requirements verification

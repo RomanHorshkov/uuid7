@@ -1,9 +1,12 @@
 """refs.py — the cross-references of the ECSS package, used by ecss.py after the directives are expanded.
 
-structure(): every numbered section gets a label.
+structure(): every numbered section gets a label; every diagram becomes a numbered figure (caption below, with what produced it),
+every table a numbered table (caption above, from a "Table: title {#id}" line or the heading), per document in reading order;
+each document lists its figures and tables, and list_page() lists them for the package.
 link(): every reference in the text becomes a doxygen link: sections (<9.7>, SRS <5.2>), documents and their ids, requirements,
 components, verification cases, reviews, RIDs, change requests, open items, baselines, ECSS clauses (the row of the compliance
-matrix), tools (the row of the tools register), evidence files. A reference that does not resolve stays bare,
+matrix), tools (the row of the tools register), evidence and source files, API symbols, tests, and the citations {{fig:name}},
+{{fig:DOC:name}} and {{tab:id}} (Figure 3, SDD Figure 1, Table 2). A reference that does not resolve stays bare,
 and links_gate.py turns the pipeline RED on it.
 """
 import html
@@ -25,7 +28,7 @@ FENCE = re.compile(r"^\s*(~~~|```)")
 TABLE_SEP = re.compile(r"^\|(?:\s*:?-+:?\s*\|)+\s*$")
 PROTECT = re.compile(r"(`[^`\n]*`|\\ref\s+[\w.:-]+(?:\(\))?(?:\s+\"[^\"]*\")?|\\anchor\s+\S+|\\image\s+.*$|"
                      r"<span class=\"ecss-def\">.*?</span>|<a\b[^>]*>.*?</a>|<[A-Za-z/!][^>\n]*>|\{#[\w-]+\}|\[[^\]\n]*\]\([^)\n]*\)|"
-                     r"https?://\S+)")
+                     r"https?://\S+|\{\{(?:fig|tab):[^}]+\}\})")
 
 
 def lab(*parts):
@@ -63,6 +66,8 @@ class Index:
         self.reg = reg
         self.pages = {}
         self.sections = {}       # (page short, number) -> label
+        self.figlabels = {}      # (page short, diagram) -> (label, number)
+        self.tablabels = {}      # explicit table id -> (label, page short, number)
         self.unresolved = []     # (page, text) of references that stay bare
         self.count = {"links": 0}
         abbr = sorted(reg["abbr"], key=len, reverse=True)
@@ -74,7 +79,8 @@ class Index:
         self.src_re = "|".join(re.escape(x) for x in sorted(reg["sources"], key=len, reverse=True))
         self.sym_re = "|".join(re.escape(x) for x in sorted(reg["symbols"], key=len, reverse=True))
         self.TOKEN = re.compile(
-            r"(?P<docsec>\b(?:[A-Z]{2,3}/)?(?P<dabbr>" + self.abbr_re + r")(?:\.md)?(?:'s)?\s+(?P<dsecs>" + SECLIST + r"))"
+            r"(?P<fig>\{\{(?:fig|tab):[^}]+\}\})"
+            r"|(?P<docsec>\b(?:[A-Z]{2,3}/)?(?P<dabbr>" + self.abbr_re + r")(?:\.md)?(?:'s)?\s+(?P<dsecs>" + SECLIST + r"))"
             r"|(?P<docannex>\b(?P<aabbr>" + self.abbr_re + r")\s+Annex\s+(?P<annex>[A-Z])\b)"
             r"|(?P<sec>" + SECLIST + r")"
             r"|(?P<clause>(?<![\w-])(?P<std>" + STD_RE + r")(?:\s+(?:clauses?\s+)?(?P<parts>" + PARTLIST + r"))?(?![\w-]))"
@@ -126,10 +132,87 @@ class Index:
                 out.append("%s %s%s" % (hashes, title, (" {#%s}" % label) if label else ""))
                 i += 1
                 continue
+            fm = re.match(r"^@@FIGURE@@(\S+)@@(.*)@@$", line)
+            if fm:
+                out.append(self.figure(p, fm.group(1), fm.group(2), heading))
+                i += 1
+                continue
+            if line.startswith("|") and i + 1 < len(lines) and TABLE_SEP.match(lines[i + 1]):
+                # the caption: a "Table: title {#id}" line just above (blank lines between allowed), else the heading;
+                # "Table: -" leaves the table unnumbered (a document's identification block)
+                j = len(out) - 1
+                while j >= 0 and not out[j].strip():
+                    j -= 1
+                cap, tid = None, None
+                if j >= 0:
+                    cm = re.match(r"^Table:\s*(.*?)\s*(?:\{#([\w-]+)\})?\s*$", out[j])
+                    if cm:
+                        cap, tid = cm.group(1), cm.group(2)
+                        del out[j:]
+                        out.append("")
+                if cap != "-":
+                    cap = cap or heading or p.title
+                    n = len(p.tables) + 1
+                    label = lab("tab", p.prefix, str(n))
+                    p.tables.append((label, n, cap, heading))
+                    if tid:
+                        self.tablabels[tid] = (label, p.short, n)
+                    out += ['<div class="ecss-caption ecss-tcap">\\anchor %s<span class="ecss-def">Table %d</span>: %s</div>' % (label, n, cap), ""]
             out.append(line)
             i += 1
         text = "\n".join(out)
-        return text
+        return text.replace("@@LISTS@@", self.lists_of(p))
+
+    def figure(self, p, name, caption, heading):
+        """A numbered figure: the SVG (a link to the diagram alone) or, unrendered, the PlantUML source; the caption below it says
+        what produced the diagram."""
+        n = len(p.figures) + 1
+        label = lab("fig", p.prefix, name)
+        info = self.reg["figure_info"].get(name, (name, ""))
+        cap = (caption or info[0]).rstrip(".")
+        p.figures.append((label, n, cap, heading, name))
+        self.figlabels[(p.short, name)] = (label, n)
+        if self.reg["svg"].get(name):
+            body = ('<a href="diagrams/%s.svg" title="the diagram alone"><img class="ecss-img" src="diagrams/%s.svg" alt="%s"></a>'
+                    % (name, name, html.escape(plain(cap), quote=True)))
+        else:
+            body = "<pre>%s</pre>" % html.escape(self.reg["puml"].get(name) or "(no PlantUML source: the producing step did not run)")
+        return ('<div class="ecss-figure">\\anchor %s\n%s\n<div class="ecss-caption"><span class="ecss-def">Figure %d</span>: %s. %s '
+                'Source: <a href="diagrams/%s.puml">%s.puml</a>.</div>\n</div>' % (label, body, n, cap, info[1], name, name))
+
+    def lists_of(self, p):
+        """The figures and tables of one document, folded under its identification."""
+        if not (p.figures or p.tables):
+            return ""
+        what = " and ".join(x for x in (("%d figure%s" % (len(p.figures), "s" * (len(p.figures) != 1))) if p.figures else "",
+                                        ("%d table%s" % (len(p.tables), "s" * (len(p.tables) != 1))) if p.tables else "") if x)
+        parts = ['<details class="ecss-lists"><summary>List of figures and tables (%s)</summary>' % what]
+        if p.figures:
+            parts.append("<b>Figures</b><ul>" + "".join('<li>\\ref %s "Figure %d": %s</li>' % (l, n, c) for l, n, c, _, _ in p.figures) + "</ul>")
+        if p.tables:
+            parts.append("<b>Tables</b><ul>" + "".join('<li>\\ref %s "Table %d": %s</li>' % (l, n, c) for l, n, c, _ in p.tables) + "</ul>")
+        parts.append("</details>")
+        return "\n".join(parts)
+
+    def list_page(self, kind, order):
+        """The package's list of figures or of tables, by document in the order of the front page."""
+        label = "UUID7_LIST_FIGURES" if kind == "figures" else "UUID7_LIST_TABLES"
+        word = "Figure" if kind == "figures" else "Table"
+        body, total, docs = [], 0, 0
+        for rel in order:
+            p = self.pages.get(rel)
+            items = (p.figures if kind == "figures" else p.tables) if p else []
+            if not items:
+                continue
+            total += len(items)
+            docs += 1
+            body += ["## %s" % p.title, "", "<ul>"]
+            body += ['<li>\\ref %s "%s %d": %s</li>' % (it[0], word, it[1], it[2]) for it in items]
+            body += ["</ul>", ""]
+        head = ["# List of %s {#%s}" % (kind, label), "",
+                "%d %s in %d documents, numbered per document in reading order; each entry opens the %s where it stands." % (
+                    total, kind, docs, word.lower()), ""]
+        return "\n".join(head + body)
 
     # -- links -------------------------------------------------------------------------------------------------------------------
 
@@ -190,6 +273,8 @@ class Index:
         def one(m):
             g = m.lastgroup
             s = m.group(0)
+            if m.group("fig"):
+                return self.cite(p, s)
             if m.group("docsec"):
                 target = self.reg["abbr"][m.group("dabbr")]
                 short = self.short_of(target)
@@ -267,6 +352,27 @@ class Index:
                 return p.short
         return None
 
+    def cite(self, p, token):
+        """{{fig:name}}, {{fig:DOC:name}}, {{tab:id}}: 'Figure 3', 'SDD Figure 1', 'Table 2', linked."""
+        kind, _, rest = token.strip("{}").partition(":")
+        if kind == "fig":
+            doc, _, name = rest.rpartition(":")
+            short = doc.upper() if doc else p.short
+            hit = self.figlabels.get((short, name))
+            text = "%sFigure %d" % ((doc + " ") if doc else "", hit[1]) if hit else token
+        else:
+            hit = self.tablabels.get(rest)
+            other = hit and hit[1] != p.short
+            text = "%sTable %d" % ((self.short_name_of(hit[1]) + " ") if other else "", hit[2]) if hit else token
+        if not hit:
+            self.unresolved.append((p.rel, token))
+            return token
+        self.count["links"] += 1
+        return '\\ref %s "%s"' % (hit[0], text)
+
+    def short_name_of(self, short):
+        return next((q.short_name for q in self.pages.values() if q.short == short), short)
+
     def link(self, rel, text):
         p = self.pages[rel]
         out, fence = [], False
@@ -305,6 +411,8 @@ class Index:
         return "".join(out)
 
     def protected(self, p, s, state):
+        if s.startswith("{{"):
+            return self.cite(p, s)
         if s.startswith("`"):
             inner = s[1:-1]
             if re.fullmatch(r"(?:build/ecss/)?evidence/[\w./-]+", inner):

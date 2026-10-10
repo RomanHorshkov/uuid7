@@ -1,0 +1,17 @@
+/* site.css — the package's additions to doxygen's style (ecss/Doxyfile HTML_EXTRA_STYLESHEET): numbered figures and tables with
+   their captions, the folded lists of each document, quieter links in running text, wide tables that scroll instead of overflowing. */
+.ecss-figure { margin: 1.4em 0 1.8em; }
+.ecss-figure img.ecss-img { display: block; max-width: 100%; height: auto; margin: 0 auto; padding: 8px; background: #fff;
+                            border: 1px solid var(--separator-color, #d6dbe4); border-radius: 4px; box-sizing: border-box; }
+.ecss-figure pre { max-height: 32em; overflow: auto; }
+.ecss-caption { font-size: 0.92em; line-height: 1.45; margin: .55em auto 0; max-width: 60em; }
+.ecss-figure .ecss-caption { text-align: center; }
+.ecss-tcap { margin: 1.2em 0 .35em; }
+.ecss-caption .ecss-def { font-weight: bold; }
+details.ecss-lists { margin: .4em 0 1.4em; padding: .45em .9em; border: 1px solid var(--separator-color, #d6dbe4); border-radius: 4px; }
+details.ecss-lists summary { cursor: pointer; font-weight: bold; }
+details.ecss-lists ul { margin: .3em 0 .6em; }
+div.contents a.el { font-weight: normal; }
+div.contents h1 a.el, div.contents h2 a.el, div.contents th a.el { font-weight: bold; }
+table.markdownTable { display: block; max-width: 100%; overflow-x: auto; }
+table.markdownTable td, table.markdownTable th { vertical-align: top; }

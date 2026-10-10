@@ -27,6 +27,10 @@ Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.htm
 
 Every reference is a link (`tools/refs.py`): a section (`<9.7>`, `SRS <5.2>`), a document name or id, a requirement, component, verification case, review, RID, change request, open item or baseline, an ECSS clause (its row of the compliance matrix), a tool (its row of the tools register), an evidence or source file, an API symbol, a test. The links gate (`tools/links_gate.py`) reads the built HTML and turns make.sh RED on any reference left bare and any anchor doxygen cannot resolve, each listed with its page (`build/ecss/links.txt`). Headings, the anchored cell of a register row and code blocks are definitions or code, not references.
 
+## Figures and tables
+
+Every diagram is a numbered figure and every table a numbered table of its document (`Figure N`, `Table N`, caption and anchor; the numbers follow the reading order, so they are stable while the document is). A figure's caption says what produced it: the scenario test that recorded the run, ecss.py, or the hand-written source. Each document lists its figures and tables under its identification; the front page links the package's two lists. In a template a figure is `<!-- ecss:diagram name=... -->`, a table takes its title from a `Table: title {#id}` line above it (else from its heading), and a citation is `{{fig:name}}`, `{{fig:SVS:name}}` or `{{tab:id}}`, written out as a linked `Figure 3`, `SVS Figure 3`, `Table 2`.
+
 ## Documents
 
 | File | Documents | Directory |

@@ -30,7 +30,9 @@ From a clean checkout of the tag, without root:
 ./utils/build_deb.sh                                      # build/debs: libuuid7, libuuid7-dev, SHA256SUMS, .buildinfo
 ~~~
 
-Releases are built inside the pinned build root (`build/sysroot/share/kyr-build/build_root.sh enter -- ./utils/build_deb.sh`), whose identity each `.buildinfo` records; `SOURCE_DATE_EPOCH` comes from the commit, so the same commit gives the same bytes (UUID7-SRS-121).
+Releases are built inside the pinned build root (`build/sysroot/share/kyr-build/build_root.sh enter -- ./utils/build_deb.sh`), whose identity each `.buildinfo` records; `SOURCE_DATE_EPOCH` comes from the commit, so the same commit gives the same bytes (UUID7-SRS-121). The steps, from the pins to the packages ({{fig:tooling_sequence}}):
+
+<!-- ecss:diagram name=tooling_sequence -->
 
 ## Build environment
 

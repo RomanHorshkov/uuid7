@@ -76,7 +76,7 @@ No supplier.
 
 ### 5.1 Strategy to the software development
 
-The library was written first and is now specified, verified and documented against ECSS at category D; from now on every change goes requirement first (rms), then code with its tags, then tests, then the pipeline, then the regenerated documents.
+The library was written first and is now specified, verified and documented against ECSS at category D; from now on every change goes requirement first (rms), then code with its tags, then tests, then the pipeline, then the regenerated documents ({{fig:pipeline}}).
 
 <!-- ecss:diagram name=pipeline -->
 
@@ -114,6 +114,8 @@ No part of the software is generated automatically (5.3.2.4 and 5.3.5e not appli
 
 The development and test environment is fixed by `deps.txt` and resolved by `utils/deps.sh sysroot` into `build/sysroot` without root; releases are built inside the pinned build root (Ubuntu 24.04 snapshot, kyr-build's `build_root.sh`) so that every machine produces the same bytes. C11 is the language: portable, close enough to the hardware for lock-free atomics, and the platform's language; no assembly. The environment is suitable (ECSS-Q-ST-80 5.6.2.1, 5.6.2.2) because it is available offline from its pins, the same on every machine (the root's identity), maintained by the platform, and every tool in it is justified in the \ref UUID7_DOC_SPAP "SPAP" <5.8>.
 
+Table: Tools by need
+
 | Need | Tool |
 |---|---|
 | Compiler | gcc (the version below) with the kyr-build profile catalog: debug, audit (-fanalyzer), sanitize (ASan, UBSan, LSan), release, native, extreme, coverage |
@@ -124,6 +126,10 @@ The development and test environment is fixed by `deps.txt` and resolved by `uti
 | Static analysis | the catalog's warning set, gcc -fanalyzer (audit profile), clang-format 18 |
 | Test scripts | C with CMocka; bash for the pipeline |
 | Testing | CMocka, gcovr, the sanitizers, the stress benchmarks, kyr-build pipeline.sh |
+
+How a build uses the environment: the pinned kyr-build, the sysroot and the pipeline ({{fig:tooling_sequence}}):
+
+<!-- ecss:diagram name=tooling_sequence -->
 
 The environment and the versions of the last `ecss/make.sh` run, read where it ran:
 

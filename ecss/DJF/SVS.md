@@ -60,6 +60,8 @@ The cases are grouped by test design, each a suite or a pipeline stage.
 
 #### 6.2.1 General
 
+Table: Test designs
+
 | Design | Grouping | Cases |
 |---|---|---|
 | TD-IT integration | function: one case per behaviour of the TS | `UUID7-TC-IT-*` |

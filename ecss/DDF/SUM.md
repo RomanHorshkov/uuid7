@@ -45,6 +45,8 @@ Any x86-64 machine; memory: 24 bytes of static data and about 1.7 KB of code (\r
 
 ### 7.3 Software configuration
 
+The packages and what they depend on ({{fig:package_uuid7}}):
+
 <!-- ecss:diagram name=package_uuid7 -->
 
 ### 7.4 Operational constraints
@@ -71,10 +73,12 @@ Install the packages released for the version you pin (the platform's way: an `o
 #include <uuid7.h>
 
 uint8_t id[UUID7_SIZE_BYTES];
-if (uuid7_gen(id) != 0) { /* back off, see 9.7 */ }
+if (uuid7_gen(id) != 0) { /* back off: SUM 9.7 */ }
 ~~~
 
-No initialisation is needed: the first call installs the built-in RNG. Check-list when it fails: -1 the buffer is NULL; -2 the entropy source failed; -3 generation outran the wall clock by `UUID7_MAX_AHEAD_MS`, or the clock is wrong.
+No initialisation is needed: the first call installs the built-in RNG. Check-list when it fails: -1 the buffer is NULL; -2 the entropy source failed; -3 generation outran the wall clock by `UUID7_MAX_AHEAD_MS`, or the clock is wrong. What one call does, as a scenario test recorded it ({{fig:sd_generate_one}}):
+
+<!-- ecss:diagram name=sd_generate_one -->
 
 ### 9.4 Access
 
@@ -87,11 +91,27 @@ No password, no access control: the library is linked into your process. Identif
 3. Optionally replace the RNG: `uuid7_set_rng_func(my_rng)`; `uuid7_set_rng_func(NULL)` restores the built-in one.
 4. Health: poll `uuid7_clock_failure_count()`; alert if it is ever non-zero.
 
+Step 1 across a restart ({{fig:sd_restart_with_floor}}): the identifiers generated after the import sort after the stored one even when the restarted process runs behind the clock that wrote it.
+
+<!-- ecss:diagram name=sd_restart_with_floor -->
+
+Step 2 at a high rate: within one millisecond the sequence counts, and 4096 identifiers move the logical clock one millisecond ahead ({{fig:sd_same_millisecond}}); threads generating at once each see a strictly increasing sequence and never the same identifier ({{fig:sd_concurrent_generation}}).
+
+<!-- ecss:diagram name=sd_same_millisecond -->
+
+<!-- ecss:diagram name=sd_concurrent_generation -->
+
+Step 3, the RNG ({{fig:sd_configuration}}): replaceable at any time; NULL restores the built-in one.
+
+<!-- ecss:diagram name=sd_configuration -->
+
 ### 9.6 Normal termination
 
-Nothing to do: the library holds no resource. To continue the order after a restart, keep the newest identifier you stored and import it at the next start (9.5 step 1).
+Nothing to do: the library holds no resource. To continue the order after a restart, keep the newest identifier you stored and import it at the next start (<9.5> step 1).
 
 ### 9.7 Error conditions
+
+Table: Error conditions and what to do {#sum_errors}
 
 | Function | Return | Condition | What to do |
 |---|---|---|---|
@@ -102,9 +122,19 @@ Nothing to do: the library holds no resource. To continue the order after a rest
 | uuid7_init(), uuid7_raise_floor() | -2, -3 | the imported value is not a version-7, variant-0b10 identifier | the stored key is not one of ours: fix the store |
 | uuid7_init(), uuid7_raise_floor() | -4 | the imported identifier is dated beyond now + `UUID7_MAX_AHEAD_MS` | a poisoned key or a wrong clock: fix it before generating |
 
+A failed entropy source, as a scenario test recorded it: -2, nothing written, no sequence consumed, and the next success takes the next sequence ({{fig:sd_entropy_failure}}). A poisoned floor refused with -4, and the ahead-of-clock bound stopping generation with -3 until the clock catches up ({{fig:sd_abuse_bounds}}):
+
+<!-- ecss:diagram name=sd_entropy_failure -->
+
+<!-- ecss:diagram name=sd_abuse_bounds -->
+
 ### 9.8 Recover runs
 
-After -3 or a clock problem: correct the clock, restart, import the newest stored identifier (9.5). After -4 at start: find out why a stored key is dated in the future; do not start generating until it is resolved, since importing it would date every new key after it.
+After -3 or a clock problem: correct the clock, restart, import the newest stored identifier (<9.5>). A wall clock that stalls or steps back needs no recovery: the generator continues from its state and follows the clock again once it is ahead ({{fig:sd_clock_backwards}}).
+
+<!-- ecss:diagram name=sd_clock_backwards -->
+
+ After -4 at start: find out why a stored key is dated in the future; do not start generating until it is resolved, since importing it would date every new key after it.
 
 ### 9.9 Secure installation and operation
 
@@ -130,17 +160,17 @@ None: no screen.
 
 ### 10.5 Error messages
 
-The library prints nothing; its errors are the return values of <9.7>.
+The library prints nothing and logs nothing; its errors are the return values of <9.7> ({{tab:sum_errors}}), each shown in a recorded run in {{fig:sd_entropy_failure}} and {{fig:sd_abuse_bounds}}.
 
 ## 11 Tutorial {#sum_tutorial}
 
 ### 11.1 Introduction
 
-Each scenario below is a test of `tests/plantuml/scenarios.c`: it runs against the library, asserts what it shows, and records the interaction as a sequence diagram. They are the training material of the library (ECSS-E-ST-40 5.7.2.2a).
+Each scenario below is a test of `tests/plantuml/scenarios.c`: it runs against the library, asserts what it shows, and records the interaction as a sequence diagram, shown where the manual explains the operation. They are the training material of the library (ECSS-E-ST-40 5.7.2.2a).
 
 ### 11.2 Getting started
 
-The library in one picture:
+The library in one picture ({{fig:class_uuid7}}):
 
 <!-- ecss:diagram name=class_uuid7 -->
 
