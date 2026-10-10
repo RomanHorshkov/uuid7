@@ -1,0 +1,30 @@
+@startuml reservation_state
+' the reservation rule of uuid7_gen(), one call (SDD <5.2>); hand-written, checked against app/uuid7.c
+title Reservation rule of one uuid7_gen() call
+skinparam shadowing false
+[*] --> Entropy
+Entropy : fill the 8 tail bytes from the RNG
+Entropy --> RngFailed : the RNG returns non-zero
+RngFailed : return -2, nothing written, state unchanged
+RngFailed --> [*]
+Entropy --> Candidate : ok
+state Candidate {
+  [*] --> Compare
+  Compare : now = the clock (0 if clock_gettime() fails)
+  Compare --> NewMillisecond : now > last ms
+  NewMillisecond : candidate = (now, 0)
+  Compare --> SameMillisecond : now <= last ms, seq < 4095
+  SameMillisecond : candidate = (last ms, seq + 1)
+  Compare --> Borrow : now <= last ms, seq = 4095
+  Borrow : candidate = (last ms + 1, 0)
+}
+Candidate --> Refused : candidate ms >= 2^48, or > now + UUID7_MAX_AHEAD_MS (clock ok)
+Refused : return -3, nothing written, state unchanged
+Refused --> [*]
+Candidate --> Swap : within the bounds
+Swap : compare-and-swap the state word
+Swap --> Candidate : another thread reserved first
+Swap --> Encode : swapped: the pair is this call's
+Encode : write the 16 bytes
+Encode --> [*] : return 0
+@enduml

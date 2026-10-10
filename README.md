@@ -24,6 +24,8 @@ Project layout
 - `tests/ITs/` — Integration tests.
 - `tests/stress/` — Single-thread and multi-thread stress benchmarks.
 - `tests/package/smoke.c` — the installed-package test.
+- `tests/plantuml/` — scenario tests that also write one sequence diagram each.
+- `ecss/` — the ECSS documents, their data and the generator.
 - `build/` — Build output directory.
 
 Build
@@ -35,6 +37,8 @@ Build
 ./utils/build_libs.sh release          # build/<profile>/libuuid7.{a,so.<VERSION>} (no argument: every profile)
 ./utils/build_deb.sh                   # build/debs: libuuid7, libuuid7-dev, SHA256SUMS, one .buildinfo per deb
 ```
+
+ECSS qualification package (category D): `ecss/make.sh` runs every gate and writes the documents to `build/ecss/md` and one site to `build/ecss/html/index.html`; see `ecss/README.md`.
 
 ## Release process
 
