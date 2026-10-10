@@ -25,6 +25,16 @@ if (( ! DOCS_ONLY )); then
     say "sysroot: utils/deps.sh sysroot"
     ./utils/deps.sh sysroot > "${EV}/deps.txt" 2>&1 || { tail -n 5 "${EV}/deps.txt"; exit 1; }
     eval "$(grep '^export' "${EV}/deps.txt")"
+    # The format stage wants clang-format 18 (the pinned major). A workstation without it borrows the release root's.
+    root_sh="${ROOT}/build/sysroot/share/kyr-build/build_root.sh"
+    if ! command -v clang-format-18 > /dev/null 2>&1 && ! clang-format --version 2> /dev/null | grep -q 'version 18\.' \
+        && [[ -x "${root_sh}" ]] && "${root_sh}" enter -- clang-format-18 --version > /dev/null 2>&1; then
+        mkdir -p "${TMPDIR}/cf18-root"
+        printf '#!/usr/bin/env bash\nexec %q enter -- clang-format-18 "$@"\n' "${root_sh}" > "${TMPDIR}/cf18-root/clang-format-18"
+        chmod 0755 "${TMPDIR}/cf18-root/clang-format-18"
+        export PATH="${TMPDIR}/cf18-root:${PATH}"
+        say "format: clang-format 18 from the release root"
+    fi
     say "pipeline: utils/run_pipeline.sh (gates, six profiles, suites and scenarios, coverage, stress, packages)"
     ./utils/run_pipeline.sh > "${EV}/pipeline.txt" 2>&1 || rc=1
     tail -n 1 "${EV}/pipeline.txt"
