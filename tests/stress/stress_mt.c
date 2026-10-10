@@ -20,7 +20,7 @@
 /**
  * @brief Start barrier used to align worker measurement windows.
  *
- * Workers signal readiness, block on @ref start_cond, then begin generating UUIDs after the coordinator broadcasts the start flag.
+ * Workers signal readiness, block on `start_cond`, then begin generating UUIDs after the coordinator broadcasts the start flag.
  */
 typedef struct start_gate
 {

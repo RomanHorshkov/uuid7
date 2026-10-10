@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# make.sh [--docs-only] — the one click of the ECSS pipeline (ecss/README.md): every gate of the repository, the evidence ECSS asks
+# for, the diagrams, the documents (build/ecss/md) and one site (build/ecss/html/index.html). Idempotent; no network once the pins of
+# deps.txt are cached. --docs-only keeps the last run's test results and evidence and regenerates the documents and the site.
+# Exit 1 when a gate failed (the documents are written anyway and say what failed).
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}" || exit 1
+export TMPDIR="${ROOT}/build/tmp"
+OUT="${ROOT}/build/ecss"
+EV="${OUT}/evidence"
+DOCS_ONLY=0
+[[ "${1:-}" == --docs-only ]] && DOCS_ONLY=1
+say() { printf '== %s\n' "$*"; }
+need() { command -v "$1" > /dev/null 2>&1 || { printf 'make.sh: %s not found (%s)\n' "$1" "$2" >&2; exit 1; }; }
+need python3 "the generator"
+need doxygen "the site"
+need dot "doxygen's graphs: graphviz"
+mkdir -p "${TMPDIR}" "${OUT}"
+rc=0
+
+if (( ! DOCS_ONLY )); then
+    rm -rf "${OUT}/puml" "${EV}"
+    mkdir -p "${EV}"
+    say "sysroot: utils/deps.sh sysroot"
+    ./utils/deps.sh sysroot > "${EV}/deps.txt" 2>&1 || { tail -n 5 "${EV}/deps.txt"; exit 1; }
+    eval "$(grep '^export' "${EV}/deps.txt")"
+    say "pipeline: utils/run_pipeline.sh (gates, six profiles, suites and scenarios, coverage, stress, packages)"
+    ./utils/run_pipeline.sh > "${EV}/pipeline.txt" 2>&1 || rc=1
+    tail -n 1 "${EV}/pipeline.txt"
+    say "evidence: packages built again (reproducibility), hardening of the release library"
+    cp build/debs/SHA256SUMS "${EV}/SHA256SUMS.first" 2> /dev/null || : > "${EV}/SHA256SUMS.first"
+    verdict=different
+    if ./utils/build_deb.sh > "${EV}/build_deb_again.txt" 2>&1 && [[ -s "${EV}/SHA256SUMS.first" ]] \
+        && cmp -s build/debs/SHA256SUMS "${EV}/SHA256SUMS.first"; then verdict=identical; fi
+    { printf 'first build (pipeline stage package):\n'; cat "${EV}/SHA256SUMS.first"
+      printf 'second build (utils/build_deb.sh):\n'; cat build/debs/SHA256SUMS 2> /dev/null; printf 'SHA256SUMS %s\n' "${verdict}"; } \
+        > "${EV}/reproducible.txt"
+    ./utils/check_hardening.sh build/release/libuuid7.so build/release/libuuid7.a > "${EV}/hardening.txt" 2>&1 || rc=1
+fi
+
+say "documents: ecss/tools/ecss.py"
+rm -rf "${OUT}/md" "${OUT}/html" "${OUT}/svg" "${OUT}/xml_api" "${OUT}/rms"
+python3 ecss/tools/ecss.py components-dox || exit 1
+python3 ecss/tools/ecss.py api-doxyfile | doxygen - > /dev/null 2>&1
+python3 ecss/tools/ecss.py generate || exit 1
+mkdir -p "${OUT}/svg"
+
+say "site: doxygen ecss/Doxyfile ($(doxygen --version), $(dot -V 2>&1 | awk '{print $1, $5}'))"
+ECSS_VERSION="$(tr -d '[:space:]' < VERSION)" ECSS_ROOT="${ROOT}" doxygen ecss/Doxyfile || exit 1
+mkdir -p "${OUT}/html/evidence" "${OUT}/html/diagrams"
+cp -r "${EV}/." "${OUT}/html/evidence/" 2> /dev/null
+[[ -d tests/results/logs/it ]] && cp -r tests/results/logs/it "${OUT}/html/evidence/logs"
+[[ -d tests/results/ITs/coverage ]] && cp -r tests/results/ITs/coverage "${OUT}/html/evidence/coverage"
+cp "${OUT}"/puml/*.puml "${OUT}/html/diagrams/" 2> /dev/null
+cp "${OUT}"/svg/*.svg "${OUT}/html/diagrams/" 2> /dev/null
+
+python3 - "${OUT}" << 'PY'
+import json, sys
+s = json.load(open(sys.argv[1] + "/summary.json"))
+w = sum(1 for l in open(sys.argv[1] + "/doxygen_warnings.txt") if l.strip())
+print("   %d requirements (%d SRS, %d ICD), %d verified; %d tests, %d scenarios; %d documents; doxygen warnings: %d"
+      % (s["requirements"], s["srs"], s["icd"], s["verified"], s["tests"], s["scenarios"], s["documents"], w))
+print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] else "FAILED") if s["pipeline_ran"] else "not run", s["mode"]))
+if s["render_note"]:
+    print("   " + s["render_note"])
+PY
+printf 'markdown: %s\nsite:     %s\n' "${OUT}/md" "${OUT}/html/index.html"
+exit "${rc}"

@@ -1,0 +1,310 @@
+clause,expected_output,category_D,compliance,reference,remark
+5.2.2.1a,Specification of system requirements allocated to software,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo a,Functions and performance system requirements allocated to software,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo b,Verification and validation product requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo c,Software operations requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo d,Software maintenance requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo e,Requirements for in flight modification capabilities,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo f,Requirements for real-time,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo g,Requirements for security,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1a eo h,Quality requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1b,Additional security requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1c,Security requirements catalogues,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.1d,Security traceability matrix,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.2a,System and software observability requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.3a,HMI requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.2.4a,HW/SW co-engineering analysis,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.3.1a,Verification and validation process requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.3.1b,Security verification and validation process requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.3.2a,Validation requirements and scenario,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.3.3a,Installation an acceptance requirements at the operational and maintenance sites,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.3.3b,Secure installation and security specific acceptance criteria requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.1a,Association of requirements to versions,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.1b,Delivery content and media,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.2a,System level integration support requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.3a,External interface requirements specification,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.3b,External interface security requirements specification,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.4a,System database content and allowed operational range,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.4b,System database security constraints,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.5a,Design and development constraints,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.6a,OBCP requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.7a,Requirements for ’software to be reused’,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.8a,Software safety and dependability requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.9a,Format and delivery medium of exchanged data,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.9b,Security marking and labelling requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.9c,Integrity and authenticity requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.10a,Security constraints for the development and integration environments,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.4.11a,Secure software delivery requirements,Y,NA,PAF/TAILORING.md,"Customer process (""the customer shall"", 5.2.2.1a); RB tailored out; the TS cites its upper-level sources instead."
+5.2.5a,SRR,Y,C,MGT/SRevP.md,SRR held as the first part of the combined SRR/PDR.
+5.3.2.1a,Software life cycle definition,Y,C,MGT/SDP.md <5.1> to <5.4>,
+5.3.2.1b,Software life cycle definition,Y,C,MGT/SDP.md <5.1> to <5.4>,
+5.3.2.1c,"Development strategy, standards, techniques, development and testing environment",Y,C,MGT/SDP.md <5.1> to <5.4>,
+5.3.2.1d,Software life cycle definition,Y,C,MGT/SDP.md <5.1> to <5.4>,
+5.3.2.2a,Identification of interface between development and maintenance,Y,C,MGT/SDP.md <5.2.1>; MF/SMP.md,
+5.3.2.3a,Software procurement process documentation and implementation,Y,C,MGT/SDP.md <4.8>,Procured software: build and test tools only.
+5.3.2.4a,Automatic code generation management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
+5.3.2.4b,Automatic code generation management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
+5.3.2.4c,Automatic code generation management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
+5.3.2.4d,Automatic code generation management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
+5.3.2.4e,Automatic code generation configuration management,Y,NA,MGT/SDP.md <5.3>,No automatically generated code.
+5.3.2.5a,Changes to baseline procedures,Y,C,MGT/SCMP.md; MF/SMP.md <10>,
+5.3.3.1a,Joint review reports,Y,C,DJF/JRR.md,Generated from the rms reviews.
+5.3.3.1b,Security specific sessions,Y,C,MGT/SRevP.md <6>,Security is an agenda item of every review.
+5.3.3.2a,Software project reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.3.2b,Review Plan,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.3.3a,Software technical reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.3.3b,Technical reviews process,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.3.3c,Software technical reviews included in the software life cycle definition,Y,C,MGT/SRevP.md; MGT/SDP.md <5.2.3>,
+5.3.4.1a,Approved requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline (RB tailored out).
+5.3.4.2a,"Approved technical specification and interface, architecture and plans",Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.2b,Approved technical specification and interface,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.3a,Approved design definition file and design justification file,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.3b,"Approved detailed design, interface design and budget",Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.4a,Qualified software product,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.4.5a,Accepted software product,Y,C,MGT/SRevP.md,Review outcome recorded in rms (baseline per review).
+5.3.5.1a,Confirmation of readiness of test activities,Validation and acceptance tests only,C,DJF/SValP.md <4.3>,Test readiness: the pipeline green on the commit under review.
+5.3.5.2a,Approved test results,Validation and acceptance tests only,C,DJF/SValP.md <4.3>,Test readiness: the pipeline green on the commit under review.
+5.3.5.3a,Software delivery review board,Y,C,MGT/SRevP.md; MGT/SDP.md <5.5.3>,The delivery review is part of QR/AR.
+5.3.5.4a,Software validation specification review,Y,C,MGT/SRevP.md,SVS reviewed at CDR.
+5.3.6.1a,Flight software review phasing,Y,NA,-,Not flight software.
+5.3.6.1b,Flight software review phasing,Y,NA,-,Not flight software.
+5.3.6.2a,Ground software review phasing,Y,NA,-,Not ground segment software.
+5.3.7.1a,Interface management procedures,Y,C,MGT/SDP.md <5.2.3>; TS/ICD.md,ABI gate and SemVer.
+5.3.8.1a,Technical budgets and margin philosophy for the project,Y,C,DJF/SVR.md <5>,
+5.3.8.2a,Technical budgets and margin computation,Y,C,DJF/SVR.md <5>,
+5.3.8.2b,Technical budgets and margin computation,Y,C,DJF/SVR.md <5>,
+5.3.9.1a,E40 compliance matrix,Y,C,MGT/E40_COMPLIANCE.md,This matrix.
+5.3.9.2a,E40 compliance matrix,Y,C,MGT/E40_COMPLIANCE.md,This matrix.
+5.4.2.1a eo a,"Functional and performance specifications, including hardware characteristics, and environmental conditions under which the software item executes, including budgets requirements",Y,C,"TS/SRS.md <5.2>, <5.3>, <5.6>",
+5.4.2.1a eo b,"Operational, reliability, safety, maintainability, portability, configuration, delivery, adaptation and installation requirements, design constraints",Y,C,"TS/SRS.md <5.5>, <5.7>, <5.9>, <5.11>, <5.12>, <5.14>, <5.17>",
+5.4.2.1a eo c,Software product quality requirements (see ECSS-Q-ST-80 clause 7.2),Y,C,TS/SRS.md <5.10>,
+5.4.2.1a eo d,"Security specifications, including those related to factors which can compromise sensitive information",Y,C,TS/SRS.md <5.8>,
+5.4.2.1a eo e,"Human factors engineering (ergonomics) specifications, following the human factor engineering process described in ECSS-E-ST-10-11",Y,C,TS/SRS.md <5.16>,None: no human-machine interface.
+5.4.2.1a eo f,Data definition and database requirements,Y,C,TS/SRS.md <5.15>,
+5.4.2.1a eo g,Validation requirements,Y,C,TS/SRS.md <6>,
+5.4.2.1a eo h,Interfaces external to the software item,Y,C,TS/ICD.md,
+5.4.2.1a eo i,Reuse requirements,Y,C,TS/SRS.md <5.7>,
+5.4.2.2a,Specifications for in flight software modifications,Y,NA,-,Not flight software.
+5.4.2.3a,Software logical model,N,NA,-,Not applicable to category D (Annex R).
+5.4.2.3b,Software logical model method,N,NA,-,Not applicable to category D (Annex R).
+5.4.2.3c,Behavioural view in software logical model,N,NA,-,Not applicable to category D (Annex R).
+5.4.2.4a,SWRR,Y,C,MGT/SRevP.md,SWRR combined with the PDR.
+5.4.3.1a,Software architectural design,Y,C,DDF/SDD.md,
+5.4.3.2a,Software architectural design method,Y,C,DDF/SDD.md,
+5.4.3.2b,Vulnerability analysis of the design,Y,C,SF/SSAR.md,
+5.4.3.3a,Computational model,Y,C,DDF/SDD.md,
+5.4.3.4a,Software behaviour,N,NA,-,Not applicable to category D (Annex R).
+5.4.3.5a eo a,Preliminary external interfaces design,Y,C,TS/ICD.md,
+5.4.3.5a eo b,Preliminary internal interfaces design,Y,C,DDF/SDD.md <5.5>,
+5.4.3.6a,Software intended for reuse - justification of methods and tools,Y,C,DJF/SRF.md,
+5.4.3.6b,Software intended for reuse - evaluation of reuse potential,Y,C,DJF/SRF.md,
+5.4.3.6c,Software architectural design with configuration data,Y,C,DDF/SDD.md <4.1>,
+5.4.3.7a,Justification of reuse with respect to requirements baseline,Y,C,DJF/SRF.md,
+5.4.3.8a,Software integration strategy,N,NA,-,Not applicable to category D (Annex R).
+5.4.4a,PDR,Y,C,MGT/SRevP.md,
+5.5.2.1a,Software components design tba documents,Y,C,DDF/SDD.md; app/,
+5.5.2.1b,Software components design tba documents,Y,C,DDF/SDD.md; app/,
+5.5.2.1c,Software components design tba documents,Y,C,DDF/SDD.md; app/,
+5.5.2.2a eo a,External interfaces design (update),Y,C,TS/ICD.md,
+5.5.2.2a eo b,Internal interfaces design (update) tba,Y,C,DDF/SDD.md; app/,
+5.5.2.3a eo a,Software static design model tba,Y,C,DDF/SDD.md; app/,
+5.5.2.3a eo b,Software dynamic design model tba,Y,C,DDF/SDD.md; app/,
+5.5.2.3a eo c,Software behavioural design model tba,Y,C,DDF/SDD.md; app/,
+5.5.2.4a,Software design method,Y,C,DDF/SDD.md; app/,
+5.5.2.5a,Real-time software dynamic design tba model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.5b,Real-time software dynamic design tba model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.5c,Real-time software dynamic design tba model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.5d,Real-time software dynamic design tba model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.5e,Real-time software dynamic design tba model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.6a,Software behavioural design model tba techniques,Y,C,DDF/SDD.md; app/,
+5.5.2.7a,Compatibility of real-time design methods with the computational model,Y,C,"DDF/SDD.md <4.2>, <5.2>",Passive library: no task of its own; the computational model is the caller's threads.
+5.5.2.8a,Software user manual,Y,C,DDF/SUM.md,
+5.5.2.9a,Software unit test plan,"Y except Annex K sections 9, 10 and 11",C,DJF/SUITP.md,Sections 9 to 11 omitted as Annex R allows.
+5.5.2.10a,DDR,Y,C,MGT/SRevP.md,DDR combined with the CDR.
+5.5.3.1a eo a,Software component design tba documents and code (update),Y,C,DDF/SDD.md; app/,
+5.5.3.1a eo b,Software configuration file - build procedures,Y,C,DDF/SCF.md,
+5.5.3.2a eo a,Software component design document tba and code (update),Y,C,DDF/SDD.md; app/,
+5.5.3.2a eo b,Software unit test plan (update),Y,C,DJF/SUITP.md,
+5.5.3.2b eo a,Software component design document tba and code (update),Y,C,DDF/SDD.md; app/,
+5.5.3.2b eo b,Software unit test reports tba,Y,C,DJF/UTR.md,
+5.5.3.2c,Software unit test reports tba,Y,C,DJF/UTR.md,
+5.5.4.1a,Software integration test plan (update),N,NA,-,Not applicable to category D (Annex R).
+5.5.4.2a,Software integration test report,N,NA,-,Not applicable to category D (Annex R).
+5.6.2.1a,Software validation plan - validation process identification,Y,C,DJF/SValP.md,
+5.6.2.1b,Software validation plan - methods and tools,Y,C,DJF/SValP.md,
+5.6.2.1c,Software validation plan - effort and independence,Y,C,DJF/SValP.md,
+5.6.2.1d,Software validation regulations and policies compliance,Y,C,DJF/SValP.md,
+5.6.2.2a,Independent software validation plan - organization selection,N,NA,-,Not applicable to category D (Annex R).
+5.6.2.2b,Independent software validation plan - level of independence,N,NA,-,Not applicable to category D (Annex R).
+5.6.3.1a,Software validation specification with respect to the technical specification,Y,C,DJF/SVS.md,
+5.6.3.1b,Software validation specification with respect to the technical specification,Y,C,DJF/SVS.md,
+5.6.3.1c,Software validation specification with respect to the technical specification,Y,C,DJF/SVS.md,
+5.6.3.2a,Software validation report with respect to the technical specification,Y,C,DJF/SValR.md,
+5.6.3.3a,Software user manual (update),Y,C,DDF/SUM.md,
+5.6.3.4a,CDR,Y,C,MGT/SRevP.md,
+5.6.4.1a,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
+5.6.4.1b,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
+5.6.4.1c,Software validation specification with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
+5.6.4.2a,Software validation report with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
+5.6.4.2b,Software validation report with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline: validation is against the TS; the consumers validate the library in their systems.
+5.6.4.3a,Software user manual (update),Y,C,DDF/SUM.md,
+5.6.4.4a,QR,Y,C,MGT/SRevP.md,
+5.6.5a,Software validation control,Y,C,DJF/SValP.md <8>,
+5.7.2.1a eo a,Software product,Y,C,DDF/SCF.md,The debs built by utils/build_deb.sh.
+5.7.2.1a eo b,Software release document,Y,C,DDF/SRelD.md,
+5.7.2.1b,Secured software delivery,Y,C,DDF/SCF.md; SF/SSAR.md,SHA256SUMS published with the release; consumers pin the sha256.
+5.7.2.2a,Training material,Y,C,DDF/SUM.md <11>,
+5.7.2.3a,Installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
+5.7.2.3b,Secured installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
+5.7.2.4a,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
+5.7.2.4b,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
+5.7.2.4c,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
+5.7.2.4d,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
+5.7.3.1a,Acceptance test plan,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
+5.7.3.2a,Acceptance test report,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
+5.7.3.3a,Software product,Y,C,DDF/SCF.md,Packages built from the tagged source in the pinned build root.
+5.7.3.4a,Joint review report,Y,C,DJF/JRR.md,
+5.7.3.4b,Joint review report,Y,C,DJF/JRR.md,
+5.7.3.5a,Traceability of acceptance tests to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline.
+5.7.3.6a,AR,Y,C,MGT/SRevP.md,
+5.8.2.1a,Software verification plan - verification process identification,Y,C,DJF/SVerP.md,
+5.8.2.1b,Software verification plan - software products identification,Y,C,DJF/SVerP.md,
+5.8.2.1c,"Software verification plan - activities, methods and tools",Y,C,DJF/SVerP.md,
+5.8.2.1d,"Software verification plan - organizational independence, risk and effort identification",Y,C,DJF/SVerP.md,
+5.8.2.1e,Software verification regulations and policies compliance,Y,C,DJF/SVerP.md,
+5.8.2.2a,Independent software verification plan - organization selection,N,NA,-,Not applicable to category D (Annex R).
+5.8.2.2b,Independent software verification plan - level of independence,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.1a,Requirements baseline verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.2a eo a,Requirements traceability matrices,Y,C,DJF/TRACE.md; TS/SRS.md <7>,
+5.8.3.2a eo b,Requirements verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.3a eo a,Software architectural design to requirements traceability matrices,Y,C,DJF/TRACE.md; DDF/SDD.md <6>,
+5.8.3.3a eo b,Software architectural design and interface verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.4a eo a,Detailed design traceability matrices,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.4a eo b,Detailed design verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.5a eo a,Software code traceability matrices,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.5a eo b,Software code verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.5b,Code coverage verification report,"TBA (agreed figures, 5.8.3.5b table)",C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (UUID7-SRS-090)."
+5.8.3.5c,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (UUID7-SRS-090)."
+5.8.3.5d,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (UUID7-SRS-090)."
+5.8.3.5e,Code coverage verification report (object code),N/A (5.8.3.5e table),NA,-,Object code coverage: N/A for category D (5.8.3.5e table).
+5.8.3.5f,Robustness verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.6a eo a,Software unit tests traceability matrices,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.6a eo b,Software unit testing verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.7a,Software integration verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.8a eo a,Traceability of the requirements baseline to the validation specification,Y,NA,PAF/TAILORING.md,No requirements baseline.
+5.8.3.8a eo b,Traceability of the technical specification to the validation specification,Y,C,DJF/TRACE.md,
+5.8.3.8b eo a,Validation report evaluation with respect to the technical specification,Y,C,DJF/SVR.md <4.6>,
+5.8.3.8b eo b,Validation report evaluation with respect to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline.
+5.8.3.9a,Complement of validation at system level,Y,C,DJF/SValP.md <9>,
+5.8.3.10a,Software documentation verification report,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.11a,Schedulability analysis,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.11b,Schedulability analysis (update),N,NA,-,Not applicable to category D (Annex R).
+5.8.3.11c,Schedulability analysis (update),N,NA,-,Not applicable to category D (Annex R).
+5.8.3.11d,Schedulability analysis environment,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.12a,Technical budgets - memory and PU estimation,Y,C,DJF/SVR.md <5>,
+5.8.3.12b,Technical budgets (update) - memory and PU estimation,Y,C,DJF/SVR.md <5>,
+5.8.3.12c,Technical budgets (update) - memory and PU calculation,Y,C,DJF/SVR.md <5>,
+5.8.3.13a,Software behaviour verification,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.13b,Software behaviour verification,N,NA,-,Not applicable to category D (Annex R).
+5.8.3.13c,Software behaviour verification,N,NA,-,Not applicable to category D (Annex R).
+5.9.2.1a,Software operation support plan - operational testing specifications,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.2.2a,Software operation support plan - plans and procedures,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.2.3a,Software operation support plan - procedures for problem handling,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.2.3b,Software operation support plan – security impact,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.3.1a,Operational testing results,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.3.2a,Operational testing results,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.3.3a,Software product,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.4.1a,Software operation support performance,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.4.2a,Problem and nonconformance report,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.4.3a,Security vulnerabilities in operations,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.1a,User’s request record - user’s request and subsequent actions,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.1b,User’s request record - user’s request and subsequent actions,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.2a,User’s request record - actions,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.2b,User’s request record - actions,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.2c,User’s request record - actions,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.3a,User’s request record - work around solution,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.9.5.3b,User’s request record - work around solution,Y,NA,PAF/TAILORING.md,"No operation of its own: tailored out by agreement (Annex S), beyond Annex R."
+5.10.2.1a,Maintenance plan - plans and procedures,Y,C,MF/SMP.md,
+5.10.2.1b,"Maintenance plan - applicability of development process procedures, methods, tools and standards",Y,C,MF/SMP.md,
+5.10.2.1c,Maintenance plan - configuration management process,Y,C,MF/SMP.md,
+5.10.2.1d,Maintenance plan - problem reporting and handling,Y,C,MF/SMP.md,
+5.10.2.1e,Problem and nonconformance report,Y,C,MF/SMP.md,
+5.10.2.1f,Secured software maintenance process,Y,C,MF/SMP.md,
+5.10.2.2a,Maintenance plan - long term maintenance solutions,Y,C,MF/SMP.md,
+5.10.3.1a,Modification analysis report and problem analysis report,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.3.1b,Modification analysis report and problem analysis report,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.3.1c,Modification analysis report and problem analysis report,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.3.1d,Modification analysis report and problem analysis report,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.3.1e,Modification approval,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.1a,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.2a,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.3a,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.3b,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.3c,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.3d,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.4.3e,Modification documentation,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.5.1a,Joint review reports,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.5.2a,Baseline for changes,Y,C,MF/SMP.md <10>,Records produced per modification.
+5.10.6.1a,Migration plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.2a,Migration plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.3a,Migration plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.4a,Migration plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.5a,Migration notification,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.5b,Migration notification,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.6a,Post operation review report,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.6b,Post operation review report,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.6.7a,Migration plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.7.1a,Retirement plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.7.2a,Retirement notification,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.7.3a,Retirement plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.10.7.4a,Retirement plan,Y,C,MF/SMP.md <8>,Plan issued when a migration or retirement is decided; none is.
+5.11.2a,Software security management plan,Y,C,PAF/SPAP.md <6.4>,The SSMP is part of the SPAP (5.11.2a NOTE 3).
+5.11.2b,Software security management plan,Y,C,PAF/SPAP.md <6.4>,The SSMP is part of the SPAP (5.11.2a NOTE 3).
+5.11.2c,Software security management plan,Y,C,PAF/SPAP.md <6.4>,The SSMP is part of the SPAP (5.11.2a NOTE 3).
+5.11.2d,Software security management plan,Y,C,PAF/SPAP.md <6.4>,The SSMP is part of the SPAP (5.11.2a NOTE 3).
+5.11.3a,Software security analysis,Y,C,SF/SSAR.md,
+5.11.3b,Software security analysis methods,Y,C,SF/SSAR.md,
+5.11.3c,Software security analysis production,Y,C,SF/SSAR.md,
+5.11.3d,Software security analysis of next higher level,Y,C,SF/SSAR.md,
+5.11.3e,Software security analysis feedback,Y,C,SF/SSAR.md,
+5.11.3f,Software security analysis update,Y,C,SF/SSAR.md,
+5.11.3g,Software security analysis distribution,Y,C,SF/SSAR.md,
+5.11.3h,Software security analysis order,Y,C,SF/SSAR.md,
+5.11.3i,Software security analysis vulnerability mapping,Y,C,SF/SSAR.md,
+5.11.3j,Software security analysis vulnerability mapping update,Y,C,SF/SSAR.md,
+5.11.3k,Software security analysis review,Y,C,SF/SSAR.md,
+5.11.3l,Software security analysis classification,Y,C,SF/SSAR.md,
+5.11.4a,Security risk treatment,Y,C,SF/SSAR.md,
+5.11.4b,Security risk impact,Y,C,SF/SSAR.md,
+5.11.4c,Security risk protection,Y,C,SF/SSAR.md,
+5.11.4d,Software requirements linked to security risk traceability,Y,C,SF/SSAR.md,
+5.11.4e,"Security risks, associated security risks and risk treatments consistency",Y,C,SF/SSAR.md,
+5.11.4f,Risk treatment measures,Y,C,SF/SSAR.md,
+5.11.5.1a,Security in the requirements baseline,Y,C,TS/SRS.md <5.8>,RB tailored out: security requirements live in the SRS.
+5.11.5.1b,Security assurance requirements,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.1c,Security requirement verification and validation,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.1d,Software security analysis and associated risk treatment measures review,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.2a,Security in the software requirements specification and architectural design,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.2b,Software security analysis revision,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.2c,Software security analysis and associated risk treatment plan review,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.2d,Architecture review with respect to security risks,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.3a,Security analysis review during the detailed design and implementation engineering,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.3b,Residual vulnerabilities list,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.3c,Residual vulnerabilities list review,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.3d,Additional security risks identification,Y,C,SF/SSAR.md; MGT/SRevP.md,
+5.11.5.4a,Security validation process,Y,C,SF/SSAR.md; DJF/SVS.md,
+5.11.5.4b,Security tests results approval,Y,C,SF/SSAR.md; DJF/SVS.md,
+5.11.5.4c,Security measures for testing,Y,C,SF/SSAR.md; DJF/SVS.md,
+5.11.5.4d,Security analysis review,Y,C,SF/SSAR.md; DJF/SVS.md,
+5.11.5.5a,Security in delivery and acceptance process,Y,C,SF/SSAR.md; DDF/SRelD.md,
+5.11.5.5b,Security at acceptance review,Y,C,SF/SSAR.md; DDF/SRelD.md,
+5.11.5.5c,Software security analysis and risk treatment measures status,Y,C,SF/SSAR.md; DDF/SRelD.md,
+5.11.5.6a,Security in the operations and maintenance process,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6b,Software security analysis review,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6c,Software security performance,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6d,Software security during maintenance,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6e,Software security during migration,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6f,Software security during retirement,Y,C,MF/SMP.md <12>; SF/SSAR.md,
+5.11.5.6g,Data sanitation,Y,C,MF/SMP.md <12>; SF/SSAR.md,Data sanitation: the library holds no data at rest.
+5.11.5.6h,Data sanitation compliance,Y,C,MF/SMP.md <12>; SF/SSAR.md,Data sanitation: the library holds no data at rest.
+5.11.5.6i,Data sanitation records,Y,C,MF/SMP.md <12>; SF/SSAR.md,Data sanitation: the library holds no data at rest.
