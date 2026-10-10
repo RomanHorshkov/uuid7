@@ -16,7 +16,7 @@ This SPAMR reports the product assurance activities performed on uuid7 up to the
 
 ## 4 Verification activities performed
 
-1. Reviews: the reviews held so far and their outcome:
+1. Reviews: the reviews recorded so far in the rms and their outcome (a scripted demonstration, \ref UUID7_DOC_JRR "JRR"):
 
 <!-- ecss:reviews -->
 

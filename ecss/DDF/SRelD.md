@@ -44,7 +44,7 @@ Verification status of this version:
 
 <!-- ecss:spr -->
 
-Limitations by design: identifiers are binary only (formatting is the caller's); they disclose their creation time; they are unique per process, not across processes that share no floor (the 62 random bits make a cross-process collision negligible, not impossible); the logical clock may run up to `UUID7_MAX_AHEAD_MS` ahead of the wall clock under sustained bursts. No waiver.
+Limitations by design: identifiers are binary only (formatting is the caller's); they disclose their creation time; they are unique per process, not across processes that share no floor (the 62 random bits make a cross-process collision negligible, not impossible); the logical clock may run up to `UUID7_MAX_AHEAD_MS` ahead of the wall clock under sustained bursts. No waiver. One deviation without a record: the accessor name `uuid7_clock_failure_count()` against coding rule N3 (\ref UUID7_DOC_SPAMR "SPAMR" <6>).
 
 ## 6 Advice for use of the software configuration item
 

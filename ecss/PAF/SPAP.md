@@ -22,10 +22,10 @@ The library and its context are described in the \ref UUID7_DOC_SRS "SRS" <4> an
 
 ### 5.1 Organization
 
-1. Structure: one maintainer, Roman Horshkov, who develops, verifies, assures and reviews (\ref UUID7_DOC_SDP "SDP" <4.7>).
+1. Structure: one maintainer, Roman Horshkov, who develops, verifies, assures and reviews (\ref UUID7_DOC_SDP "SDP" <4.7>). ECSS-Q-ST-80 5.1.4.2 (Y at D) asks for a PA function with organisational authority over development, which one person cannot be: a declared deviation (\ref UUID7_DOC_SDP "SDP" <4.6>, OI-14).
 2. Interfaces: the consuming repositories (customers of the packages), the kyr-build maintainers (the same person) for the tooling.
 3. System-level product assurance and safety: none above the library; the classification is in \ref UUID7_DOC_TAILORING "the tailoring" <3>.
-4. Independence: not required at category D (ECSS-Q-ST-80 5.1.3.2: N); the pipeline's gates are the independent check: a machine applies them the same way to every change.
+4. Independence: not required at category D (ECSS-Q-ST-80 5.1.3.2: N). The pipeline's gates apply the same checks to every change, but they are the developer's own tools, not an independent check.
 5. Delegation: none.
 
 ### 5.2 Responsibilities
@@ -121,7 +121,7 @@ Security assurance (ECSS-Q-ST-80 6.2.9.1): the security requirements and their v
 
 ### 6.5 Software documentation and configuration management {#spap_ncr}
 
-Documentation and configuration management follow the \ref UUID7_DOC_SCMP "SCMP"; product assurance checks at each review that the package was regenerated from the reviewed commit (the docinfo of every document names it). Nonconformance control: a software problem is an rms change-request (\ref UUID7_DOC_SMP "SMP" <14>); a problem found after a review's baseline that affects a baselined item is a nonconformance, dispositioned by the nonconformance review board, which is the maintainer (ECSS-Q-ST-10-09 is not applied beyond this). Nonconformance procedures apply from the first baseline (the PDR). Protection of the supplied software: the SHA-256 of each package in SHA256SUMS and in the consumers' pins; labelling: the package name and version (`libuuid7_<version>_amd64.deb`).
+Documentation and configuration management follow the \ref UUID7_DOC_SCMP "SCMP"; product assurance checks at each review that the package was regenerated from the reviewed commit (the docinfo of every document names it). Nonconformance control: a software problem is an rms change-request (\ref UUID7_DOC_SMP "SMP" <14>); a problem found after a review's baseline that affects a baselined item is a nonconformance, dispositioned by the nonconformance review board, which is the maintainer (ECSS-Q-ST-10-09 is not applied beyond this). The rms has no nonconformance record yet and the board has no PA member other than the developer (OI-11, OI-14). Nonconformance procedures apply from the first baseline (the PDR). Protection of the supplied software: the SHA-256 of each package in SHA256SUMS and in the consumers' pins; labelling: the package name and version (`libuuid7_<version>_amd64.deb`).
 
 ### 6.6 Process metrics
 
@@ -138,7 +138,7 @@ The library is itself software intended for reuse; its reuse file is the \ref UU
 | Requirements analysis | every requirement atomic, with rationale, criteria, method and source; the rms `check` on each; review at SRR/PDR |
 | Architectural design and design of items | components and their requirements traced (`@ingroup`, `@satisfies`); review at PDR/CDR |
 | Coding | the coding standard's gates; the inspection UUID7-IN-008 |
-| Testing and validation (regression included) | every change runs every suite in every cell; coverage measured against the agreed figures |
+| Testing and validation (regression included) | every change runs every suite in every cell; coverage measured against the proposed figures (UUID7-SRS-090) |
 | Verification | the SVerP's activities; the generated matrices show any gap |
 | Delivery and acceptance | packages reproducible and smoke-tested; SRelD and SCF regenerated |
 | Operations and maintenance | the SMP; the same gates |

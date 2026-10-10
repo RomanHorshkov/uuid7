@@ -58,7 +58,7 @@ Open items: what the package does not yet achieve, with what closes each one, wh
 
 ### 4.7 Staffing plan
 
-One maintainer, Roman Horshkov, holds every role: developer, verifier, configuration manager, product assurance, reviewer. The skills are C11, POSIX, C11 atomics, the platform's tooling and ECSS documentation; they are in use across the platform's repositories. Independence is not required at category D (ECSS-Q-ST-80 5.1.3.2 and 6.3.5.19: N).
+One maintainer, Roman Horshkov, holds every role: developer, verifier, configuration manager, product assurance, reviewer. The skills are C11, POSIX, C11 atomics, the platform's tooling and ECSS documentation; they are in use across the platform's repositories. Independence is not required at category D (ECSS-Q-ST-80 5.1.3.2 and 6.3.5.19: N); a PA function with organisational authority is (5.1.4.2), and one person cannot hold it over their own work: a declared deviation (<4.6>, OI-14).
 
 ### 4.8 Software procurement process {#sdp_procurement}
 

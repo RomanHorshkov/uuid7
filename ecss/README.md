@@ -27,11 +27,11 @@ Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.htm
 
 | File | Documents | Directory |
 |---|---|---|
-| MGT | SDP (with the ECSS-E-ST-40 compliance matrix), SRevP, SCMP | `MGT/` |
+| MGT | SDP (with the ECSS-E-ST-40 compliance matrix and the open items, `open_items.csv`), SRevP, SCMP | `MGT/` |
 | TS | SRS, ICD, the requirements | `TS/` |
 | DDF | SDD, SUM, SRelD, SCF | `DDF/` |
 | DJF | SVerP, SValP, SUITP, SVS, SVR, SRF, unit test report, validation report, traceability matrices, problem reports, joint review reports | `DJF/` |
-| PAF | SPAP (with the SSMP and the ECSS-Q-ST-80 compliance matrix), SPAMR, tailoring and criticality, coding standard | `PAF/` |
+| PAF | SPAP (with the SSMP, the ECSS-Q-ST-80 compliance matrix and the tools register, `tools.csv`), SPAMR, tailoring and criticality, coding standard | `PAF/` |
 | MF | SMP | `MF/` |
 | SF | SSAR with the risk treatment plan | `SF/` |
 | RB, OP | tailored out, justified in `PAF/TAILORING.md` | - |

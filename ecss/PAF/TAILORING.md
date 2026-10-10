@@ -15,6 +15,7 @@ The owner asked for uuid7 to be documented "as per ECSS standard, level 4". ECSS
 ECSS-Q-ST-80 6.2.2.1 (applicable at D) asks for the criticality classification of the software products from the system-level analyses (ECSS-Q-ST-30 5.4, ECSS-Q-ST-40 6.5.6.3). uuid7 has no system of its own; the classification is made against its consumers' use:
 
 - Function: it issues identifiers that key records. Its worst credible failure is a duplicate or misordered key, which the consumers' databases refuse or detect (a duplicate key is a refused write; an append out of order is a slower write). No safety function, no mission function, no loss of data follows from it.
+- Status: a proposal. Q-80 D.1 assigns the category from the system analysis of the project that uses the software; no using project has made that assignment yet (\ref UUID7_DOC_SDP "SDP" <4.6>, OI-02).
 - Table D-1: software involved in category IV functions (negligible consequences) with no compensating provision is category D. The library is classified **D**; every component of the \ref UUID7_DOC_SDD "SDD" inherits D, and no component can cause the failure of a higher-criticality component through shared resources (ECSS-Q-ST-80 6.2.2.10): it holds no lock, allocates nothing and writes only into the caller's buffer.
 - Security sensitivity: assessed by the \ref UUID7_DOC_SSAR "SSAR": not security sensitive (the identifiers are not secrets; ECSS-Q-ST-80 6.2.9 and 6.2.10 are applied at the level the SSAR justifies).
 
@@ -24,7 +25,7 @@ ECSS-Q-ST-80 6.2.2.1 (applicable at D) asks for the criticality classification o
 
 ## 4 Tailoring of ECSS-E-ST-40C Rev.1
 
-Annex R Table R-1 applies as written for category D. In addition, by agreement (Annex S, general tailoring):
+Annex R Table R-1 applies as written for category D. In addition, proposed for agreement (Annex S makes tailoring the customer's task; no counter-party has agreed it: \ref UUID7_DOC_SDP "SDP" <4.6>, OI-02):
 
 | Clauses | Disposition | Justification |
 |---|---|---|

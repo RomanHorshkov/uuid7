@@ -5,8 +5,8 @@ clause,subject,category_D,compliance,reference,remark
 5.1.2.3,Responsibility and authority,Y,NA,-,No delegation to a lower-level supplier.
 5.1.3.1,Resources,Y,C,PAF/SPAP.md <5.3>,
 5.1.3.2,Resources,N,NA,-,Not applicable to category D (Table D-2).
-5.1.4.1,Software product assurance manager/engineer,Y,C,"PAF/SPAP.md <5.1>, <5.2>",The maintainer is the SW PA engineer; no independence at category D (5.1.3.2 N).
-5.1.4.2,Software product assurance manager/engineer,Y,C,"PAF/SPAP.md <5.1>, <5.2>",The maintainer is the SW PA engineer; no independence at category D (5.1.3.2 N).
+5.1.4.1,Software product assurance manager/engineer,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",The maintainer is the SW PA engineer and also the developer. Closes with OI-14.
+5.1.4.2,Software product assurance manager/engineer,Y,NC,"PAF/SPAP.md <5.1>, <5.2>","Declared deviation: one person holds PA and development, so PA has no organisational authority over the developer. Closes with OI-14."
 5.1.5.1,Training,Expected output not required,NA,-,Category D: expected output (training plan) not required.
 5.1.5.2,Training,N,NA,-,Not applicable to category D (Table D-2).
 5.1.5.3,Training,Y,C,MGT/SDP.md <4.7>,
@@ -21,12 +21,12 @@ clause,subject,category_D,compliance,reference,remark
 5.2.2.3,Software product assurance reporting,Y,C,PAF/SPAMR.md,
 5.2.3,Audits,Audits planned and performed only when necessary,C,PAF/SPAP.md <5.4>,No audit planned (category D: only when necessary).
 5.2.4,Alerts,Y,C,PAF/SPAP.md <6.9>,No alert issued or received.
-5.2.5.1,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record with the fields of 5.2.5.2. Closes with an rms problem-report kind.
-5.2.5.2,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md","Change-requests lack the disposition, modification and re-executed-test fields of 5.2.5.2. Closes with an rms problem-report kind."
-5.2.5.3,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with an rms problem-report kind.
-5.2.5.4,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with an rms problem-report kind.
-5.2.6.1,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,No nonconformance record exists (the deviation from rule N3 is unrecorded) and the NRB is the maintainer alone. Closes with an rms nonconformance kind and an NRB that includes PA.
-5.2.6.2,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,No nonconformance record exists. Closes with an rms nonconformance kind.
+5.2.5.1,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record with the fields of 5.2.5.2. Closes with OI-11.
+5.2.5.2,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md","Change-requests lack the disposition, modification and re-executed-test fields of 5.2.5.2. Closes with OI-11."
+5.2.5.3,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with OI-11.
+5.2.5.4,Software problems,Y,PC,"MF/SMP.md <10>, <14>; DJF/SPR.md",Problems are rms change-requests; there is no problem-report record. Closes with OI-11.
+5.2.6.1,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,"No nonconformance record exists (the deviation from rule N3 is unrecorded) and the NRB is the maintainer alone. Closes with OI-11, OI-14."
+5.2.6.2,Nonconformances,Y,NY,PAF/SPAP.md <6.5>,No nonconformance record exists. Closes with OI-11.
 5.2.7.1,Quality requirements and quality models,Y,C,PAF/SPAP.md <5.5>,
 5.2.7.2,Quality requirements and quality models,Relevant characteristics only (e.g. suitability for safety is not relevant for cat. D software),C,PAF/SPAP.md <5.5>,Relevant characteristics only (no suitability for safety).
 5.3.1,Risk management,Y,C,MGT/SDP.md <4.5>,
@@ -75,7 +75,7 @@ clause,subject,category_D,compliance,reference,remark
 6.2.1.7,Documentation of processes,Y,C,"PAF/SPAP.md <6.2>, <6.9>",
 6.2.1.8,Documentation of processes,Y,C,"PAF/SPAP.md <6.2>, <6.9>",
 6.2.1.9,Documentation of processes,N,NA,-,Not applicable to category D (Table D-2).
-6.2.2.1,Software dependability and safety,Y,C,PAF/TAILORING.md,Category D.
+6.2.2.1,Software dependability and safety,Y,PC,PAF/TAILORING.md,"Category D classified by the supplier against its consumers' use (TAILORING <3>), not from a using project's system analysis. Closes with OI-02."
 6.2.2.2,Software dependability and safety,N,NA,-,Not applicable to category D (Table D-2).
 6.2.2.3,Software dependability and safety,N,NA,-,Not applicable to category D (Table D-2).
 6.2.2.4,Software dependability and safety,N,NA,-,Not applicable to category D (Table D-2).
@@ -97,7 +97,7 @@ clause,subject,category_D,compliance,reference,remark
 6.2.4.3,Software configuration management,Y,PC,DDF/SCF.md; DDF/SRelD.md,Regenerated with every refresh; no release of this configuration has been delivered yet. Closes with OI-04.
 6.2.4.4,Software configuration management,Y,C,DDF/SCF.md,
 6.2.4.5,Software configuration management,Y,C,MGT/SCMP.md,No code generation tool.
-6.2.4.6,Software configuration management,Y,C,MGT/SCMP.md; DDF/SCF.md,
+6.2.4.6,Software configuration management,Y,PC,MGT/SCMP.md; DDF/SCF.md,Changes are commits and rms revisions; nothing records which change request authorised them. Closes with OI-13.
 6.2.4.7,Software configuration management,Y,C,MGT/SCMP.md,
 6.2.4.8,Software configuration management,Y,C,PAF/SPAP.md <6.5>,
 6.2.4.9,Software configuration management,Y,C,"PAF/SPAP.md <6.4>, <6.5>",
@@ -151,9 +151,9 @@ clause,subject,category_D,compliance,reference,remark
 6.2.10.2,Handling of security sensitive software,Per security assurance and sensitivity levels,C,"PAF/SPAP.md <6.2>, <6.9>",
 6.2.10.3,Handling of security sensitive software,Per security assurance and sensitivity levels,C,"PAF/SPAP.md <6.2>, <6.9>",
 6.2.10.4,Handling of security sensitive software,Per security assurance and sensitivity levels,C,"PAF/SPAP.md <6.2>, <6.9>",
-6.3.1.1,Software related system requirements process,Y,NA,PAF/TAILORING.md,No requirements baseline (RB tailored out).
-6.3.1.2,Software related system requirements process,Y,NA,PAF/TAILORING.md,No requirements baseline (RB tailored out).
-6.3.1.3,Software related system requirements process,Y,NA,PAF/TAILORING.md,No requirements baseline (RB tailored out).
+6.3.1.1,Software related system requirements process,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline. Closes with OI-02."
+6.3.1.2,Software related system requirements process,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline. Closes with OI-02."
+6.3.1.3,Software related system requirements process,Y,NC,PAF/TAILORING.md,"No customer, so no requirements baseline. Closes with OI-02."
 6.3.2.1,Software requirements analysis,Y,C,TS/SRS.md,Derived from the upper-level sources cited per requirement.
 6.3.2.2,Software requirements analysis,Y,C,TS/requirements.csv; rms,"Under git and the rms (revisions, baselines)."
 6.3.2.3,Software requirements analysis,Y,C,"TS/SRS.md <5.8>, <5.13>; SF/SSAR.md",
@@ -206,17 +206,17 @@ clause,subject,category_D,compliance,reference,remark
 6.3.5.30,Testing and validation,N,NA,-,Not applicable to category D (Table D-2).
 6.3.5.31,Testing and validation,N,NA,-,Not applicable to category D (Table D-2).
 6.3.5.32,Testing and validation,Y,C,DJF/SVS.md,
-6.3.5.33,Testing and validation,Y,C,DJF/SValR.md,
+6.3.5.33,Testing and validation,Y,PC,DJF/SValR.md,"The per-requirement validation status is generated and exported; the control record lacks the configuration ids, logs and SPR links. Closes with OI-12."
 6.3.6.1,Software delivery and installation,Y,NY,MGT/SRevP.md,"The delivery review board sits within QR and AR, neither held by people. Closes with OI-01, OI-03."
 6.3.6.2,Software delivery and installation,Y,C,DDF/SUM.md <9.2>,
 6.3.6.3,Software delivery and installation,Y,NA,-,Customer activity.
 6.3.6.4,Software delivery and installation,Y,C,DDF/SUM.md <9.2>,
-6.3.7.1,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
-6.3.7.2,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
+6.3.7.1,Software acceptance,Y,NY,-,No customer has established an acceptance test plan. Closes with OI-03.
+6.3.7.2,Software acceptance,Y,NY,-,No customer acceptance tests. Closes with OI-03.
 6.3.7.3,Software acceptance,Y,NY,DDF/SRelD.md; DDF/SCF.md,No customer acceptance yet; three approved change requests are not implemented. Closes with OI-03.
 6.3.7.5,Software acceptance,Y,NY,DJF/SPR.md,"No acceptance has taken place, so no acceptance problem is documented. Closes with OI-03."
-6.3.7.6,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
-6.3.7.7,Software acceptance,Y,NA,-,Customer acceptance: each consumer pins a release after its own pipeline passes.
+6.3.7.6,Software acceptance,Y,NY,-,No acceptance test report. Closes with OI-03.
+6.3.7.7,Software acceptance,Y,NY,-,No acceptance. Closes with OI-03.
 6.3.8.1,Operations,Y,NA,PAF/TAILORING.md,No operation of its own.
 6.3.8.2,Operations,Y; bullet on safety features not applicable,NA,PAF/TAILORING.md,No operation of its own.
 6.3.8.3,Operations,Y,NA,PAF/TAILORING.md,No operation of its own.

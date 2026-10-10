@@ -45,7 +45,7 @@ At category D the requirements verification report (5.8.3.2a eo b), the architec
 
 <!-- ecss:checks -->
 
-Structural code coverage achievement (5.8.3.5b to d; the figures for category D are to be agreed and are agreed in UUID7-SRS-090):
+Structural code coverage achievement (5.8.3.5b to d; the figures for category D are to be agreed with the customer; UUID7-SRS-090 proposes them and no customer has agreed them, \ref UUID7_DOC_SDP "SDP" <4.6>, OI-02):
 
 <!-- ecss:coverage -->
 

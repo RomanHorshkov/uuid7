@@ -1369,7 +1369,7 @@ def h_coverage(M, a):
     if not M.coverage:
         return "No coverage run in this refresh."
     c = M.coverage
-    return (table(["Measure", "Covered", "Total", "Percent", "Agreed (UUID7-SRS-090)"], [
+    return (table(["Measure", "Covered", "Total", "Percent", "Target proposed (UUID7-SRS-090)"], [
         ["Statements (lines)", c.get("line_covered"), c.get("line_total"), "%.1f %%" % c.get("line_percent", 0), ">= 80 %"],
         ["Decisions (branches)", c.get("branch_covered"), c.get("branch_total"), "%.1f %%" % c.get("branch_percent", 0), ">= 65 %"],
         ["Functions", c.get("function_covered"), c.get("function_total"), "%.1f %%" % c.get("function_percent", 0), "-"]]) +
