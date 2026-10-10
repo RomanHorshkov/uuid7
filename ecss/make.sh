@@ -90,7 +90,10 @@ say "documents: ecss/tools/ecss.py"
 rm -rf "${OUT}/md" "${OUT}/html" "${OUT}/svg" "${OUT}/xml_api" "${OUT}/rms"
 python3 ecss/tools/ecss.py components-dox || exit 1
 python3 ecss/tools/ecss.py api-doxyfile | doxygen - > /dev/null 2>&1
-python3 ecss/tools/ecss.py generate || exit 1
+# exit 3: the rms export is refused (a decision or a baseline without its actor): RED, the documents and the site say why
+python3 ecss/tools/ecss.py generate; g=$?
+(( g == 3 )) && rc=1
+(( g == 0 || g == 3 )) || exit 1
 mkdir -p "${OUT}/svg"
 
 say "site: doxygen ecss/Doxyfile ($(doxygen --version), $(dot -V 2>&1 | awk '{print $1, $5}'))"
@@ -108,7 +111,10 @@ s = json.load(open(sys.argv[1] + "/summary.json"))
 w = sum(1 for l in open(sys.argv[1] + "/doxygen_warnings.txt") if l.strip())
 print("   %d requirements (%d SRS, %d ICD), %d verified; %d tests, %d scenarios; %d documents; doxygen warnings: %d"
       % (s["requirements"], s["srs"], s["icd"], s["verified"], s["tests"], s["scenarios"], s["documents"], w))
-print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] else "FAILED") if s["pipeline_ran"] else "not run", s["mode"]))
+print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] else "FAILED") if s["pipeline_ran"] else "not run",
+                                             s["mode"] + (" REFUSED (RED)" if s["refusal"] else "")))
+if s["refusal"]:
+    print("   RED: " + s["refusal"])
 print("   evidence: commit %s (%s), %s; release tag %s" % (s["evidence_commit"][:12] or "not recorded", s["evidence_state"] or "?",
                                                          s["environment"], s["tag"]))
 for f in s["config_flags"]:

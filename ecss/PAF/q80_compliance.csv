@@ -1,7 +1,7 @@
 clause,subject,category_D,compliance,reference,remark
-5.1.1,Organization,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
-5.1.2.1,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
-5.1.2.2,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>",One maintainer holds every role; the rms export does not yet record who performed each step (actors unrecorded). Closes when the export names the actors.
+5.1.1,Organization,Y,PC,"PAF/SPAP.md <5.1>, <5.2>","One maintainer holds every role; the rms export does not yet record who performed each step, and ecss.py refuses it until it does. Closes with OI-05."
+5.1.2.1,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>","One maintainer holds every role; the rms export does not yet record who performed each step, and ecss.py refuses it until it does. Closes with OI-05."
+5.1.2.2,Responsibility and authority,Y,PC,"PAF/SPAP.md <5.1>, <5.2>","One maintainer holds every role; the rms export does not yet record who performed each step, and ecss.py refuses it until it does. Closes with OI-05."
 5.1.2.3,Responsibility and authority,Y,NA,-,No delegation to a lower-level supplier.
 5.1.3.1,Resources,Y,C,PAF/SPAP.md <5.3>,
 5.1.3.2,Resources,N,NA,-,Not applicable to category D (Table D-2).

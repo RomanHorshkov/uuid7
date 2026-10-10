@@ -64,4 +64,6 @@ build/ecss/rms/export.sh <db-root> <actor-uid>          # package export -> rms_
 ecss/make.sh                                            # now generated from the rms; repository links missing there are reported
 ```
 
+An export in which a decision (approval, review outcome, RID disposition, verification) or a baseline names no actor is refused: RED, exit 1, the front page says why. Each baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description), else it is a configuration flag. `ECSS_RMS_EXPORT=<dir>` reads another export.
+
 Without `rms_export/package.json` the generator uses the CSVs and the tags. With it, the rms's artifacts, links and baselines are the truth, the fresh run's results are shown with the rms's recorded verdicts, and any tag or note the rms does not hold is listed as drift in `DJF/TRACE.md`.
