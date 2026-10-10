@@ -18,7 +18,7 @@ This SValP describes how uuid7 is validated: that the library, as built and pack
 
 ### 4.1 General
 
-Validation is against the technical specification only: there is no requirements baseline (\ref UUID7_DOC_TAILORING "tailoring"), and the consumers validate the library within their systems. The effort is the full regression on every change, automated; independence is not required (category D). All code is written by hand: no separate activity for generated code. The quality requirements are validated like the others (UUID7-SRS-040, UUID7-SRS-060, UUID7-SRS-090, UUID7-SRS-091).
+Validation is against the technical specification only: there is no requirements baseline (\ref UUID7_DOC_TAILORING "tailoring"), and the consumers validate the library within their systems. The effort is the full regression on every change, automated; independence is not required (category D). All code is written by hand: no separate activity for generated code. The quality requirements are validated like the others (UUID7-SRS-040, UUID7-SRS-050 to UUID7-SRS-054, UUID7-SRS-060, UUID7-SRS-091).
 
 ### 4.2 Organization
 

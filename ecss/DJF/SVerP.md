@@ -84,7 +84,7 @@ One software item, the library; all its code is written by hand: there is no aut
 
 #### 6.3.1 Activities
 
-The quality requirements of the SRS <5.10> and the SPAP's metrics are verified by analysis at every refresh: coverage against the proposed figures (UUID7-SRS-090), header documentation (UUID7-SRS-091), warnings (UUID7-SRS-060), generation cost (UUID7-SRS-040).
+The quality requirements of the SRS <5.10> and the SPAP's metrics are verified by analysis at every refresh: coverage against the figures proposed in the \ref UUID7_DOC_SPAP "SPAP" <5.5>, header documentation (UUID7-SRS-091), warnings (UUID7-SRS-060), the technical budgets (UUID7-SRS-040, UUID7-SRS-050 to UUID7-SRS-054).
 
 #### 6.3.2 Inputs
 

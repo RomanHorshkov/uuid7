@@ -18,7 +18,7 @@
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
  * @date    may 2026
  *
- * @satisfies UUID7-SRS-051 UUID7-SRS-052 UUID7-SRS-063 UUID7-SRS-081 UUID7-SRS-100
+ * @satisfies UUID7-SRS-051 UUID7-SRS-052 UUID7-SRS-053 UUID7-SRS-054 UUID7-SRS-081 UUID7-SRS-100
  */
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
@@ -269,7 +269,7 @@
  * silently truncated on encode and sort BEFORE every earlier id — the generator refuses it instead.
  *
  * @ingroup uuid7_cmp_gen
- * @satisfies UUID7-SRS-012
+ * @satisfies UUID7-SRS-007
  */
 #define V7_MS_LIMIT         (UINT64_C(1) << (8u * V7_MS_BYTES))
 
@@ -339,7 +339,7 @@ static _Atomic uint64_t g_v7_state = 0;
  * Stored atomically to avoid data races between callers of `uuid7_gen()` and `uuid7_set_rng_func()`.
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-SRS-029 UUID7-SRS-050
+ * @satisfies UUID7-SRS-028 UUID7-SRS-050
  */
 static _Atomic(uuid7_rng_function_t) g_uuid_rng_func = NULL;
 
@@ -402,7 +402,7 @@ void uuid7_test_reset_state(void)
  * @return negative on failure (e.g., if /dev/urandom cannot be read).
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-SRS-019 UUID7-SRS-025 UUID7-SRS-070 UUID7-SRS-080
+ * @satisfies UUID7-SRS-019 UUID7-SRS-024 UUID7-SRS-051
  */
 static int _default_rng(void* buf, size_t n);
 
@@ -421,7 +421,7 @@ static int _default_rng(void* buf, size_t n);
  * @return -3 if @p uuid7_buf does not encode the RFC variant bits.
  *
  * @ingroup uuid7_cmp_import
- * @satisfies UUID7-SRS-014 UUID7-SRS-015 UUID7-SRS-017 UUID7-SRS-018
+ * @satisfies UUID7-SRS-016 UUID7-SRS-017
  */
 static int _raise_g_v7_state_from_uuid(const void* uuid7_buf);
 
@@ -474,7 +474,7 @@ static inline uint64_t _get_g_v7_state(void)
  * @return The currently configured RNG function, or NULL if none is set.
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-SRS-029
+ * @satisfies UUID7-SRS-028
  */
 static inline uuid7_rng_function_t _load_rng_func(void)
 {
@@ -490,7 +490,7 @@ static inline uuid7_rng_function_t _load_rng_func(void)
  * @return The installed RNG callback, never NULL.
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-SRS-021 UUID7-SRS-022
+ * @satisfies UUID7-SRS-021 UUID7-SRS-020
  */
 static inline uuid7_rng_function_t _ensure_rng_func(void)
 {
@@ -555,7 +555,7 @@ static inline uint64_t _get_realtime_ms(void)
  * @return 0 on success, negative on error (only detectable for default RNG).
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-SRS-023
+ * @satisfies UUID7-SRS-024 UUID7-SRS-005
  */
 static inline int _fill_random(void* buf, size_t n)
 {

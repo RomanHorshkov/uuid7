@@ -4,7 +4,7 @@
 
 ## 1 Introduction
 
-This SRS is the main part of the technical specification (TS) of uuid7, a C library that generates time-ordered UUIDs of version 7. It states every functional and non-functional requirement the library meets, each with its rationale, its verification method and its upper-level source, so that the library can be verified, validated and reused as a category D software item (ECSS-E-ST-40 5.4.2.1). It is prepared for the PDR. The requirements live in the rms (project `UUID7`) and in `ecss/TS/requirements.csv`; this document is generated from them, so the text here and the rms never differ.
+This SRS is the main part of the technical specification (TS) of uuid7, a C library that generates time-ordered UUIDs of version 7. It states every functional and non-functional requirement the library meets, each with its rationale, its verification method and its upper-level source, so that the library can be verified, validated and reused as a category D software item (ECSS-E-ST-40 5.4.2.1). It is prepared for the PDR. The requirements live in the rms (project `UUID7`), `ecss/TS/requirements.csv` is a snapshot of its export, and this document is generated from the export, so the text here and the rms never differ. Since UUID7-CR-004 the requirements state what a user of the library needs; how the library meets them is the \ref UUID7_DOC_SDD "SDD"'s, and its trade-offs are rms decisions (`UUID7-DEC-nnn`).
 
 ## 2 Applicable and reference documents
 
@@ -40,7 +40,7 @@ uuid7 is a foundation library (tier 1): it knows nothing of the platform. The pl
 
 ### 5.1 General
 
-Each requirement has a unique identifier `UUID7-SRS-nnn` (`UUID7-ICD-nnn` for the interface, in the ICD), a verification method (T test, A analysis, I inspection, R review) and an upper-level source: RFC 9562, a platform rule or a platform need. The requirements are characterised by the software criticality category (all D) and the rms lifecycle status with who set it; those statuses come from the scripted rms demonstration (\ref UUID7_DOC_JRR "JRR"), and the rms criticality is a workflow priority, not an ECSS category (\ref tailoring_scales "tailoring <3.1>"). Section <7> gives the traceability to the sources.
+Each requirement has a unique identifier `UUID7-SRS-nnn` (the interface items, `UUID7-IF-nnn`, are in the ICD), a verification method (T test, A analysis, I inspection, R review) and an upper-level source: RFC 9562, a platform rule or a platform need. The requirements are characterised by the software criticality category (all D) and the rms lifecycle status with who set it; those statuses come from the scripted rms demonstration (\ref UUID7_DOC_JRR "JRR"), and the rms criticality is a workflow priority, not an ECSS category (\ref tailoring_scales "tailoring <3.1>"). Section <7> gives the traceability to the sources.
 
 ### 5.2 Functional requirements
 
@@ -58,7 +58,7 @@ The external interfaces (the header, its types and functions, the shared object'
 
 ### 5.5 Operational requirements
 
-The library has no operational mode and no mode transition: initialisation is optional (UUID7-SRS-021), and every call is valid at any time from any thread (UUID7-SRS-028, UUID7-SRS-029). There is no human-machine interaction.
+The library has no operational mode and no mode transition: initialisation is optional (UUID7-SRS-021), and every call is valid at any time from any thread (UUID7-SRS-028). There is no human-machine interaction.
 
 ### 5.6 Resources requirements
 
@@ -68,13 +68,13 @@ The hardware environment is in <4.2>. The software used with the library is the 
 
 ### 5.7 Design requirements and implementation constraints
 
-The applicable coding standard is \ref UUID7_DOC_CODING_STANDARD "the coding standard"; the library is designed for intended reuse (UUID7-SRS-063). It reuses no third-party code; it has no in-flight modification and no numerical accuracy concern (integer arithmetic only).
+The applicable coding standard is \ref UUID7_DOC_CODING_STANDARD "the coding standard"; the library is designed for intended reuse (UUID7-SRS-052). It reuses no third-party code; it has no in-flight modification and no numerical accuracy concern (integer arithmetic only).
 
 <!-- ecss:reqs doc=SRS section=5.7 level=4 groups=no -->
 
 ### 5.8 Security and privacy requirements
 
-The functional requirements UUID7-SRS-011, UUID7-SRS-018, UUID7-SRS-019, UUID7-SRS-024 and UUID7-SRS-025 also carry security; the security analysis is the \ref UUID7_DOC_SSAR "SSAR".
+The functional requirements UUID7-SRS-005, UUID7-SRS-017, UUID7-SRS-019, UUID7-SRS-024 and UUID7-SRS-041 also carry security; the security analysis is the \ref UUID7_DOC_SSAR "SSAR".
 
 <!-- ecss:reqs doc=SRS section=5.8 level=4 groups=no -->
 
@@ -106,7 +106,7 @@ None: the library implements no safety function and is of criticality category D
 
 ### 5.15 Data definition and database requirements
 
-The only data exchanged is the 16-byte identifier, specified by UUID7-SRS-001 to UUID7-SRS-005 and stored by the callers as is (a floor is an identifier read back, UUID7-SRS-014). The library has no database.
+The only data exchanged is the 16-byte identifier, specified by UUID7-SRS-001 and UUID7-SRS-005 and stored by the callers as is (a floor is an identifier read back, UUID7-SRS-016). The library has no database.
 
 ### 5.16 Human factors related requirements
 
@@ -129,6 +129,10 @@ Every requirement is validated by the approach of its method; the cases are spec
 The upper-level sources stand where a requirements baseline would (the RB is tailored out, see \ref UUID7_DOC_TAILORING "the tailoring"). The downward traceability to design and tests is in the DJF: \ref UUID7_DOC_TRACE "the matrices".
 
 <!-- ecss:upward-trace doc=SRS -->
+
+The requirements of the first issue that left the specification under UUID7-CR-004, each with the item that replaced it or the reason it was made obsolete:
+
+<!-- ecss:retired doc=SRS -->
 
 ## 8 Logical model description
 

@@ -268,7 +268,7 @@ static void reset_state(void)
 /**
  * @brief uuid7_gen() must remain usable even if the caller never explicitly calls uuid7_init() or uuid7_set_rng_func().
  *
- * @verifies UUID7-SRS-021 UUID7-SRS-002 UUID7-SRS-003
+ * @verifies UUID7-SRS-021 UUID7-SRS-001
  */
 static void test_default_rng_used_when_uninitialized(void** state)
 {
@@ -290,7 +290,7 @@ static void test_default_rng_used_when_uninitialized(void** state)
  * - byte 8 stores variant bits overlaid onto scripted random byte 0
  * - bytes 9..15 store scripted random bytes 1..7 unchanged
  *
- * @verifies UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-005
+ * @verifies UUID7-SRS-001 UUID7-SRS-005
  */
 static void test_version_variant_and_tail_bytes(void** state)
 {
@@ -334,7 +334,7 @@ static void test_timestamp_matches_override(void** state)
 /**
  * @brief With a fixed millisecond, packed (ms, seq) state must be strictly increasing for every generated UUID.
  *
- * @verifies UUID7-SRS-004 UUID7-SRS-007 UUID7-SRS-009
+ * @verifies UUID7-SRS-007
  */
 static void test_monotonic_non_decreasing_many(void** state)
 {
@@ -367,7 +367,7 @@ static void test_monotonic_non_decreasing_many(void** state)
  *
  * The next UUID must roll into the next logical millisecond and restart the sequence at zero.
  *
- * @verifies UUID7-SRS-004 UUID7-SRS-010
+ * @verifies UUID7-SRS-041 UUID7-SRS-007
  */
 static void test_overflow_advances_logical_ms(void** state)
 {
@@ -409,7 +409,7 @@ static void test_overflow_advances_logical_ms(void** state)
 /**
  * @brief The generator must reject NULL output buffers deterministically.
  *
- * @verifies UUID7-SRS-031 UUID7-ICD-007
+ * @verifies UUID7-SRS-100
  */
 static void test_null_buffer_rejected(void** state)
 {
@@ -423,7 +423,7 @@ static void test_null_buffer_rejected(void** state)
 /**
  * @brief uuid7_set_rng_func(NULL) must restore the built-in default RNG.
  *
- * @verifies UUID7-SRS-020 UUID7-ICD-008
+ * @verifies UUID7-SRS-020
  */
 static void test_rng_reset_to_default(void** state)
 {
@@ -448,7 +448,7 @@ static void test_rng_reset_to_default(void** state)
 /**
  * @brief uuid7_init(fn, NULL) must install the supplied RNG callback.
  *
- * @verifies UUID7-SRS-020 UUID7-ICD-004
+ * @verifies UUID7-SRS-020
  */
 static void test_init_accepts_custom_rng(void** state)
 {
@@ -471,7 +471,7 @@ static void test_init_accepts_custom_rng(void** state)
  *
  * A previously installed custom RNG must not stay in place.
  *
- * @verifies UUID7-SRS-020 UUID7-ICD-004
+ * @verifies UUID7-SRS-020
  */
 static void test_init_null_uses_default_rng(void** state)
 {
@@ -496,7 +496,7 @@ static void test_init_null_uses_default_rng(void** state)
  *
  * The next generated UUID is strictly newer than the imported one.
  *
- * @verifies UUID7-SRS-014
+ * @verifies UUID7-SRS-016
  */
 static void test_init_raises_state_from_last_uuid(void** state)
 {
@@ -549,7 +549,7 @@ static void test_repeated_init_does_not_move_state_backward(void** state)
 /**
  * @brief Imported state must be rejected when the version nibble is not 7.
  *
- * @verifies UUID7-SRS-017 UUID7-ICD-004
+ * @verifies UUID7-SRS-017
  */
 static void test_init_rejects_invalid_import_version(void** state)
 {
@@ -575,7 +575,7 @@ static void test_init_rejects_invalid_import_version(void** state)
 /**
  * @brief Imported state must be rejected when the RFC variant bits are not 10xxxxxx.
  *
- * @verifies UUID7-SRS-017 UUID7-ICD-004
+ * @verifies UUID7-SRS-017
  */
 static void test_init_rejects_invalid_import_variant(void** state)
 {
@@ -601,7 +601,7 @@ static void test_init_rejects_invalid_import_variant(void** state)
 /**
  * @brief The public error contract for RNG failure is -2.
  *
- * @verifies UUID7-SRS-024 UUID7-ICD-007
+ * @verifies UUID7-SRS-024
  */
 static void test_default_rng_failure_returns_minus2(void** state)
 {
@@ -685,7 +685,7 @@ static int cmp_uuid(const void* a, const void* b)
 /**
  * @brief Concurrent callers must never receive duplicate UUIDs.
  *
- * @verifies UUID7-SRS-007 UUID7-SRS-028
+ * @verifies UUID7-SRS-028 UUID7-SRS-007
  */
 static void test_multithreaded_uniqueness(void** state)
 {
@@ -728,7 +728,7 @@ static void test_multithreaded_uniqueness(void** state)
 /**
  * @brief Even if the wall clock moves backward, the packed monotonic state must keep increasing.
  *
- * @verifies UUID7-SRS-007 UUID7-SRS-009
+ * @verifies UUID7-SRS-007
  */
 static void test_time_regression_monotonic(void** state)
 {
@@ -760,7 +760,7 @@ static void test_time_regression_monotonic(void** state)
  *
  * The sequence restarts from zero on each rollover.
  *
- * @verifies UUID7-SRS-010
+ * @verifies UUID7-SRS-041
  */
 static void test_overflow_multiple_ms_advances(void** state)
 {
@@ -815,7 +815,7 @@ static void test_overflow_multiple_ms_advances(void** state)
 /**
  * @brief Stress the generator in one thread and confirm all produced UUIDs are unique after lexicographic sorting.
  *
- * @verifies UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-007
+ * @verifies UUID7-SRS-001 UUID7-SRS-007
  */
 static void test_heavy_single_thread_uniqueness(void** state)
 {
@@ -850,7 +850,7 @@ static void test_heavy_single_thread_uniqueness(void** state)
  * appends sequential across a restart / snapshot restore / clock rollback. The tail still comes from the RNG installed before the
  * import. NULL is rejected.
  *
- * @verifies UUID7-SRS-014 UUID7-SRS-015 UUID7-SRS-032 UUID7-ICD-005
+ * @verifies UUID7-SRS-016 UUID7-SRS-100
  */
 static void test_raise_floor_orders_after_import(void** state)
 {
@@ -885,7 +885,7 @@ static void test_raise_floor_orders_after_import(void** state)
  * which would need bound+1 — is refused with -3 and leaves the state untouched. Advancing the wall clock by one millisecond lifts the
  * bound by one and the refused reservation succeeds.
  *
- * @verifies UUID7-SRS-011 UUID7-SRS-008 UUID7-SRS-010 UUID7-ICD-007
+ * @verifies UUID7-SRS-041 UUID7-SRS-006
  */
 static void test_gen_refuses_beyond_ahead_bound(void** state)
 {
@@ -920,7 +920,7 @@ static void test_gen_refuses_beyond_ahead_bound(void** state)
  * Such an id is a poisoned import (or a runaway clock): uuid7_raise_floor() and uuid7_init() must refuse it with -4 and leave the generator
  * exactly where it was. The 48-bit maximum timestamp is the canonical poison value.
  *
- * @verifies UUID7-SRS-018 UUID7-ICD-004 UUID7-ICD-005
+ * @verifies UUID7-SRS-017
  */
 static void test_raise_floor_refuses_far_future(void** state)
 {
@@ -952,7 +952,7 @@ static void test_raise_floor_refuses_far_future(void** state)
  * Pins the accessor + the healthy invariant (the failure itself isn't injectable through the test hooks, which bypass clock_gettime
  * entirely).
  *
- * @verifies UUID7-SRS-027 UUID7-ICD-006
+ * @verifies UUID7-SRS-026
  */
 static void test_clock_failure_count_healthy_is_zero(void** state)
 {
@@ -966,7 +966,7 @@ static void test_clock_failure_count_healthy_is_zero(void** state)
 /**
  * @brief The public constants carry their documented values.
  *
- * @verifies UUID7-ICD-001 UUID7-ICD-002
+ * @verifies UUID7-SRS-001 UUID7-SRS-122
  */
 static void test_public_constants(void** state)
 {
@@ -1012,7 +1012,7 @@ static void test_timestamp_tracks_realtime(void** state)
 /**
  * @brief A wall-clock millisecond later than the last reservation restarts the sequence at zero.
  *
- * @verifies UUID7-SRS-008 UUID7-SRS-004
+ * @verifies UUID7-SRS-006
  */
 static void test_new_millisecond_restarts_sequence(void** state)
 {
@@ -1043,7 +1043,7 @@ static void test_new_millisecond_restarts_sequence(void** state)
 /**
  * @brief A reservation that would leave the 48-bit timestamp field is refused with -3 and leaves the state untouched.
  *
- * @verifies UUID7-SRS-012 UUID7-ICD-007
+ * @verifies UUID7-SRS-007
  */
 static void test_gen_refuses_48bit_limit(void** state)
 {
@@ -1071,7 +1071,7 @@ static void test_gen_refuses_48bit_limit(void** state)
 /**
  * @brief Identifiers compare with memcmp() in generation order, across sequence rollovers and clock steps.
  *
- * @verifies UUID7-SRS-013
+ * @verifies UUID7-SRS-007
  */
 static void test_ids_sort_in_generation_order(void** state)
 {
@@ -1111,7 +1111,7 @@ static int failing_rng(void* buf, const size_t n)
 /**
  * @brief A failed RNG call returns -2, writes nothing to the output buffer and consumes no sequence value.
  *
- * @verifies UUID7-SRS-023 UUID7-SRS-024 UUID7-ICD-007
+ * @verifies UUID7-SRS-024
  */
 static void test_rng_failure_consumes_no_sequence(void** state)
 {
@@ -1147,7 +1147,7 @@ static void test_rng_failure_consumes_no_sequence(void** state)
 /**
  * @brief uuid7_init() installs the RNG before it validates the imported id, so a refused import still selects the RNG.
  *
- * @verifies UUID7-ICD-004 UUID7-SRS-020
+ * @verifies UUID7-SRS-020
  */
 static void test_init_installs_rng_before_import(void** state)
 {
@@ -1198,7 +1198,7 @@ static void* thread_swap_rng(void* arg)
 /**
  * @brief RNG changes and floor imports racing with generation never break uniqueness or per-thread order.
  *
- * @verifies UUID7-SRS-029 UUID7-SRS-028
+ * @verifies UUID7-SRS-028
  */
 static void test_concurrent_rng_swap(void** state)
 {
@@ -1246,7 +1246,7 @@ static void test_concurrent_rng_swap(void** state)
 /**
  * @brief uuid7_raise_floor() refuses an identifier that is not version 7 (-2) or not variant 0b10 (-3) and keeps the state.
  *
- * @verifies UUID7-SRS-017 UUID7-ICD-005
+ * @verifies UUID7-SRS-017
  */
 static void test_raise_floor_rejects_invalid(void** state)
 {

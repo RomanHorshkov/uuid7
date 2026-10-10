@@ -16,7 +16,7 @@ Output: `build/ecss/md/` (the documents as Markdown), `build/ecss/html/index.htm
 
 ## From requirement to evidence
 
-1. A requirement is an rms artifact (`UUID7-SRS-nnn`, `UUID7-ICD-nnn`) with rationale, criteria, method (test, analysis, inspection, review) and source. Seed and fallback: `TS/requirements.csv`.
+1. A requirement is an rms artifact (`UUID7-SRS-nnn`; the interface items, `UUID7-IF-nnn`, are of kind interface and verified through the requirements they satisfy) with rationale, criteria, method (test, analysis, inspection, review) and source; the design trade-offs are rms decisions, rationales and assumptions (`UUID7-DEC-nnn`, `UUID7-RAT-nnn`, `UUID7-ASM-nnn`). They are changed in the rms only: `TS/requirements.csv` and `DDF/decisions.csv` are snapshots of its export (`ecss/tools/ecss.py snapshot`), never sources, and the fallback when no export is present.
 2. The code names what it implements: `@ingroup uuid7_cmp_*` (the SDD component) and `@satisfies UUID7-SRS-nnn` on every documented symbol of `app/`.
 3. Every test names what it verifies: `@verifies UUID7-SRS-nnn` (`tests/ITs`, `tests/plantuml`, `tests/stress/stress.c`, `tests/package/smoke.c`); the other verification cases (analyses, inspections, reviews, pipeline gates) are `DJF/verification_cases.csv`.
 4. `tests/plantuml` holds scenario tests: real tests that assert, and through `puml_trace.h` write one sequence diagram each to `build/ecss/puml/`. They run in the integration matrix like the other suite.

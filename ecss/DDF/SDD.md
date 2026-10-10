@@ -50,7 +50,7 @@ The exported symbols are held to the header by the ABI gate ({{fig:abi_exports}}
 
 ### 4.5 Long lifetime software
 
-The library depends on ISO C11 and four POSIX calls; the only Linux-specific call (`getrandom(2)`) has a portable fallback (`/dev/urandom`). The 48-bit millisecond field lasts until the year 10889; the generator refuses rather than wraps (UUID7-SRS-012).
+The library depends on ISO C11 and four POSIX calls; the only Linux-specific call (`getrandom(2)`) has a portable fallback (`/dev/urandom`). The 48-bit millisecond field lasts until the year 10889; the generator refuses rather than wraps (UUID7-SRS-007).
 
 ### 4.6 Memory and PU budget
 

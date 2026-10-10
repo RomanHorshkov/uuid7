@@ -47,13 +47,13 @@ Risk level accepted without treatment: low (5.11.4a NOTE 2); every medium risk i
 
 | Risk | Treatment | Requirements (5.11.4d) | Verification | Status |
 |---|---|---|---|---|
-| R1 | refuse a floor beyond now + UUID7_MAX_AHEAD_MS (-4), state untouched | UUID7-SRS-018 | UUID7-TC-IT-raise_floor_refuses_far_future, UUID7-TC-SD-abuse_bounds | implemented, verified |
-| R2 | refuse a reservation beyond the bound or the 48-bit field (-3) | UUID7-SRS-011, UUID7-SRS-012 | UUID7-TC-IT-gen_refuses_beyond_ahead_bound, UUID7-TC-IT-gen_refuses_48bit_limit | implemented, verified |
-| R3 | kernel CSPRNG with fallback; failure returns -2 and writes nothing; partial bytes zeroed | UUID7-SRS-019, UUID7-SRS-024, UUID7-SRS-025 | UUID7-IN-001, UUID7-TC-IT-rng_failure_consumes_no_sequence | implemented, verified |
+| R1 | refuse a floor beyond now + UUID7_MAX_AHEAD_MS (-4), state untouched | UUID7-SRS-017 | UUID7-TC-IT-raise_floor_refuses_far_future, UUID7-TC-SD-abuse_bounds | implemented, verified |
+| R2 | refuse a reservation beyond the bound or the 48-bit field (-3) | UUID7-SRS-041, UUID7-SRS-007 | UUID7-TC-IT-gen_refuses_beyond_ahead_bound, UUID7-TC-IT-gen_refuses_48bit_limit | implemented, verified |
+| R3 | kernel CSPRNG with fallback; failure returns -2 and writes nothing; partial bytes zeroed | UUID7-SRS-019, UUID7-SRS-024 | UUID7-IN-001, UUID7-TC-IT-rng_failure_consumes_no_sequence | implemented, verified |
 | R4 | documented: a replacement must be as strong (accepted, the caller's choice) | - | SUM <9.9> | accepted |
-| R5 | documented: identifiers are not secrets; no state disclosed beyond them | UUID7-SRS-071 | UUID7-RV-002; SUM <9.4> | transferred to the consumers' analyses (5.11.4b) |
-| R6 | ordering kept whatever the clock does; bounded borrowing | UUID7-SRS-009, UUID7-SRS-011 | UUID7-TC-IT-time_regression_monotonic | implemented, verified |
-| R7 | `O_CLOEXEC`, close on every path | UUID7-SRS-070 | UUID7-IN-001 | implemented, verified |
+| R5 | documented: identifiers are not secrets; no state disclosed beyond them | UUID7-SRS-062 | UUID7-RV-002; SUM <9.4> | transferred to the consumers' analyses (5.11.4b) |
+| R6 | ordering kept whatever the clock does; bounded borrowing | UUID7-SRS-007, UUID7-SRS-041 | UUID7-TC-IT-time_regression_monotonic | implemented, verified |
+| R7 | `O_CLOEXEC`, close on every path | UUID7-SRS-051 | UUID7-IN-001 | implemented, verified |
 | R8 | SHA256SUMS with every release; consumers pin each deb by SHA-256; reproducible builds; hardened binaries | UUID7-SRS-121, UUID7-SRS-072 | UUID7-AN-008, UUID7-TC-PL-hardening | implemented, verified |
 | R9 | no allocation, fixed-size buffers, sanitizers in every run, `-fanalyzer` | UUID7-SRS-051, UUID7-SRS-060 | UUID7-AN-001, UUID7-AN-005 | implemented, verified |
 

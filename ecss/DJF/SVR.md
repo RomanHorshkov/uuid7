@@ -46,7 +46,7 @@ At category D the requirements verification report (5.8.3.2a eo b), the architec
 
 <!-- ecss:checks -->
 
-Structural code coverage achievement (5.8.3.5b to d; the figures for category D are to be agreed with the customer; UUID7-SRS-090 proposes them and no customer has agreed them, \ref UUID7_DOC_SDP "SDP" <4.6>, OI-02):
+Structural code coverage achievement (5.8.3.5b to d; the figures for category D are to be agreed with the customer; the \ref UUID7_DOC_SPAP "SPAP" <5.5> proposes them and no customer has agreed them, \ref UUID7_DOC_SDP "SDP" <4.6>, OI-02):
 
 <!-- ecss:coverage -->
 
@@ -81,7 +81,7 @@ The quality requirements (SRS <5.10> and the SPAP's metrics):
 
 ### 5.1 Technical budgets and margins computation
 
-Memory: the sizes of the release object (`size`, `nm -S`): code, initialised and static data; the stack per call from `gcc -fstack-usage` on the release build, followed through the references between the functions (no recursion, no variable-length array). Processing: the mean cost per identifier of the single-thread benchmark (10 runs of 1,000,000 identifiers after a warm-up) in every profile and linkage; the margin is the budget of UUID7-SRS-040 minus the release measure. The budgets are measured, not estimated: the code exists.
+Memory: the sizes of the release object (`size`, `nm -S`): code, initialised and static data; the stack per call from `gcc -fstack-usage` on the release build, followed through the references between the functions (no recursion, no variable-length array). Processing: the mean cost per identifier of the single-thread benchmark (10 runs of 1,000,000 identifiers after a warm-up) in every profile and linkage; the margin is the budget of UUID7-SRS-040 minus the release measure. Each budget is a requirement (UUID7-SRS-040, UUID7-SRS-050, UUID7-SRS-051, UUID7-SRS-053, UUID7-SRS-054) with its verification case. The budgets are measured, not estimated: the code exists.
 
 ### 5.2 Software budget (sizing and timing)
 

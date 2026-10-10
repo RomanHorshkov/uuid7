@@ -99,10 +99,11 @@ say "documents: ecss/tools/ecss.py"
 rm -rf "${OUT}/md" "${OUT}/html" "${OUT}/svg" "${OUT}/xml_api" "${OUT}/rms"
 python3 ecss/tools/ecss.py components-dox || exit 1
 python3 ecss/tools/ecss.py api-doxyfile | doxygen - > /dev/null 2>&1
-# exit 3: the rms export is refused (a decision or a baseline without its actor): RED, the documents and the site say why
+# exit 3: the rms export is refused (a decision or a baseline without its actor); exit 4: the traceability is incomplete (an item
+# not verified, a case verifying none, a repository link the rms lacks, a stale snapshot): RED, the documents and the site say why
 python3 ecss/tools/ecss.py generate; g=$?
-(( g == 3 )) && rc=1
-(( g == 0 || g == 3 )) || exit 1
+(( g == 3 || g == 4 )) && rc=1
+(( g == 0 || g == 3 || g == 4 )) || exit 1
 mkdir -p "${OUT}/svg"
 
 say "site: doxygen ecss/Doxyfile ($(doxygen --version), $(dot -V 2>&1 | awk '{print $1, $5}'))"
@@ -133,6 +134,10 @@ print("   pipeline: %s; source of truth: %s" % (("GREEN" if s["pipeline_green"] 
                                              s["mode"] + (" REFUSED (RED)" if s["refusal"] else "")))
 if s["refusal"]:
     print("   RED: " + s["refusal"])
+print("   traceability: %d of %d verified, %d case(s) verifying no requirement, drift %d; snapshot %s"
+      % (s["verified"], s["requirements"], len(s["orphan_cases"]), s["drift"], s["snapshot"]))
+if s["trace_red"]:
+    print("   RED: traceability: " + s["trace_red"])
 print("   evidence: commit %s (%s), %s; release tag %s" % (s["evidence_commit"][:12] or "not recorded", s["evidence_state"] or "?",
                                                          s["environment"], s["tag"]))
 for f in s["config_flags"]:

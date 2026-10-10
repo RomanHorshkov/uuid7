@@ -26,6 +26,7 @@ RID: review item discrepancy, recorded as an rms review-comment.
 | \anchor rev_pdr <span class="ecss-def">PDR</span> | uuid7 preliminary design review | SRR, SWRR |
 | \anchor rev_cdr <span class="ecss-def">CDR</span> | uuid7 critical design review | DDR, software validation specification review |
 | \anchor rev_qr <span class="ecss-def">QR</span> | uuid7 qualification review | software delivery review board |
+| \anchor rev_qr2 <span class="ecss-def">QR2</span> | uuid7 delta qualification review: a change after the QR (UUID7-CR-004) reviewed on its own data package (the changed TS, DDF and DJF items), closed by baseline QR-2 | software delivery review board |
 | \anchor rev_ar <span class="ecss-def">AR</span> | uuid7 acceptance review | software delivery review board |
 | \anchor rev_orr <span class="ecss-def">ORR</span> | not held: the library has no operation of its own (\ref UUID7_DOC_TAILORING "tailoring" <4>) | - |
 

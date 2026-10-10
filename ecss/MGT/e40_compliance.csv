@@ -73,7 +73,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.3.6.1b,Flight software review phasing,Y,NA,-,Not flight software.
 5.3.6.2a,Ground software review phasing,Y,NA,-,Not ground segment software.
 5.3.7.1a,Interface management procedures,Y,C,MGT/SDP.md <5.2.3>; TS/ICD.md,ABI gate and SemVer.
-5.3.8.1a,Technical budgets and margin philosophy for the project,Y,PC,DJF/SVR.md <5>,"No customer specified budgets (no RB); the supplier's budgets are UUID7-SRS-040, -050 and -051; stack and code size are measured without a budget and no budget is recorded in the rms at the reviews. Closes with OI-02, OI-08."
+5.3.8.1a,Technical budgets and margin philosophy for the project,Y,PC,DJF/SVR.md <5>,"No customer specified budgets (no RB); the supplier's budgets are UUID7-SRS-040 (time), UUID7-SRS-050 (static data), UUID7-SRS-051 (heap), UUID7-SRS-053 (stack) and UUID7-SRS-054 (code size), each measured with its margin at every refresh and recorded as an rms result at the delta qualification review QR2 (UUID7-CR-004). Closes with OI-02."
 5.3.8.2a,Technical budgets and margin computation,Y,PC,DJF/SVR.md <5>,"The computation is stated and run at every refresh, but not agreed with a customer. Closes with OI-02."
 5.3.8.2b,Technical budgets and margin computation,Y,C,DJF/SVR.md <5>,
 5.3.9.1a,E40 compliance matrix,Y,C,MGT/E40_COMPLIANCE.md,This matrix.
@@ -186,9 +186,9 @@ clause,expected_output,category_D,compliance,reference,remark
 5.8.3.4a eo b,Detailed design verification report,N,NA,-,Not applicable to category D (Annex R).
 5.8.3.5a eo a,Software code traceability matrices,N,NA,-,Not applicable to category D (Annex R).
 5.8.3.5a eo b,Software code verification report,N,NA,-,Not applicable to category D (Annex R).
-5.8.3.5b,Code coverage verification report,"TBA (agreed figures, 5.8.3.5b table)",PC,DJF/SVR.md <4.4>,"Targets 80 % statement, 65 % decision (UUID7-SRS-090) proposed by the supplier and measured; TBA with a customer, none agreed. Closes with OI-02."
-5.8.3.5c,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (UUID7-SRS-090)."
-5.8.3.5d,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (UUID7-SRS-090)."
+5.8.3.5b,Code coverage verification report,"TBA (agreed figures, 5.8.3.5b table)",PC,DJF/SVR.md <4.4>,"Targets 80 % statement, 65 % decision (SPAP <5.5>) proposed by the supplier and measured; TBA with a customer, none agreed. Closes with OI-02."
+5.8.3.5c,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (SPAP <5.5>)."
+5.8.3.5d,Code coverage verification report,Y,C,DJF/SVR.md <4.4>,"Agreed figures: 80 % statement, 65 % decision (SPAP <5.5>)."
 5.8.3.5e,Code coverage verification report (object code),N/A (5.8.3.5e table),NA,-,Object code coverage: N/A for category D (5.8.3.5e table).
 5.8.3.5f,Robustness verification report,N,NA,-,Not applicable to category D (Annex R).
 5.8.3.6a eo a,Software unit tests traceability matrices,N,NA,-,Not applicable to category D (Annex R).

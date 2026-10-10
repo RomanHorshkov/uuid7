@@ -8,7 +8,7 @@ import os
 import re
 import sys
 
-ID = re.compile(r"\b(UUID7-(?:SRS|ICD)-\d{3})\b")
+ID = re.compile(r"\b(UUID7-(?:SRS|ICD|IF)-\d{3})\b")
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
     with open(os.path.join(HERE, "..", "..", "build", "ecss", "links.json"), encoding="utf-8") as f:

@@ -41,10 +41,10 @@ The criterion of each case (<7>); a C test passes when every assertion holds and
 | Item | Why not by test | Validated by |
 |---|---|---|
 | Clock failure behaviour (UUID7-SRS-026) | the test seams replace the clock read, so `clock_gettime()` failure cannot be injected without changing the code | inspection UUID7-IN-002 |
-| Entropy fallback and zero fill (UUID7-SRS-019, -025, -070, -080) | `getrandom(2)` and `/dev/urandom` failures cannot be provoked from a test without privileges or interposition | inspection UUID7-IN-001 |
-| Static and binary properties (UUID7-SRS-050 to -052, -060, -062 to -064, -090, -091, -121) | properties of the artifacts, not of a run | analyses UUID7-AN-001 to -010 |
-| Burst capacity and non-blocking (UUID7-SRS-030, -041, -022) | a property of every execution, not observable in one | analyses UUID7-AN-011, -012 |
-| Interface shape (UUID7-ICD-010, UUID7-SRS-071), initial state (UUID7-ICD-011), callback contract (UUID7-ICD-003), configuration (UUID7-SRS-122), error reporting (UUID7-SRS-100), static assertions (UUID7-SRS-081), coding standard (UUID7-SRS-061) | properties of the code's text | inspections and reviews UUID7-IN-003 to -008, UUID7-RV-001, -002 |
+| Entropy fallback and zero fill (UUID7-SRS-019, -024, -051, -081) | `getrandom(2)` and `/dev/urandom` failures cannot be provoked from a test without privileges or interposition | inspection UUID7-IN-001 |
+| Static and binary properties (UUID7-SRS-050 to -054, -060, -062, -064, -091, -121) | properties of the artifacts, not of a run | analyses UUID7-AN-001 to -005, -007 to -010, -013, -014 |
+| Burst capacity and non-blocking (UUID7-SRS-030, -041, -020) | a property of every execution, not observable in one | analyses UUID7-AN-011, -012 |
+| Interface shape (UUID7-SRS-001, UUID7-SRS-062), initial state (UUID7-SRS-021), callback contract (UUID7-SRS-020), configuration (UUID7-SRS-122), error reporting (UUID7-SRS-100), static assertions (UUID7-SRS-081) | properties of the code's text | inspections and reviews UUID7-IN-003 to -007, UUID7-RV-001, -002 |
 
 ### 5.6 Manually and automatically generated code
 

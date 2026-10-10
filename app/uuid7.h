@@ -26,7 +26,7 @@
  * (c) 2026
  *
  * @ingroup uuid7_cmp_api
- * @satisfies UUID7-ICD-010 UUID7-SRS-062
+ * @satisfies UUID7-SRS-001 UUID7-SRS-062
  */
 
 #ifndef UUID7_H
@@ -46,7 +46,7 @@
  * Callers must provide at least this many bytes to `uuid7_gen()`.
  *
  * @ingroup uuid7_cmp_api
- * @satisfies UUID7-ICD-001
+ * @satisfies UUID7-IF-001 UUID7-SRS-001
  */
 #define UUID7_SIZE_BYTES 16u
 
@@ -63,7 +63,7 @@
  * a loud boot error instead of a silent corruption. Override at compile time with `-DUUID7_MAX_AHEAD_MS=<ms>` if a deployment needs more.
  *
  * @ingroup uuid7_cmp_api
- * @satisfies UUID7-ICD-002 UUID7-SRS-122
+ * @satisfies UUID7-IF-001 UUID7-SRS-122 UUID7-SRS-041
  */
 #ifndef UUID7_MAX_AHEAD_MS
 #    define UUID7_MAX_AHEAD_MS 10000u
@@ -95,7 +95,7 @@
  * @return Negative value on failure.
  *
  * @ingroup uuid7_cmp_api
- * @satisfies UUID7-ICD-003
+ * @satisfies UUID7-IF-002 UUID7-SRS-020
  */
 typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
 
@@ -124,7 +124,7 @@ typedef int (*uuid7_rng_function_t)(void* buf, size_t n);
  *         floor is NOT raised.
  *
  * @ingroup uuid7_cmp_import
- * @satisfies UUID7-ICD-004 UUID7-SRS-014 UUID7-SRS-016 UUID7-SRS-017 UUID7-SRS-018 UUID7-SRS-020
+ * @satisfies UUID7-IF-004 UUID7-SRS-016 UUID7-SRS-017 UUID7-SRS-020
  */
 int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
 
@@ -144,7 +144,7 @@ int uuid7_init(uuid7_rng_function_t fn, const void* last_gen_uuid7);
  * @return 0 on success; -1 if NULL; -2/-3 if not a version-7 / RFC-variant UUID; -4 if dated beyond `now + UUID7_MAX_AHEAD_MS`.
  *
  * @ingroup uuid7_cmp_import
- * @satisfies UUID7-ICD-005 UUID7-SRS-015 UUID7-SRS-016 UUID7-SRS-017 UUID7-SRS-018 UUID7-SRS-032
+ * @satisfies UUID7-IF-005 UUID7-SRS-016 UUID7-SRS-017 UUID7-SRS-100
  */
 int uuid7_raise_floor(const void* last_uuid7);
 
@@ -157,7 +157,7 @@ int uuid7_raise_floor(const void* last_uuid7);
  * @return Monotonically increasing failure count.
  *
  * @ingroup uuid7_cmp_clock
- * @satisfies UUID7-ICD-006 UUID7-SRS-027
+ * @satisfies UUID7-IF-007 UUID7-SRS-026
  */
 uint64_t uuid7_clock_failure_count(void);
 
@@ -179,9 +179,8 @@ uint64_t uuid7_clock_failure_count(void);
  * Nothing is written to @p out_buf when the call fails.
  *
  * @ingroup uuid7_cmp_gen
- * @satisfies UUID7-ICD-007 UUID7-SRS-001 UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-004 UUID7-SRS-005 UUID7-SRS-007 UUID7-SRS-008
- * @satisfies UUID7-SRS-009 UUID7-SRS-010 UUID7-SRS-011 UUID7-SRS-012 UUID7-SRS-013 UUID7-SRS-023 UUID7-SRS-024 UUID7-SRS-028
- * @satisfies UUID7-SRS-030 UUID7-SRS-031
+ * @satisfies UUID7-IF-003 UUID7-SRS-001 UUID7-SRS-005 UUID7-SRS-006 UUID7-SRS-007 UUID7-SRS-024 UUID7-SRS-028 UUID7-SRS-030
+ * @satisfies UUID7-SRS-041 UUID7-SRS-100
  */
 int uuid7_gen(void* out_buf);
 
@@ -198,7 +197,7 @@ int uuid7_gen(void* out_buf);
  * @return 0 on success.
  *
  * @ingroup uuid7_cmp_rng
- * @satisfies UUID7-ICD-008 UUID7-SRS-020 UUID7-SRS-029
+ * @satisfies UUID7-IF-006 UUID7-SRS-020 UUID7-SRS-028
  */
 int uuid7_set_rng_func(uuid7_rng_function_t fn);
 

@@ -5,6 +5,7 @@ pipeline summary, the ELF files and deps.txt.
 
   ecss.py generate     the model, the diagrams' PlantUML, the Markdown documents (build/ecss/md), the rms loader (build/ecss/rms)
   ecss.py api-doxyfile the doxygen configuration of the header pre-pass (stdout)
+  ecss.py snapshot     ecss/TS/requirements.csv and ecss/DDF/decisions.csv rewritten from the rms export (snapshots, not sources)
 
 Only the standard library; run from anywhere, paths resolve from the repository root.
 """
@@ -14,6 +15,7 @@ import datetime
 import glob
 import hashlib
 import html
+import io
 import json
 import os
 import re
@@ -50,7 +52,17 @@ LINKS = ["derives-from", "refines", "allocates-to", "satisfies", "verifies", "va
 ECSS_METHOD = {"test": "T", "analysis": "A", "inspection": "I", "review": "R", "demonstration": "D", "simulation": "S", "none": "-"}
 CSV_COLUMNS = ["human_id", "kind", "title", "body", "rationale", "criteria", "method", "status", "owner", "source_ref", "applicability",
                "notes"]
-REVIEWS = ["SRR", "PDR", "CDR", "QR", "AR", "ORR"]
+# QR2: the delta qualification review of a change after the QR (UUID7-CR-004); its baseline is QR-2.
+REVIEWS = ["SRR", "PDR", "CDR", "QR", "QR2", "AR", "ORR"]
+# The technical specification's items: the SRS requirements and the ICD's interface items. An item superseded, made obsolete,
+# withdrawn or rejected has left the specification: it is listed with what replaced it, never verified again.
+TS_KINDS = ("requirement", "interface")
+RETIRED = ("superseded", "obsolete", "withdrawn", "rejected")
+# The technical budgets of the SRS, checked from the evidence of each refresh.
+STACK_BUDGET = 256   # UUID7-SRS-053, bytes per call
+CODE_BUDGET = 4096   # UUID7-SRS-054, bytes of .text
+SNAPSHOT_NOTE = ("# A snapshot of the rms export (ecss/rms_export/package.json) written by ecss/tools/ecss.py snapshot: the items live "
+                 "in the rms and are changed there\n")
 FILES = [("MGT", "Management file"), ("TS", "Technical specification"), ("DDF", "Design definition file"),
          ("DJF", "Design justification file"), ("PAF", "Product assurance file"), ("MF", "Maintenance file"), ("SF", "Security file"),
          ("RB", "Requirements baseline"), ("OP", "Operational documentation")]
@@ -141,7 +153,7 @@ def load_csv(path, origin):
     if not os.path.exists(path):
         return []
     with open(path, newline="", encoding="utf-8") as f:
-        return [Art(r, origin) for r in csv.DictReader(f)]
+        return [Art(r, origin) for r in csv.DictReader(l for l in f if not l.startswith("#"))]
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------
@@ -408,6 +420,22 @@ def evidence_checks(stages):
         size = tool(["size", obj])
         put("footprint", "passed" if ok else "failed", ", ".join("%s %d B" % (n, sizes[n]) for n in names),
             "$ nm -S --size-sort %s\n%s\n$ size %s\n%s" % (rel(obj), syms, rel(obj), size))
+        m = re.search(r"^\s*(\d+)\s+\d+\s+\d+\s+\d+\s+\w+\s+\S+$", size, re.M)
+        if m:
+            text_b = int(m.group(1))
+            put("code_size", "passed" if text_b <= CODE_BUDGET else "failed", "%d B of code (.text), budget %d B" % (text_b, CODE_BUDGET),
+                "$ size %s\n%s" % (rel(obj), size))
+    su = stack_usage()
+    if su:
+        graph = call_graph()
+        worst = {f: stack_worst(f, su, graph) for f in sorted(su) if f.startswith("uuid7_")}
+        deepest = max(worst.values() or [0])
+        dynamic = sorted(n for n, (_, q) in su.items() if q != "static")
+        put("stack_budget", "passed" if worst and not dynamic and deepest <= STACK_BUDGET else "failed",
+            "worst case %d B per call (%s), budget %d B" % (deepest, ("dynamic frames: " + ", ".join(dynamic)) if dynamic
+                                                          else "all frames static", STACK_BUDGET),
+            "gcc -fstack-usage of the release build (evidence/stack/uuid7.su) and the calls and references between the functions of "
+            "app/uuid7.c:\n" + "\n".join("%s(): own %d B, worst case %d B" % (f, su[f][0], w) for f, w in worst.items()) + "\n")
     if os.path.exists(a):
         g = tool(["nm", "-g", "--defined-only", a])
         names = re.findall(r"^[0-9a-f]+ [A-Z] (\w+)$", g, re.M)
@@ -641,7 +669,8 @@ def build_model():
     M.rms = load_rms()
     csv_arts = (load_csv(os.path.join(ECSS, "TS", "requirements.csv"), "csv") + load_csv(os.path.join(ECSS, "documents.csv"), "csv") +
                 load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv") + load_csv(os.path.join(ECSS, "MGT", "reviews.csv"), "csv") +
-                load_csv(os.path.join(ECSS, "DJF", "verification_cases.csv"), "csv"))
+                load_csv(os.path.join(ECSS, "DJF", "verification_cases.csv"), "csv") +
+                load_csv(os.path.join(ECSS, "DDF", "decisions.csv"), "csv"))
     M.csv_by_id = {a.id: a for a in csv_arts}
     # Artifacts: the rms when exported, else the CSVs; the tests the sources declare complete either side.
     arts = list(M.rms["arts"]) if M.rms else list(csv_arts)
@@ -669,11 +698,17 @@ def build_model():
             if not a.body:
                 a.body = t["detail"]
     M.arts, M.by_id = arts, by_id
-    M.reqs = sorted([a for a in arts if a.kind == "requirement"], key=lambda a: a.id)
+    M.kind_of = {a.id: a.kind for a in csv_arts}
+    M.kind_of.update({a.id: a.kind for a in arts})
+    ts = [a for a in arts if a.kind in TS_KINDS]
+    M.reqs = sorted([a for a in ts if a.status not in RETIRED], key=lambda a: a.id)
+    M.retired = sorted([a for a in ts if a.status in RETIRED], key=lambda a: a.id)
+    M.ifaces = {a.id for a in M.reqs if a.kind == "interface"}
     M.docs = [a for a in arts if a.kind == "document"]
     M.comps = [a for a in arts if a.kind == "component"]
     M.reviews = [a for a in arts if a.kind == "review"]
-    M.cases = [a for a in arts if a.kind == "verification-case"]
+    M.cases = [a for a in arts if a.kind == "verification-case" and a.status not in RETIRED]
+    M.retired_cases = [a for a in arts if a.kind == "verification-case" and a.status in RETIRED]
     M.crs = [a for a in arts if a.kind == "change-request"]
     M.decisions = sorted([a for a in arts if a.kind == "decision"], key=lambda a: a.id)
     M.rationales = sorted([a for a in arts if a.kind in ("rationale", "assumption")], key=lambda a: (a.kind, a.id))
@@ -689,11 +724,17 @@ def build_model():
     for c in [a for a in csv_arts if a.kind == "component"]:
         group_comp.setdefault(c.notes.get("group"), c.id)
     M.group_comp = group_comp
+    # A symbol's @satisfies: its component satisfies each requirement named; an interface item named there is the interface the
+    # symbol declares, and it satisfies the same requirements. An item neither the rms nor the CSVs hold yet is known by its prefix.
     for s in M.symbols.values():
         comp = group_comp.get(s["group"])
+        ifs = [r for r in s["satisfies"] if M.kind_of.get(r, "interface" if r.startswith("UUID7-IF-") else "requirement") == "interface"]
         for r in s["satisfies"]:
+            if r in ifs:
+                continue
             if comp:
                 repo_links.append((comp, "satisfies", r, "code"))
+            repo_links += [(i, "satisfies", r, "code") for i in ifs]
     for a in csv_arts:
         if a.kind == "requirement":
             doc = {"SRS": "UUID7-DOC-SRS", "ICD": "UUID7-DOC-ICD"}.get(a.notes.get("doc"))
@@ -720,7 +761,9 @@ def build_model():
     M.coverage, M.uncovered = coverage_summary()
     M.result = {}
     test_by_id = {t["id"]: t for t in M.tests}
-    for c in M.cases:
+    # the verdicts of every case, those the rms does not hold yet included (the loader records them once it does)
+    M.result_cases = M.cases + [a for a in csv_arts if a.kind == "verification-case" and a.id not in by_id]
+    for c in M.result_cases:
         t = test_by_id.get(c.id)
         n = c.notes
         if t and t["exe"]:
@@ -748,9 +791,18 @@ def build_model():
     # Requirement status
     M.cases_of, M.comps_of, M.reqs_of_comp, M.reqs_of_case = {}, {}, {}, {}
     dkinds = ("decision", "rationale", "assumption")
+    # A link to an item that left the specification (or a retired case) is history: kept in the rms, not traced here.
+    gone = {a.id for a in M.retired} | {c.id for c in M.retired_cases}
+    M.superseded_by = {d: s for s, t, d, _ in M.links if t == "supersedes"}
+    M.via = {}
     for s, t, d, _ in M.links:
         if (s in by_id and by_id[s].kind in dkinds) or (d in by_id and by_id[d].kind in dkinds):
             continue   # a design decision's links are read below, whatever their type
+        if s in gone or d in gone:
+            continue
+        if t == "satisfies" and s in M.ifaces:
+            M.via.setdefault(s, []).append(d)
+            continue
         if t == "verified-by":
             M.cases_of.setdefault(s, []).append(d)
             M.reqs_of_case.setdefault(d, []).append(s)
@@ -763,17 +815,22 @@ def build_model():
         elif t == "allocates-to":
             M.comps_of.setdefault(s, []).append(d)
             M.reqs_of_comp.setdefault(d, []).append(s)
-    # design decisions: whatever an rms link joins a decision, a rationale or an assumption to, in either direction
+    # design decisions: whatever an rms link joins a decision, a rationale or an assumption to, in either direction (an item that
+    # left the specification is the decision's history, not what it answers)
     M.dlinks = {}
     for s_, t, d, _ in M.links:
         for x, y in ((s_, d), (d, s_)):
             xa, ya = by_id.get(x), by_id.get(y)
-            if xa and ya and xa.kind in ("decision", "rationale", "assumption"):
+            if xa and ya and xa.kind in ("decision", "rationale", "assumption") and y not in gone:
                 M.dlinks.setdefault(x, set()).add(y)
     M.decisions_of = {}
     for dec in M.decisions:
         for y in M.dlinks.get(dec.id, ()):
             M.decisions_of.setdefault(y, set()).add(dec.id)
+    # An interface item is verified through the requirements it satisfies.
+    for i in M.ifaces:
+        M.via[i] = sorted(set(M.via.get(i, [])))
+        M.cases_of[i] = sorted(set(c for r in M.via[i] for c in M.cases_of.get(r, [])))
     M.symbols_of = {}
     for s in M.symbols.values():
         for r in s["satisfies"]:
@@ -791,6 +848,21 @@ def build_model():
         else:
             st = "not run"
         M.req_status[r.id] = st
+    # Traceability both ways: every item of the specification verified by passing cases, every case verifying one of them, every
+    # link the repository's tags and notes make held by the rms, and the snapshot of the specification equal to the export.
+    M.unverified = [r.id for r in M.reqs if M.req_status[r.id] != "verified"]
+    M.orphan_cases = sorted(c.id for c in M.cases if not M.reqs_of_case.get(c.id))
+    repo_keys = {(s, t, d) for s, t, d, _ in M.repo_links}
+    M.rms_only = sorted((s, t, d) for s, t, d, _ in M.links if t in ("satisfies", "verified-by", "has-child") and s not in gone and
+                        d not in gone and (s, t, d) not in repo_keys) if M.rms else []
+    M.snapshot = snapshot_state(M)
+    M.trace_red = ""
+    if M.mode == "rms":
+        bad = (["%d requirement(s) not verified (first: %s)" % (len(M.unverified), M.unverified[0])] if M.unverified else []) + \
+              (["%d case(s) verifying no requirement (first: %s)" % (len(M.orphan_cases), M.orphan_cases[0])] if M.orphan_cases else []) + \
+              (["%d repository link(s) not in the rms export (first: %s)" % (len(M.drift), " ".join(M.drift[0][:3]))] if M.drift else []) + \
+              (["the snapshot %s" % M.snapshot] if M.snapshot != "in step with the export" else [])
+        M.trace_red = "; ".join(bad)
     M.diagrams = {}
     return M
 
@@ -1166,7 +1238,32 @@ def req_block(M, r, level):
                  status_text(M, r, (" (rms revision %s)" % r.revision) if r.revision else "", note=False)),
              "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id]))] + \
         (["- Design decisions: %s" % ", ".join(dec_ref(x) for x in sorted(M.decisions_of[r.id]))] if M.decisions_of.get(r.id) else []) + [""]
+    if r.kind == "interface":
+        k = next(i for i, l in enumerate(lines) if l.startswith("- Implemented by: "))
+        lines[k:k + 2] = ["- Declared by: %s" % sat, "- Satisfies: %s" % (", ".join(rref(x) for x in M.via.get(r.id, [])) or "**nothing**"),
+                          "- Verified through the requirements it satisfies: %s → %s" % (ver, status_word(M.req_status[r.id]))]
     return "\n".join(lines)
+
+
+def ts_ref(i, M):
+    """An item of the specification, current or retired, as a link; anything else as text."""
+    return rref(i) if i in M.kind_of and M.kind_of[i] in TS_KINDS else md_escape(i)
+
+
+def h_retired(M, a):
+    """The items that left the specification: superseded (with the item that replaced each) or made obsolete, with the reason
+    their approver recorded."""
+    rs = [r for r in M.retired if not a.get("doc") or r.notes.get("doc") == a.get("doc")]
+    if not rs:
+        return "None."
+    rows = []
+    for r in rs:
+        last = next((x for x in reversed(r.revs) if x["status"] == r.status), None)
+        by = M.superseded_by.get(r.id)
+        rows.append([defn(anchor("req_" + r.id), r.id), md_escape(r.title),
+                     ("%s by %s" % (r.status, who(last["by"]))) if last else r.status, ts_ref(by, M) if by else "-",
+                     md_escape(last["reason"]) if last else "-"])
+    return table(["Item", "Title", "Status", "Superseded by", "Reason"], rows, "Items superseded or made obsolete")
 
 
 def h_reqs(M, a):
@@ -1457,8 +1554,9 @@ def h_summary(M, a):
         x = M.result.get(c.id, {}).get("verdict", "not-run")
         v[x] = v.get(x, 0) + 1
     return table(["Measure", "Value"], [
-        ["Requirements", "%d (%d SRS, %d ICD)" % (n, len([r for r in M.reqs if r.notes.get("doc") == "SRS"]),
-                                                   len([r for r in M.reqs if r.notes.get("doc") == "ICD"]))],
+        ["Requirements", "%d (%d SRS, %d ICD interface items); %d superseded or obsolete" % (
+            n, len([r for r in M.reqs if r.notes.get("doc") == "SRS"]), len([r for r in M.reqs if r.notes.get("doc") == "ICD"]),
+            len(M.retired))],
         ["Verified", by.get("verified", 0)], ["Failed", by.get("failed", 0)], ["Not run", by.get("not run", 0)],
         ["Without a case", by.get("no case", 0)],
         ["Verification cases", "%d (%s)" % (len(M.cases), ", ".join("%d %s" % (k2, k) for k, k2 in sorted(v.items())))],
@@ -1485,7 +1583,7 @@ def h_coverage(M, a):
     if not M.coverage:
         return "No coverage run in this refresh."
     c = M.coverage
-    return (table(["Measure", "Covered", "Total", "Percent", "Target proposed (UUID7-SRS-090)"], [
+    return (table(["Measure", "Covered", "Total", "Percent", "Target proposed (SPAP <5.5>)"], [
         ["Statements (lines)", c.get("line_covered"), c.get("line_total"), "%.1f %%" % c.get("line_percent", 0), ">= 80 %"],
         ["Decisions (branches)", c.get("branch_covered"), c.get("branch_total"), "%.1f %%" % c.get("branch_percent", 0), ">= 65 %"],
         ["Functions", c.get("function_covered"), c.get("function_total"), "%.1f %%" % c.get("function_percent", 0), "-"]],
@@ -1509,7 +1607,7 @@ RMS_CRITICALITY = [
 def h_criticality(M, a):
     """The one mapping between the rms criticality field and the ECSS software criticality category, with the items of this
     project counted by both."""
-    count = collections.Counter((x.criticality or "not set", x.applicability or "-") for x in M.arts if x.kind == "requirement")
+    count = collections.Counter((x.criticality or "not set", x.applicability or "-") for x in M.reqs if x.kind == "requirement")
     rows = []
     for level, rule in RMS_CRITICALITY:
         n = {cat: v for (lv, cat), v in count.items() if lv == level}
@@ -1518,7 +1616,7 @@ def h_criticality(M, a):
     if any(lv == "not set" for lv, _ in count):
         rows.append(["not set", "the CSV import carries no criticality column", "-", ", ".join(
             "%d of category %s" % (v, c) for (lv, c), v in sorted(count.items()) if lv == "not set")])
-    bad = [x.id for x in M.arts if x.kind == "requirement" and x.criticality == "safety"]
+    bad = [x.id for x in M.reqs if x.criticality == "safety"]
     return ("Two scales, one mapping. The ECSS software criticality category (A to D, ECSS-Q-ST-80 Table D-1) belongs to the software "
             "product and follows from the consequences of its failure (<3>): every item here is category D, in the `applicability` "
             "field. The rms `criticality` field is a workflow priority of kyr_rms that decides how many approvers an item needs; it "
@@ -1584,6 +1682,23 @@ def stack_usage():
     return out
 
 
+def call_graph():
+    """{function: [the functions of app/uuid7.c it calls or references]}, from the source: a function whose address is passed (the
+    built-in entropy source) counts as called."""
+    src = read(os.path.join(ROOT, "app", "uuid7.c"))
+    defs = list(re.finditer(r"^[A-Za-z_][^\n;=]*?\b(\w+)\([^;{]*?\)\s*\n\{\n(.*?)\n\}$", src, re.M | re.S))
+    names = {m.group(1) for m in defs}
+    code = {m.group(1): re.sub(r"/\*.*?\*/|//[^\n]*", " ", m.group(2), flags=re.S) for m in defs}
+    return {f: sorted(n for n in set(re.findall(r"\b\w+\b", body)) & names if n != f) for f, body in code.items()}
+
+
+def stack_worst(fn, su, graph, seen=()):
+    """The deepest stack under and including fn: its own frame plus the deepest of what it calls (inline helpers have no frame)."""
+    if fn in seen:
+        return 0
+    return su.get(fn, (0, ""))[0] + max([stack_worst(c, su, graph, seen + (fn,)) for c in graph.get(fn, [])] or [0])
+
+
 def h_budgets(M, a):
     fp = M.checks.get("footprint", {})
     size = read(os.path.join(EVID, "footprint.txt"))
@@ -1600,38 +1715,37 @@ def h_budgets(M, a):
         margin = "%.1f ns measured against the 100 ns budget of UUID7-SRS-040: a margin of %.1f ns (%.0f %%)" % (cost, 100.0 - cost,
                                                                                                              100.0 - cost)
     su = stack_usage()
-    refs = {m["name"]: m["refs"] for m in getattr(M, "members", []) if m["kind"] == "function"}
-
-    def worst(fn, seen=()):
-        if fn in seen:
-            return 0
-        own = su.get(fn, (0, ""))[0]
-        return own + max([worst(r, seen + (fn,)) for r in refs.get(fn, []) if r in refs] or [0])
+    graph = call_graph()
     pub = sorted(n for n in su if n.startswith("uuid7_"))
-    stack_rows = [["%s()" % n, su[n][0], worst(n), su[n][1]] for n in pub]
+    stack_rows = [["%s()" % n, su[n][0], stack_worst(n, su, graph), su[n][1]] for n in pub]
     deepest = max([r[2] for r in stack_rows] or [0])
     dynamic = [n for n, (_, q) in su.items() if q != "static"]
     st = "%s" % (("worst case %d B per call (%s)" % (deepest, "all frames static" if not dynamic else "**dynamic frames: %s**" %
                                                      ", ".join(dynamic))) if su else "not measured in this refresh")
     fp_sum = sum(int(x) for x in re.findall(r"(\d+) B", fp.get("detail", ""))) if fp.get("verdict") else None
+    def margin_of(used, budget):
+        return "%d B (%.0f %%)" % (budget - used, 100.0 * (budget - used) / budget)
     budget_rows = [
-        ["Static data", "UUID7-SRS-050", "24 B", ("%d B" % fp_sum) if fp_sum is not None else "not measured",
+        ["Static data", rref("UUID7-SRS-050"), "24 B", ("%d B" % fp_sum) if fp_sum is not None else "not measured",
          ("%d B" % (24 - fp_sum)) if fp_sum is not None else "-"],
-        ["Heap", "UUID7-SRS-051", "0 B", M.checks.get("no_alloc", {}).get("detail", "not measured"), "-"],
-        ["Generation cost (release, one thread)", "UUID7-SRS-040", "100 ns", (m2.group(1) + " ns") if m2 else "not measured", margin_short],
-        ["Stack per call", "none (no requirement)", "not specified", st, "not computable without a budget"],
-        ["Code (.text of the release object)", "none (no requirement)", "not specified", "%s B" % text_b, "not computable without a budget"]]
+        ["Heap", rref("UUID7-SRS-051"), "0 B", M.checks.get("no_alloc", {}).get("detail", "not measured"), "-"],
+        ["Generation cost (release, one thread, entropy source excluded)", rref("UUID7-SRS-040"), "100 ns",
+         (m2.group(1) + " ns") if m2 else "not measured", margin_short],
+        ["Stack per call", rref("UUID7-SRS-053"), "%d B" % STACK_BUDGET, st, margin_of(deepest, STACK_BUDGET) if su else "-"],
+        ["Code (.text of the release object)", rref("UUID7-SRS-054"), "%d B" % CODE_BUDGET, "%s B" % text_b,
+         margin_of(int(text_b), CODE_BUDGET) if text_b.isdigit() else "-"]]
     return ("Budgets and margins of this refresh, measured in the evidence's environment (%s):\n\n" % md_escape(M.env_text) +
             table(["Budget", "Requirement", "Budget value", "Measured", "Margin"], budget_rows, "Technical budgets and margins") +
-            "\n\nStack and code size are measured and tracked here at every refresh but have no budget requirement; the budgets are "
-            "not yet recorded as rms results at the reviews (\\ref UUID7_DOC_SDP \"SDP\" <4.6>).\n\n"
+            "\n\nEach budget is a requirement verified at every refresh by its case (%s, %s, %s, %s, %s), whose result the rms "
+            "records at the reviews.\n\n"
             "Memory (release object app__uuid7.c.o): code %s B, initialised data %s B, static data %s B (%s). No heap, no "
             "thread-local storage.\n\nStack (`gcc -fstack-usage` on the release build; the worst case follows the references between "
             "the functions, the callback counted as the built-in RNG; the C library's own frames are not counted):\n\n%s\n\n"
             "Processing (tests/stress, static linkage). `stress`: one thread, cost in ns per identifier, rate in identifiers per "
             "second. `stress_mt`: 10 threads on one reservation word, cost per identifier per thread under contention, aggregate "
             "rate.\n\n%s\n\nRelease single-thread: %s." %
-            (text_b, data_b, bss_b, md_escape(fp.get("detail", "not measured")),
+            (cref("UUID7-AN-003"), cref("UUID7-AN-001"), cref("UUID7-TC-ST-stress"), cref("UUID7-AN-013"), cref("UUID7-AN-014"),
+             text_b, data_b, bss_b, md_escape(fp.get("detail", "not measured")),
              table(["Function", "Own frame (B)", "Worst case (B)", "Kind"], stack_rows, "Stack per public function") if stack_rows else "not measured in this refresh",
              table(["Profile", "Benchmark", "Status", "Cost", "Rate"], rows, "Generation cost and rate") if rows else "no stress run in this refresh", margin))
 
@@ -1699,7 +1813,7 @@ def review_facts(M, rv):
     revs = a.revs if a else []
     opened = next((r for r in revs if r["status"] == "in-review"), None)
     closed = next((r for r in revs if opened and r["at_ms"] >= opened["at_ms"] and r["status"] in ("approved", "needs-rework", "rejected")), None)
-    bl = [x for x in M.baselines if x["name"].upper().startswith(rv)]
+    bl = [x for x in M.baselines if x["name"].upper().replace("-", "") == rv]
     b = bl[-1] if bl else None
     rids = sorted([x for x in M.arts if x.kind == "review-comment" and x.id.startswith("UUID7-RID-%s-" % rv)], key=lambda x: x.id)
     actors = [r["by"] for r in revs if opened and r["at_ms"] >= opened["at_ms"]] + [r["by"] for x in rids for r in x.revs]
@@ -1919,7 +2033,7 @@ def h_spr(M, a):
         return ("No software problem report or nonconformance is recorded: %s." %
                 ("the rms export holds no change-request" if M.mode == "rms" else "problem reports are rms change-requests and no rms export is present"))
     return table(["Report", "Title", "Status"], caption="Change requests", rows= [[defn(anchor("cr_" + c.id), c.id) if a.get("anchors") == "yes" else c.id, md_escape(c.title),
-                                                  c.status] for c in M.crs])
+                                                  "closed (rms status obsolete)" if c.status == "obsolete" else c.status] for c in M.crs])
 
 
 def h_jrr(M, a):
@@ -1932,7 +2046,7 @@ def h_jrr(M, a):
         f = review_facts(M, rv)
         b = f["baseline"]
         rows.append([rv, "closed: approved" if f["held"] else (f["art"].status if f["art"] else "not planned"),
-                     who(f["closed"]["by"]) if f["closed"] else "-", ("%s by %s" % (md_escape(b["name"]), who(b["by"]))) if b else "none",
+                     who(f["closed"]["by"]) if f["closed"] else "-", ('\\ref %s "%s" by %s' % (anchor("bl_" + b["name"]), md_escape(b["name"]), who(b["by"]))) if b else "none",
                      (who(b["approved_by"]) if b["approval_exported"] else "not exported") if b else "-",
                      ("%.1f s" % f["seconds"]) if f["seconds"] is not None else "-",
                      ("scripted" if f["scripted"] else "not shown scripted") if (f["held"] or b) else "-"])
@@ -2007,7 +2121,8 @@ def h_source(M, a):
                 "results %s. The repository's tags and CSVs are compared with it: %d repository link(s) are not in the export "
                 "(\\ref UUID7_DOC_TRACE \"TRACE\", gaps)." %
                 (M.rms["path"], M.rms["sha256"][:16], PROJECT_KEY, len(M.rms["arts"]), len(M.rms["links"]), len(M.baselines),
-                 "from `verification.csv`" if M.rms["verdicts"] else "not exported", len(M.drift)))
+                 "from `verification.csv`" if M.rms["verdicts"] else "not exported", len(M.drift)) +
+                " The specification's snapshot `ecss/TS/requirements.csv` and the decisions' `ecss/DDF/decisions.csv`: %s." % M.snapshot)
     return ("Source of truth: the repository's CSVs (`ecss/TS/requirements.csv` and the others, in the rms import format), because no "
             "rms export is present under `ecss/rms_export/`. Links come from the code's `@satisfies` / `@verifies` tags and the CSV notes.")
 
@@ -2124,7 +2239,7 @@ HANDLERS = {
     "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
     "spr": h_spr, "jrr": h_jrr, "scenario-results": h_scenario_results, "decisions": h_decisions, "rationale": h_rationale,
     "decision-trace": h_decision_trace, "tradeoffs-summary": h_tradeoffs_summary, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
-    "claim": h_claim, "open-items": h_open_items, "tools": h_tools, "criticality": h_criticality, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
+    "claim": h_claim, "open-items": h_open_items, "retired": h_retired, "tools": h_tools, "criticality": h_criticality, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
 }
 DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
 
@@ -2167,7 +2282,7 @@ def doc_target(d):
 def link_registry(M):
     """Every target a reference in the text can link to (refs.Index)."""
     ids, abbr = {}, {}
-    for r in M.reqs:
+    for r in M.reqs + M.retired:
         ids[r.id] = anchor("req_" + r.id)
     for c in M.cases:
         ids[c.id] = anchor("tc_" + c.id)
@@ -2347,7 +2462,7 @@ def gen_rms(M):
         for s, t, dd, o in M.repo_links:
             f.write("%s\t%s\t%s\n" % (s, t, dd))
     with open(os.path.join(d, "results.tsv"), "w", encoding="utf-8") as f:
-        for c in M.cases:
+        for c in M.result_cases:
             r = M.result.get(c.id, {})
             v = {"passed": "passed", "failed": "failed"}.get(r.get("verdict"), "not-run")
             f.write("%s\t%s\t%s\n" % (c.id, v, (r.get("detail", "") or "").replace("\t", " ")[:900]))
@@ -2392,6 +2507,39 @@ printf 'exported: ecss/rms_export/package.json, ecss/rms_export/verification.csv
 """
 
 
+SNAPSHOTS = [(os.path.join("TS", "requirements.csv"), TS_KINDS), (os.path.join("DDF", "decisions.csv"), ("decision", "rationale", "assumption"))]
+
+
+def snapshot_text(rms, kinds):
+    """The export's items of these kinds in the import format (plus the criticality), one row each, by identifier."""
+    buf = io.StringIO()
+    buf.write(SNAPSHOT_NOTE)
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(CSV_COLUMNS + ["criticality"])
+    for a in sorted((a for a in rms["arts"] if a.kind in kinds), key=lambda a: a.id):
+        w.writerow(a.row() + [a.criticality or "none"])
+    return buf.getvalue()
+
+
+def snapshot_state(M):
+    if not M.rms:
+        return "not checked (no rms export)"
+    stale = [f for f, kinds in SNAPSHOTS if read(os.path.join(ECSS, f)) != snapshot_text(M.rms, kinds)]
+    return ("%s differs from the export: run ecss/tools/ecss.py snapshot" % " and ".join("ecss/" + f for f in stale)) if stale \
+        else "in step with the export"
+
+
+def write_snapshots():
+    rms = load_rms()
+    if not rms:
+        print("ecss.py: no rms export under %s" % rel(RMS_EXPORT), file=sys.stderr)
+        return 1
+    for f, kinds in SNAPSHOTS:
+        write(os.path.join(ECSS, f), snapshot_text(rms, kinds))
+        print("ecss.py: ecss/%s: %d items" % (f, len([a for a in rms["arts"] if a.kind in kinds])))
+    return 0
+
+
 def summary(M):
     js = {"version": M.version, "commit": M.commit, "mode": M.mode, "requirements": len(M.reqs),
           "srs": len([r for r in M.reqs if r.notes.get("doc") == "SRS"]), "icd": len([r for r in M.reqs if r.notes.get("doc") == "ICD"]),
@@ -2401,7 +2549,9 @@ def summary(M):
           "diagrams": len(M.diagrams), "svg": M.rendered, "render_note": M.render_note, "render_tool": M.render_tool,
           "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0], "evidence_commit": M.ev_commit,
           "evidence_state": M.ev.get("state", ""), "environment": M.env_text, "config_flags": M.config_flags, "tag": M.tag_text,
-          "open_items": len([o for o in M.open_items if o["status"] == "open"]), "refusal": M.refusal}
+          "open_items": len([o for o in M.open_items if o["status"] == "open"]), "refusal": M.refusal,
+          "retired": len(M.retired), "interfaces": len(M.ifaces), "unverified": M.unverified, "orphan_cases": M.orphan_cases,
+          "drift": len(M.drift), "rms_only_links": len(M.rms_only), "snapshot": M.snapshot, "trace_red": M.trace_red}
     write(os.path.join(OUT, "summary.json"), json.dumps(js, indent=1) + "\n")
     return js
 
@@ -2411,6 +2561,8 @@ def main():
     if cmd == "api-doxyfile":
         sys.stdout.write(api_doxyfile())
         return 0
+    if cmd == "snapshot":
+        return write_snapshots()
     if cmd == "components-dox":
         rms = load_rms()
         comps = [a for a in rms["arts"] if a.kind == "component"] if rms else load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv")
@@ -2436,6 +2588,9 @@ def main():
     if M.refusal:
         print("ecss.py: RED: " + M.refusal, file=sys.stderr)
         return 3
+    if M.trace_red:
+        print("ecss.py: RED: traceability: " + M.trace_red, file=sys.stderr)
+        return 4
     return 0
 
 

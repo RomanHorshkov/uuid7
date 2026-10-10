@@ -22,7 +22,7 @@ See the \ref UUID7_DOC_SRS "SRS" <4>.
 
 ### 5.1 General provisions to the requirements in the IRD
 
-There is no IRD (\ref UUID7_DOC_TAILORING "the tailoring"). Each interface requirement has a unique identifier `UUID7-ICD-nnn` and an upper-level source, traced in <7>. Statuses and rms criticality read as in the SRS <5.1>.
+There is no IRD (\ref UUID7_DOC_TAILORING "the tailoring"). Each interface item is an rms artifact of kind interface with a unique identifier `UUID7-IF-nnn` and an upper-level source, traced in <7>; it satisfies requirements of the \ref UUID7_DOC_SRS "SRS", which carry its verification (<6>). The rows `UUID7-ICD-nnn` of the first issue were requirements; UUID7-CR-004 superseded them by these items (<7>). Statuses and rms criticality read as in the SRS <5.1>.
 
 ### 5.2 Interface requirements
 
@@ -32,7 +32,7 @@ The interfaces are software-to-software only: no hardware interface, no man-mach
 
 ### 5.3 Interface design
 
-The interface is the header `app/uuid7.h`, installed as `/usr/local/include/uuid7.h` by `libuuid7-dev`, and the shared object `libuuid7.so.<major>` (or the archive `libuuid7.a`). Its public ABI is committed in `abi/layout.txt` and gated by the pipeline (UUID7-ICD-009). Every item, from the header:
+The interface is the header `app/uuid7.h`, installed as `/usr/local/include/uuid7.h` by `libuuid7-dev`, and the shared object `libuuid7.so.<major>` (or the archive `libuuid7.a`). Its public ABI is committed in `abi/layout.txt` and gated by the pipeline (UUID7-IF-008). Every item, from the header:
 
 <!-- ecss:api -->
 
@@ -40,7 +40,7 @@ Data items:
 
 | Item | Type, dimension | Range | Initial value | Unit |
 |---|---|---|---|---|
-| identifier (`out_buf`, `last_gen_uuid7`, `last_uuid7`) | `uint8_t[16]`, caller-owned | layout of UUID7-SRS-001 to UUID7-SRS-005; version 7, variant 0b10 | written by uuid7_gen() | - |
+| identifier (`out_buf`, `last_gen_uuid7`, `last_uuid7`) | `uint8_t[16]`, caller-owned | layout of UUID7-SRS-001 and UUID7-SRS-005; version 7, variant 0b10 | written by uuid7_gen() | - |
 | `UUID7_SIZE_BYTES` | unsigned integer constant | 16 | 16 | bytes |
 | `UUID7_MAX_AHEAD_MS` | unsigned integer constant | any value whose sum with the clock fits 64 bits | 10000 | ms |
 | return values | `int` | 0, -1, -2, -3, -4 as each function states | - | - |
@@ -60,3 +60,7 @@ The class diagram of the interface ({{fig:class_uuid7}}):
 The validation traceability (interface requirement to test) is in the DJF: \ref UUID7_DOC_TRACE "the matrices".
 
 <!-- ecss:upward-trace doc=ICD -->
+
+The rows of the first issue, superseded by the interface items under UUID7-CR-004:
+
+<!-- ecss:retired doc=ICD -->

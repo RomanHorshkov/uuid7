@@ -53,7 +53,7 @@ static void sd_floor(uint8_t id[UUID7_SIZE_BYTES], uint64_t ms, unsigned seq)
 /**
  * @brief Generate one identifier: the RNG is called before the clock, and the fields land where RFC 9562 puts them.
  *
- * @verifies UUID7-SRS-001 UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-004 UUID7-SRS-005 UUID7-SRS-023 UUID7-ICD-007
+ * @verifies UUID7-SRS-001 UUID7-SRS-005 UUID7-SRS-006
  */
 static void sd_generate_one(void** state)
 {
@@ -87,7 +87,7 @@ static void sd_generate_one(void** state)
 /**
  * @brief Many identifiers in one millisecond: the sequence counts, and 4096 of them move the logical clock one millisecond ahead.
  *
- * @verifies UUID7-SRS-004 UUID7-SRS-007 UUID7-SRS-010 UUID7-SRS-030
+ * @verifies UUID7-SRS-007 UUID7-SRS-041 UUID7-SRS-030
  */
 static void sd_same_millisecond(void** state)
 {
@@ -128,7 +128,7 @@ static void sd_same_millisecond(void** state)
 /**
  * @brief The wall clock stalls or steps back: the generator continues from its state, and resumes the clock once it is ahead again.
  *
- * @verifies UUID7-SRS-007 UUID7-SRS-008 UUID7-SRS-009
+ * @verifies UUID7-SRS-007 UUID7-SRS-006
  */
 static void sd_clock_backwards(void** state)
 {
@@ -159,7 +159,7 @@ static void sd_clock_backwards(void** state)
 /**
  * @brief The RNG fails: -2, nothing written, no clock read, no sequence consumed; the next success takes the next sequence.
  *
- * @verifies UUID7-SRS-023 UUID7-SRS-024 UUID7-ICD-007
+ * @verifies UUID7-SRS-024
  */
 static void sd_entropy_failure(void** state)
 {
@@ -193,7 +193,7 @@ static void sd_entropy_failure(void** state)
 /**
  * @brief Persist the newest identifier, restart behind the clock, import it as the floor: new identifiers still sort after it.
  *
- * @verifies UUID7-SRS-014 UUID7-SRS-015 UUID7-SRS-016 UUID7-ICD-005
+ * @verifies UUID7-SRS-016
  */
 static void sd_restart_with_floor(void** state)
 {
@@ -236,7 +236,7 @@ static void sd_restart_with_floor(void** state)
 /**
  * @brief A poisoned floor is refused with -4; borrowing time stops at UUID7_MAX_AHEAD_MS with -3 until the clock catches up.
  *
- * @verifies UUID7-SRS-011 UUID7-SRS-018 UUID7-ICD-005 UUID7-ICD-007
+ * @verifies UUID7-SRS-041 UUID7-SRS-017
  */
 static void sd_abuse_bounds(void** state)
 {
@@ -365,7 +365,7 @@ static void sd_concurrent_generation(void** state)
 /**
  * @brief Configuration: the RNG is replaceable at any time, NULL restores the built-in one, the clock-failure count stays 0.
  *
- * @verifies UUID7-SRS-020 UUID7-SRS-021 UUID7-SRS-027 UUID7-ICD-006 UUID7-ICD-008
+ * @verifies UUID7-SRS-020 UUID7-SRS-021 UUID7-SRS-026
  */
 static void sd_configuration(void** state)
 {

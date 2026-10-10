@@ -49,11 +49,11 @@ The quality model uses the characteristics of ECSS-Q-ST-80 5.2.7.2 that are rele
 | Functionality | every TS requirement verified | requirements with a passing verification / all: 100 % |
 | Reliability | no failure in validation | failed cases: 0 |
 | Maintainability | documented interface, coding standard | header doxygen warnings: 0 (UUID7-SRS-091); format stage ok |
-| Reusability | self-contained, platform-agnostic | UUID7-SRS-063 verified |
+| Reusability | self-contained, platform-agnostic | UUID7-SRS-052 verified |
 | Security | entropy and bounds | the SSAR's treatments verified |
 | Efficiency | generation cost | <= 100 ns per identifier, release (UUID7-SRS-040) |
-| Portability | C11, POSIX fallback | UUID7-SRS-080, UUID7-SRS-081 verified |
-| Development effectiveness | coverage | statement >= 80 %, decision >= 65 % (UUID7-SRS-090) |
+| Portability | C11, POSIX fallback | UUID7-SRS-019, UUID7-SRS-081 verified |
+| Development effectiveness | coverage | statement >= 80 %, decision >= 65 %, proposed here (SDP <4.6>, OI-02) |
 
 Suitability for safety is not relevant at category D; usability has no user interface to measure.
 
@@ -138,7 +138,7 @@ The library is itself software intended for reuse; its reuse file is the \ref UU
 | Requirements analysis | every requirement atomic, with rationale, criteria, method and source; the rms `check` on each; review at SRR/PDR |
 | Architectural design and design of items | components and their requirements traced (`@ingroup`, `@satisfies`); review at PDR/CDR |
 | Coding | the coding standard's gates; the inspection UUID7-IN-008 |
-| Testing and validation (regression included) | every change runs every suite in every cell; coverage measured against the proposed figures (UUID7-SRS-090) |
+| Testing and validation (regression included) | every change runs every suite in every cell; coverage measured against the figures proposed in <5.5> |
 | Verification | the SVerP's activities; the generated matrices show any gap |
 | Delivery and acceptance | packages reproducible and smoke-tested; SRelD and SCF regenerated |
 | Operations and maintenance | the SMP; the same gates |
@@ -176,7 +176,7 @@ Adherence is ensured by the gates of the pipeline (each named in the coding stan
 3. Analyses: comparison with the targets; any miss is a problem report.
 4. Feedback: the SPAMR and the pipeline output, read by the developer who is also the assurer.
 5. Documentation quality: every document follows its DRD and is regenerated from the product; a document out of date cannot exist for a refreshed commit.
-6. Assurance activities: the verification cases that check the quality requirements (UUID7-SRS-090, UUID7-SRS-091, UUID7-SRS-060, UUID7-SRS-040).
+6. Assurance activities: the verification cases that check the quality requirements (UUID7-SRS-091, UUID7-SRS-060) and the technical budgets (UUID7-SRS-040, UUID7-SRS-050 to UUID7-SRS-054), and the coverage run against the figures of <5.5>.
 
 ## 8 Compliance matrix to software product assurance requirements
 
