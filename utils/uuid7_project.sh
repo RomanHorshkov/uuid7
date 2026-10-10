@@ -12,11 +12,15 @@ KYR_LIB_LDLIBS=()
 KYR_TEST_HOOKS_CPPFLAGS=(-DUUID7_TESTING)
 KYR_TEST_HOOKS_RUNS=(it)
 
-# The integration suite against every profile's archive and shared object, then the coverage run.
-KYR_IT_SUITES=(it)
+# The integration suite and the scenario suite (tests/plantuml: asserts, and writes one sequence diagram per scenario to
+# build/ecss/puml) against every profile's archive and shared object, then the coverage run.
+KYR_IT_SUITES=(it plantuml)
 KYR_SUITE_IT_SOURCES=(tests/ITs/integration_test.c)
 KYR_SUITE_IT_CPPFLAGS=(-pthread)
 KYR_SUITE_IT_LDLIBS=(-lcmocka -pthread)
+KYR_SUITE_PLANTUML_SOURCES=(tests/plantuml/scenarios.c)
+KYR_SUITE_PLANTUML_CPPFLAGS=(-pthread -I"${ROOT_DIR}/tests/plantuml")
+KYR_SUITE_PLANTUML_LDLIBS=(-lcmocka -pthread)
 KYR_IT_PROFILES=("${GCC_BUILD_PROFILES[@]}")
 KYR_IT_LINKAGES=(static shared)
 KYR_IT_COVERAGE=1
