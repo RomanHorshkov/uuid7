@@ -1,3 +1,9 @@
+/**
+ * @file smoke.c
+ * @brief The installed-package test: compiled against the installed header and library only, never the build tree.
+ *
+ * @verifies UUID7-SRS-120 UUID7-SRS-130 UUID7-SRS-013
+ */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>

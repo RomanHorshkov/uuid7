@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <setjmp.h>
 #include <stdarg.h>
@@ -264,10 +265,10 @@ static void reset_state(void)
     atomic_store_explicit(&g_time_flip, 0, memory_order_relaxed);
 }
 
-/*
- * test_default_rng_used_when_uninitialized()
- * ------------------------------------------
- * uuid7_gen() must remain usable even if the caller never explicitly calls uuid7_init() or uuid7_set_rng_func().
+/**
+ * @brief uuid7_gen() must remain usable even if the caller never explicitly calls uuid7_init() or uuid7_set_rng_func().
+ *
+ * @verifies UUID7-SRS-021 UUID7-SRS-002 UUID7-SRS-003
  */
 static void test_default_rng_used_when_uninitialized(void** state)
 {
@@ -283,12 +284,13 @@ static void test_default_rng_used_when_uninitialized(void** state)
     assert_uuid7_markers(uuid);
 }
 
-/*
- * test_version_variant_and_tail_bytes()
- * -------------------------------------
- * Verify the exact byte mapping of the UUID tail:
+/**
+ * @brief Verify the exact byte mapping of the UUID tail.
+ *
  * - byte 8 stores variant bits overlaid onto scripted random byte 0
  * - bytes 9..15 store scripted random bytes 1..7 unchanged
+ *
+ * @verifies UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-005
  */
 static void test_version_variant_and_tail_bytes(void** state)
 {
@@ -310,10 +312,10 @@ static void test_version_variant_and_tail_bytes(void** state)
     }
 }
 
-/*
- * test_timestamp_matches_override()
- * ---------------------------------
- * The encoded 48-bit timestamp must match the test-time override exactly.
+/**
+ * @brief The encoded 48-bit timestamp must match the test-time override exactly.
+ *
+ * @verifies UUID7-SRS-001
  */
 static void test_timestamp_matches_override(void** state)
 {
@@ -329,10 +331,10 @@ static void test_timestamp_matches_override(void** state)
     assert_int_equal(extract_ms(uuid), 0x010203040506ull);
 }
 
-/*
- * test_monotonic_non_decreasing_many()
- * ------------------------------------
- * With a fixed millisecond, packed (ms, seq) state must be strictly increasing for every generated UUID.
+/**
+ * @brief With a fixed millisecond, packed (ms, seq) state must be strictly increasing for every generated UUID.
+ *
+ * @verifies UUID7-SRS-004 UUID7-SRS-007 UUID7-SRS-009
  */
 static void test_monotonic_non_decreasing_many(void** state)
 {
@@ -360,11 +362,12 @@ static void test_monotonic_non_decreasing_many(void** state)
     }
 }
 
-/*
- * test_overflow_advances_logical_ms()
- * -----------------------------------
- * A single logical millisecond can hold TEST_SEQ_SPACE UUIDs because the sequence field is 12 bits wide (0..4095). The next UUID must roll
- * into the next logical millisecond and restart the sequence at zero.
+/**
+ * @brief A single logical millisecond can hold TEST_SEQ_SPACE UUIDs because the sequence field is 12 bits wide (0..4095).
+ *
+ * The next UUID must roll into the next logical millisecond and restart the sequence at zero.
+ *
+ * @verifies UUID7-SRS-004 UUID7-SRS-010
  */
 static void test_overflow_advances_logical_ms(void** state)
 {
@@ -403,10 +406,10 @@ static void test_overflow_advances_logical_ms(void** state)
     }
 }
 
-/*
- * test_null_buffer_rejected()
- * ---------------------------
- * The generator must reject NULL output buffers deterministically.
+/**
+ * @brief The generator must reject NULL output buffers deterministically.
+ *
+ * @verifies UUID7-SRS-031 UUID7-ICD-007
  */
 static void test_null_buffer_rejected(void** state)
 {
@@ -417,10 +420,10 @@ static void test_null_buffer_rejected(void** state)
     assert_int_equal(uuid7_gen(NULL), -1);
 }
 
-/*
- * test_rng_reset_to_default()
- * ---------------------------
- * uuid7_set_rng_func(NULL) must restore the built-in default RNG.
+/**
+ * @brief uuid7_set_rng_func(NULL) must restore the built-in default RNG.
+ *
+ * @verifies UUID7-SRS-020 UUID7-ICD-008
  */
 static void test_rng_reset_to_default(void** state)
 {
@@ -442,10 +445,10 @@ static void test_rng_reset_to_default(void** state)
     assert_uuid7_markers(uuid);
 }
 
-/*
- * test_init_accepts_custom_rng()
- * ------------------------------
- * uuid7_init(fn, NULL) must install the supplied RNG callback.
+/**
+ * @brief uuid7_init(fn, NULL) must install the supplied RNG callback.
+ *
+ * @verifies UUID7-SRS-020 UUID7-ICD-004
  */
 static void test_init_accepts_custom_rng(void** state)
 {
@@ -463,10 +466,12 @@ static void test_init_accepts_custom_rng(void** state)
     assert_int_equal(uuid[9], script[1]);
 }
 
-/*
- * test_init_null_uses_default_rng()
- * ---------------------------------
- * Passing NULL as the RNG in uuid7_init() must actively restore the default RNG, not leave a previously installed custom RNG in place.
+/**
+ * @brief Passing NULL as the RNG in uuid7_init() must actively restore the default RNG.
+ *
+ * A previously installed custom RNG must not stay in place.
+ *
+ * @verifies UUID7-SRS-020 UUID7-ICD-004
  */
 static void test_init_null_uses_default_rng(void** state)
 {
@@ -486,10 +491,12 @@ static void test_init_null_uses_default_rng(void** state)
     assert_int_equal(uuid7_test_set_default_rng_fail(0), 0);
 }
 
-/*
- * test_init_raises_state_from_last_uuid()
- * ---------------------------------------
- * Importing a previous UUID through uuid7_init() must raise the internal monotonic floor so the next generated UUID is strictly newer.
+/**
+ * @brief Importing a previous UUID through uuid7_init() must raise the internal monotonic floor.
+ *
+ * The next generated UUID is strictly newer than the imported one.
+ *
+ * @verifies UUID7-SRS-014
  */
 static void test_init_raises_state_from_last_uuid(void** state)
 {
@@ -511,10 +518,10 @@ static void test_init_raises_state_from_last_uuid(void** state)
     assert_int_equal(extract_seq(uuid), 11u);
 }
 
-/*
- * test_repeated_init_does_not_move_state_backward()
- * -------------------------------------------------
- * Re-running uuid7_init() with an older imported UUID must never rewind the generator's monotonic state.
+/**
+ * @brief Re-running uuid7_init() with an older imported UUID must never rewind the generator's monotonic state.
+ *
+ * @verifies UUID7-SRS-016
  */
 static void test_repeated_init_does_not_move_state_backward(void** state)
 {
@@ -539,10 +546,10 @@ static void test_repeated_init_does_not_move_state_backward(void** state)
     assert_int_equal(extract_seq(uuid), 11u);
 }
 
-/*
- * test_init_rejects_invalid_import_version()
- * ------------------------------------------
- * Imported state must be rejected when the version nibble is not 7.
+/**
+ * @brief Imported state must be rejected when the version nibble is not 7.
+ *
+ * @verifies UUID7-SRS-017 UUID7-ICD-004
  */
 static void test_init_rejects_invalid_import_version(void** state)
 {
@@ -565,10 +572,10 @@ static void test_init_rejects_invalid_import_version(void** state)
     assert_int_equal(extract_seq(uuid), 0u);
 }
 
-/*
- * test_init_rejects_invalid_import_variant()
- * ------------------------------------------
- * Imported state must be rejected when the RFC variant bits are not 10xxxxxx.
+/**
+ * @brief Imported state must be rejected when the RFC variant bits are not 10xxxxxx.
+ *
+ * @verifies UUID7-SRS-017 UUID7-ICD-004
  */
 static void test_init_rejects_invalid_import_variant(void** state)
 {
@@ -591,10 +598,10 @@ static void test_init_rejects_invalid_import_variant(void** state)
     assert_int_equal(extract_seq(uuid), 0u);
 }
 
-/*
- * test_default_rng_failure_returns_minus2()
- * -----------------------------------------
- * The public error contract for RNG failure is -2.
+/**
+ * @brief The public error contract for RNG failure is -2.
+ *
+ * @verifies UUID7-SRS-024 UUID7-ICD-007
  */
 static void test_default_rng_failure_returns_minus2(void** state)
 {
@@ -611,10 +618,10 @@ static void test_default_rng_failure_returns_minus2(void** state)
     assert_int_equal(uuid7_test_set_default_rng_fail(0), 0);
 }
 
-/*
- * test_rng_failure_ignored_for_custom_rng()
- * -----------------------------------------
- * The default-RNG failure hook must not affect callers that install a custom RNG implementation.
+/**
+ * @brief The default-RNG failure hook must not affect callers that install a custom RNG implementation.
+ *
+ * @verifies UUID7-SRS-020
  */
 static void test_rng_failure_ignored_for_custom_rng(void** state)
 {
@@ -675,10 +682,10 @@ static int cmp_uuid(const void* a, const void* b)
     return memcmp(a, b, UUID7_SIZE_BYTES);
 }
 
-/*
- * test_multithreaded_uniqueness()
- * -------------------------------
- * Concurrent callers must never receive duplicate UUIDs.
+/**
+ * @brief Concurrent callers must never receive duplicate UUIDs.
+ *
+ * @verifies UUID7-SRS-007 UUID7-SRS-028
  */
 static void test_multithreaded_uniqueness(void** state)
 {
@@ -718,10 +725,10 @@ static void test_multithreaded_uniqueness(void** state)
     free(all);
 }
 
-/*
- * test_time_regression_monotonic()
- * --------------------------------
- * Even if the wall clock moves backward, the packed monotonic state must keep increasing.
+/**
+ * @brief Even if the wall clock moves backward, the packed monotonic state must keep increasing.
+ *
+ * @verifies UUID7-SRS-007 UUID7-SRS-009
  */
 static void test_time_regression_monotonic(void** state)
 {
@@ -748,11 +755,12 @@ static void test_time_regression_monotonic(void** state)
     }
 }
 
-/*
- * test_overflow_multiple_ms_advances()
- * ------------------------------------
- * Repeated sequence exhaustion must keep advancing the logical millisecond one step at a time with the sequence restarting from zero on
- * each rollover.
+/**
+ * @brief Repeated sequence exhaustion must keep advancing the logical millisecond one step at a time.
+ *
+ * The sequence restarts from zero on each rollover.
+ *
+ * @verifies UUID7-SRS-010
  */
 static void test_overflow_multiple_ms_advances(void** state)
 {
@@ -804,10 +812,10 @@ static void test_overflow_multiple_ms_advances(void** state)
     }
 }
 
-/*
- * test_heavy_single_thread_uniqueness()
- * -------------------------------------
- * Stress the generator in one thread and confirm all produced UUIDs are unique after lexicographic sorting.
+/**
+ * @brief Stress the generator in one thread and confirm all produced UUIDs are unique after lexicographic sorting.
+ *
+ * @verifies UUID7-SRS-002 UUID7-SRS-003 UUID7-SRS-007
  */
 static void test_heavy_single_thread_uniqueness(void** state)
 {
@@ -835,13 +843,14 @@ static void test_heavy_single_thread_uniqueness(void** state)
     free(all);
 }
 
-/*
- * test_raise_floor_orders_after_import()
- * --------------------------------------
- * uuid7_raise_floor() imports a persisted floor WITHOUT touching the RNG, and
- * the next generated id must sort strictly AFTER it even when the wall clock is
- * older — the guarantee that keeps time-ordered DBI appends sequential across a
- * restart / snapshot restore / clock rollback. NULL is rejected.
+/**
+ * @brief uuid7_raise_floor() imports a persisted floor WITHOUT touching the RNG.
+ *
+ * The next generated id must sort strictly AFTER it even when the wall clock is older — the guarantee that keeps time-ordered DBI
+ * appends sequential across a restart / snapshot restore / clock rollback. The tail still comes from the RNG installed before the
+ * import. NULL is rejected.
+ *
+ * @verifies UUID7-SRS-014 UUID7-SRS-015 UUID7-SRS-032 UUID7-ICD-005
  */
 static void test_raise_floor_orders_after_import(void** state)
 {
@@ -862,25 +871,21 @@ static void test_raise_floor_orders_after_import(void** state)
     assert_int_equal(uuid7_gen(uuid), 0);
     assert_int_equal(extract_ms(uuid), 5000u); /* not the older 1000 wall clock */
     assert_int_equal(extract_seq(uuid), 8u);   /* strictly after the floor      */
+    for(size_t i = 9u; i < UUID7_SIZE_BYTES; ++i)
+    {
+        assert_int_equal(uuid[i], 0u);         /* the RNG installed before the import still fills the tail */
+    }
 }
 
-/*
- * test_clock_failure_count_healthy_is_zero()
- * ------------------------------------------
- * The clock-failure metric is a process-global monotonic tally; on a healthy
- * system clock_gettime never fails, so it stays zero. Pins the accessor + the
- * healthy invariant (the failure itself isn't injectable through the test hooks,
- * which bypass clock_gettime entirely).
- */
-/*
- * test_gen_refuses_beyond_ahead_bound()
- * -------------------------------------
- * Abuse bound: with the wall clock frozen, the generator may borrow logical
- * milliseconds only up to UUID7_MAX_AHEAD_MS past it. Park the state exactly at
- * the bound (sequence one short of exhaustion), prove the last in-bound id is
- * minted, then prove the next reservation — which would need bound+1 — is
- * refused with -3 and leaves the state untouched. Advancing the wall clock by
- * one millisecond lifts the bound by one and the refused reservation succeeds.
+/**
+ * @brief Abuse bound: generation refuses to run more than UUID7_MAX_AHEAD_MS ahead of the wall clock.
+ *
+ * With the wall clock frozen, the generator may borrow logical milliseconds only up to UUID7_MAX_AHEAD_MS past it. Park the state
+ * exactly at the bound (sequence one short of exhaustion), prove the last in-bound id is minted, then prove the next reservation —
+ * which would need bound+1 — is refused with -3 and leaves the state untouched. Advancing the wall clock by one millisecond lifts the
+ * bound by one and the refused reservation succeeds.
+ *
+ * @verifies UUID7-SRS-011 UUID7-SRS-008 UUID7-SRS-010 UUID7-ICD-007
  */
 static void test_gen_refuses_beyond_ahead_bound(void** state)
 {
@@ -909,13 +914,13 @@ static void test_gen_refuses_beyond_ahead_bound(void** state)
     assert_int_equal(extract_seq(uuid), 0u);
 }
 
-/*
- * test_raise_floor_refuses_far_future()
- * -------------------------------------
- * A persisted id dated more than UUID7_MAX_AHEAD_MS past the wall clock is a
- * poisoned import (or a runaway clock): uuid7_raise_floor() and uuid7_init()
- * must refuse it with -4 and leave the generator exactly where it was. The
- * 48-bit maximum timestamp is the canonical poison value.
+/**
+ * @brief A persisted id dated more than UUID7_MAX_AHEAD_MS past the wall clock is refused.
+ *
+ * Such an id is a poisoned import (or a runaway clock): uuid7_raise_floor() and uuid7_init() must refuse it with -4 and leave the generator
+ * exactly where it was. The 48-bit maximum timestamp is the canonical poison value.
+ *
+ * @verifies UUID7-SRS-018 UUID7-ICD-004 UUID7-ICD-005
  */
 static void test_raise_floor_refuses_far_future(void** state)
 {
@@ -939,6 +944,16 @@ static void test_raise_floor_refuses_far_future(void** state)
     assert_int_equal(extract_seq(uuid), 0u);
 }
 
+/**
+ * @brief The clock-failure metric stays zero on a healthy clock.
+ *
+ * It is a process-global monotonic tally; on a healthy system clock_gettime never fails.
+ *
+ * Pins the accessor + the healthy invariant (the failure itself isn't injectable through the test hooks, which bypass clock_gettime
+ * entirely).
+ *
+ * @verifies UUID7-SRS-027 UUID7-ICD-006
+ */
 static void test_clock_failure_count_healthy_is_zero(void** state)
 {
     (void)state;
@@ -946,6 +961,313 @@ static void test_clock_failure_count_healthy_is_zero(void** state)
     uint8_t uuid[UUID7_SIZE_BYTES] = {0};
     assert_int_equal(uuid7_gen(uuid), 0); /* uses the real clock */
     assert_int_equal(uuid7_clock_failure_count(), 0u);
+}
+
+/**
+ * @brief The public constants carry their documented values.
+ *
+ * @verifies UUID7-ICD-001 UUID7-ICD-002
+ */
+static void test_public_constants(void** state)
+{
+    (void)state;
+    _Static_assert(UUID7_SIZE_BYTES == 16u, "UUID7_SIZE_BYTES is 16");
+    assert_int_equal(UUID7_SIZE_BYTES, 16u);
+    assert_int_equal(UUID7_MAX_AHEAD_MS, 10000u);
+}
+
+/*
+ * realtime_ms()
+ * -------------
+ * The wall clock the library reads (CLOCK_REALTIME), in whole milliseconds, for bracketing a generation.
+ */
+static uint64_t realtime_ms(void)
+{
+    struct timespec ts;
+    assert_int_equal(clock_gettime(CLOCK_REALTIME, &ts), 0);
+    return ((uint64_t)ts.tv_sec * UINT64_C(1000)) + ((uint64_t)ts.tv_nsec / UINT64_C(1000000));
+}
+
+/**
+ * @brief With the real clock, the encoded timestamp lies between two CLOCK_REALTIME reads taken around the call.
+ *
+ * @verifies UUID7-SRS-006
+ */
+static void test_timestamp_tracks_realtime(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+
+    const uint64_t before                 = realtime_ms();
+    uint8_t        uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);
+    const uint64_t after = realtime_ms();
+
+    assert_true(extract_ms(uuid) >= before);
+    assert_true(extract_ms(uuid) <= after);
+    assert_int_equal(extract_seq(uuid), 0u);
+}
+
+/**
+ * @brief A wall-clock millisecond later than the last reservation restarts the sequence at zero.
+ *
+ * @verifies UUID7-SRS-008 UUID7-SRS-004
+ */
+static void test_new_millisecond_restarts_sequence(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 1000u);
+    assert_int_equal(extract_seq(uuid), 0u);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_seq(uuid), 1u);
+
+    set_fake_time(1001u);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 1001u);
+    assert_int_equal(extract_seq(uuid), 0u);
+
+    set_fake_time(5000u);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 5000u);
+    assert_int_equal(extract_seq(uuid), 0u);
+}
+
+/**
+ * @brief A reservation that would leave the 48-bit timestamp field is refused with -3 and leaves the state untouched.
+ *
+ * @verifies UUID7-SRS-012 UUID7-ICD-007
+ */
+static void test_gen_refuses_48bit_limit(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+
+    const uint64_t last_ms = (UINT64_C(1) << 48) - 1u; /* the last millisecond the field can hold */
+    set_fake_time(last_ms);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t floor_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(floor_uuid, last_ms, 0x0FFEu);
+    assert_int_equal(uuid7_raise_floor(floor_uuid), 0);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0); /* the last pair that fits */
+    assert_int_equal(extract_ms(uuid), last_ms);
+    assert_int_equal(extract_seq(uuid), 0x0FFFu);
+
+    assert_int_equal(uuid7_gen(uuid), -3); /* the next one needs 2^48 */
+    assert_int_equal(uuid7_gen(uuid), -3); /* state untouched */
+}
+
+/**
+ * @brief Identifiers compare with memcmp() in generation order, across sequence rollovers and clock steps.
+ *
+ * @verifies UUID7-SRS-013
+ */
+static void test_ids_sort_in_generation_order(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(fast_rng), 0);
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t prev[UUID7_SIZE_BYTES] = {0};
+    uint8_t cur[UUID7_SIZE_BYTES]  = {0};
+    for(size_t i = 0; i < (TEST_SEQ_SPACE * 2u) + 16u; ++i)
+    {
+        if(i == 3000u) set_fake_time(1500u);
+        if(i == 6000u) set_fake_time(1200u);
+        assert_int_equal(uuid7_gen(cur), 0);
+        if(i > 0u)
+        {
+            assert_true(memcmp(prev, cur, UUID7_SIZE_BYTES) < 0);
+        }
+        memcpy(prev, cur, UUID7_SIZE_BYTES);
+    }
+}
+
+/*
+ * failing_rng()
+ * -------------
+ * A callback that always reports failure.
+ */
+static int failing_rng(void* buf, const size_t n)
+{
+    (void)buf;
+    (void)n;
+    return -1;
+}
+
+/**
+ * @brief A failed RNG call returns -2, writes nothing to the output buffer and consumes no sequence value.
+ *
+ * @verifies UUID7-SRS-023 UUID7-SRS-024 UUID7-ICD-007
+ */
+static void test_rng_failure_consumes_no_sequence(void** state)
+{
+    (void)state;
+    reset_state();
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_seq(uuid), 0u);
+
+    assert_int_equal(uuid7_set_rng_func(failing_rng), 0);
+    memset(uuid, 0xAA, sizeof(uuid));
+    assert_int_equal(uuid7_gen(uuid), -2);
+    for(size_t i = 0; i < UUID7_SIZE_BYTES; ++i)
+    {
+        assert_int_equal(uuid[i], 0xAAu); /* nothing written */
+    }
+
+    assert_int_equal(uuid7_set_rng_func(NULL), 0);
+    assert_int_equal(uuid7_test_set_default_rng_fail(1), 0);
+    assert_int_equal(uuid7_gen(uuid), -2);
+    assert_int_equal(uuid7_test_set_default_rng_fail(0), 0);
+
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 1000u);
+    assert_int_equal(extract_seq(uuid), 1u); /* the two failures consumed nothing */
+}
+
+/**
+ * @brief uuid7_init() installs the RNG before it validates the imported id, so a refused import still selects the RNG.
+ *
+ * @verifies UUID7-ICD-004 UUID7-SRS-020
+ */
+static void test_init_installs_rng_before_import(void** state)
+{
+    (void)state;
+    reset_state();
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    const uint8_t script[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+    rng_prepare_script(script, sizeof(script), 0x00u);
+
+    uint8_t invalid_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(invalid_uuid, 900u, 1u);
+    invalid_uuid[6] = (uint8_t)((0x4u << 4) | (invalid_uuid[6] & TEST_UUID_SEQ_HIGH_MASK));
+    assert_int_equal(uuid7_init(scripted_rng, invalid_uuid), -2);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(uuid[9], script[1]);
+    assert_int_equal(extract_ms(uuid), 1000u);
+}
+
+static _Atomic int g_swap_stop = 0;
+
+/*
+ * thread_swap_rng()
+ * -----------------
+ * Keeps changing the RNG and re-importing an old floor while the generator threads run.
+ */
+static void* thread_swap_rng(void* arg)
+{
+    (void)arg;
+    uint8_t old_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(old_uuid, 1u, 0u);
+
+    for(unsigned int n = 0; !atomic_load_explicit(&g_swap_stop, memory_order_acquire); ++n)
+    {
+        (void)uuid7_set_rng_func(((n & 1u) != 0u) ? zero_rng : fast_rng);
+        if((n % 64u) == 0u)
+        {
+            (void)uuid7_raise_floor(old_uuid);
+            (void)uuid7_init(fast_rng, NULL);
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief RNG changes and floor imports racing with generation never break uniqueness or per-thread order.
+ *
+ * @verifies UUID7-SRS-029 UUID7-SRS-028
+ */
+static void test_concurrent_rng_swap(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(fast_rng), 0);
+    atomic_store_explicit(&g_swap_stop, 0, memory_order_release);
+
+    enum
+    {
+        SWAP_GEN_THREADS = 4,
+        SWAP_PER_THREAD  = 100000
+    };
+    const size_t total = (size_t)SWAP_GEN_THREADS * (size_t)SWAP_PER_THREAD;
+    uint8_t*     all   = calloc(total, UUID7_SIZE_BYTES);
+    assert_non_null(all);
+
+    pthread_t    swapper;
+    pthread_t    tids[SWAP_GEN_THREADS];
+    thread_ctx_t ctx[SWAP_GEN_THREADS];
+    assert_int_equal(pthread_create(&swapper, NULL, thread_swap_rng, NULL), 0);
+    for(size_t i = 0; i < (size_t)SWAP_GEN_THREADS; ++i)
+    {
+        ctx[i].buf   = all + (i * (size_t)SWAP_PER_THREAD * UUID7_SIZE_BYTES);
+        ctx[i].count = (size_t)SWAP_PER_THREAD;
+        ctx[i].error = 0;
+        assert_int_equal(pthread_create(&tids[i], NULL, thread_generate, &ctx[i]), 0);
+    }
+    for(size_t i = 0; i < (size_t)SWAP_GEN_THREADS; ++i)
+    {
+        pthread_join(tids[i], NULL);
+        assert_int_equal(ctx[i].error, 0);
+    }
+    atomic_store_explicit(&g_swap_stop, 1, memory_order_release);
+    pthread_join(swapper, NULL);
+
+    qsort(all, total, UUID7_SIZE_BYTES, cmp_uuid);
+    for(size_t i = 1; i < total; ++i)
+    {
+        assert_true(memcmp(all + ((i - 1u) * UUID7_SIZE_BYTES), all + (i * UUID7_SIZE_BYTES), UUID7_SIZE_BYTES) != 0);
+    }
+    free(all);
+}
+
+/**
+ * @brief uuid7_raise_floor() refuses an identifier that is not version 7 (-2) or not variant 0b10 (-3) and keeps the state.
+ *
+ * @verifies UUID7-SRS-017 UUID7-ICD-005
+ */
+static void test_raise_floor_rejects_invalid(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    set_fake_time(1000u);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    uint8_t bad[UUID7_SIZE_BYTES];
+    build_valid_uuid7(bad, 900u, 3u);
+    bad[6] = (uint8_t)((0x4u << 4) | (bad[6] & TEST_UUID_SEQ_HIGH_MASK));
+    assert_int_equal(uuid7_raise_floor(bad), -2);
+    build_valid_uuid7(bad, 900u, 3u);
+    bad[8] = 0xC0u;
+    assert_int_equal(uuid7_raise_floor(bad), -3);
+
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), 1000u);
+    assert_int_equal(extract_seq(uuid), 0u);
 }
 
 int main(void)
@@ -974,6 +1296,15 @@ int main(void)
         cmocka_unit_test(test_time_regression_monotonic),
         cmocka_unit_test(test_overflow_multiple_ms_advances),
         cmocka_unit_test(test_heavy_single_thread_uniqueness),
+        cmocka_unit_test(test_public_constants),
+        cmocka_unit_test(test_timestamp_tracks_realtime),
+        cmocka_unit_test(test_new_millisecond_restarts_sequence),
+        cmocka_unit_test(test_gen_refuses_48bit_limit),
+        cmocka_unit_test(test_ids_sort_in_generation_order),
+        cmocka_unit_test(test_rng_failure_consumes_no_sequence),
+        cmocka_unit_test(test_init_installs_rng_before_import),
+        cmocka_unit_test(test_concurrent_rng_swap),
+        cmocka_unit_test(test_raise_floor_rejects_invalid),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

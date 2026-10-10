@@ -4,6 +4,10 @@
  *
  * This program measures the steady-state cost of repeated `uuid7_gen()` calls using the benchmark RNG from stress_common.h. It warms the
  * generator first, then reports per-run latency, per-UUID cost, throughput, and summary statistics.
+ *
+ * The mean "cost per uuid" of the release cell is the measured value of the generation-cost budget.
+ *
+ * @verifies UUID7-SRS-040
  */
 
 #include "stress_common.h"

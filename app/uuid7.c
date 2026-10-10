@@ -17,6 +17,8 @@
  *
  * @author  Roman Horshkov <https://github.com/RomanHorshkov>
  * @date    may 2026
+ *
+ * @satisfies UUID7-SRS-051 UUID7-SRS-052 UUID7-SRS-063 UUID7-SRS-081 UUID7-SRS-100
  */
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
@@ -52,6 +54,8 @@
  * This constant defines the width of the low-order sequence field. It is used by the packing, unpacking, and masking helpers below.
  *
  * @note A value of `12` matches the UUIDv7 `rand_a` field width defined by the format used in this module.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_SEQ_BITS         12u
 
@@ -66,6 +70,8 @@
  * - extract the stored sequence from a packed state word
  *
  * @note Any bits above bit 11 are cleared when this mask is applied.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_SEQ_MASK         ((UINT64_C(1) << V7_SEQ_BITS) - UINT64_C(1))
 
@@ -75,6 +81,8 @@
  *
  * Since the lower `V7_SEQ_BITS` bits are reserved for the sequence field, the timestamp is shifted left by exactly that amount so both
  * values occupy disjoint bit ranges inside one 64-bit integer.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_MS_SHIFT         V7_SEQ_BITS
 
@@ -95,6 +103,8 @@
  *
  * @note This macro packs the module's internal `(ms, seq)` reservation state.
  *       It does not by itself produce the final 16-byte UUID representation.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_PACK(ms, seq)    (((uint64_t)(ms) << V7_MS_SHIFT) | ((uint64_t)(seq) & V7_SEQ_MASK))
 
@@ -107,6 +117,8 @@
  * @param word Packed 64-bit monotonic state value produced by `V7_PACK()`.
  *
  * @return The unpacked Unix timestamp in milliseconds as `uint64_t`.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_UNPACK_MS(word)  ((uint64_t)(word) >> V7_MS_SHIFT)
 
@@ -118,6 +130,8 @@
  * @param word Packed 64-bit monotonic state value produced by `V7_PACK()`.
  *
  * @return The unpacked 12-bit sequence / `rand_a` value as `uint16_t`.
+ *
+ * @ingroup uuid7_cmp_state
  */
 #define V7_UNPACK_SEQ(word) ((uint16_t)((word) & V7_SEQ_MASK))
 
@@ -126,6 +140,8 @@
  *
  * This constant is applied after right-shifting multi-byte fields so the result is truncated to one octet before storing into the output
  * UUID byte array.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_BYTE_MASK        0xFFu
 
@@ -146,6 +162,8 @@
  * @return Selected timestamp byte as `uint8_t`.
  *
  * @note Supplying an index outside `[0..5]` is a caller error.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_MS_BYTE(ms, n)   ((uint8_t)((((uint64_t)(ms)) >> (8 * (5 - (n)))) & V7_BYTE_MASK))
 
@@ -158,6 +176,8 @@
  * - `rand_a[7:0]` is stored in byte 7
  *
  * Shifting the 12-bit sequence right by 8 positions exposes the upper nibble before applying `V7_SEQ_HIGH_MASK`.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_SEQ_HIGH_SHIFT   8u
 
@@ -165,16 +185,22 @@
  * @brief Mask for the high 4-bit nibble of the 12-bit `rand_a` sequence field after it has been shifted down to the low bits.
  *
  * With the current layout this mask equals `0x0F` and is used when composing UUID byte 6 together with the version nibble.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_SEQ_HIGH_MASK    0x0Fu
 
 /**
  * @brief UUID version nibble encoded in byte 6.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_VERSION          0x07u
 
 /**
  * @brief Bit shift used to place or extract the 4-bit UUID version nibble.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_VERSION_SHIFT    4u
 
@@ -182,6 +208,8 @@
  * @brief Mask for the low 8 bits of the 12-bit `rand_a` sequence field.
  *
  * This mask isolates `rand_a[7:0]`, which are written directly into UUID byte 7.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_SEQ_LOW_MASK     0xFFu
 
@@ -194,11 +222,15 @@
  * - bits `[5:0]`: high 6 bits of `rand_b`
  *
  * This mask keeps only the payload portion that may coexist with the variant marker in the same byte.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_RB0_LOW6_MASK    0x3Fu
 
 /**
  * @brief Mask for the RFC variant bits stored in UUID byte 8.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_VARIANT_MASK     0xC0u
 
@@ -207,6 +239,8 @@
  *
  * The UUID variant required by RFC 4122 / RFC 9562 is binary `10` in the two most-significant bits of byte 8. OR-ing with this value sets
  * bit 7 and leaves bit 6 cleared.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_VARIANT_TOP      0x80u
 
@@ -214,6 +248,8 @@
  * @brief Number of random-tail bytes stored in the low 64 bits of the UUID assembly buffer before variant adjustment.
  *
  * The implementation samples 8 random bytes, then overlays the variant bits in the first of those bytes when constructing bytes `8..15`.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_RB_BYTES         8u
 
@@ -221,6 +257,8 @@
  * @brief Number of bytes occupied by the UUIDv7 Unix millisecond timestamp.
  *
  * UUIDv7 stores a 48-bit timestamp, which corresponds to exactly 6 bytes in the binary output representation.
+ *
+ * @ingroup uuid7_cmp_gen
  */
 #define V7_MS_BYTES         6u
 
@@ -229,6 +267,9 @@
  *
  * The packed state word holds 52 bits of milliseconds; the encoded UUID holds 48. A reservation at or past this value would be
  * silently truncated on encode and sort BEFORE every earlier id — the generator refuses it instead.
+ *
+ * @ingroup uuid7_cmp_gen
+ * @satisfies UUID7-SRS-012
  */
 #define V7_MS_LIMIT         (UINT64_C(1) << (8u * V7_MS_BYTES))
 
@@ -240,6 +281,8 @@
  * @param sec Whole-second component to convert.
  *
  * @return Equivalent millisecond count as `uint64_t`.
+ *
+ * @ingroup uuid7_cmp_clock
  */
 #define SEC_TO_MSEC(sec)    ((uint64_t)(sec) * UINT64_C(1000))
 
@@ -251,6 +294,9 @@
  * @param nsec Nanosecond component to convert.
  *
  * @return Whole milliseconds extracted from @p nsec as `uint64_t`.
+ *
+ * @ingroup uuid7_cmp_clock
+ * @satisfies UUID7-SRS-006
  */
 #define NSEC_TO_MSEC(nsec)  ((uint64_t)(nsec) / UINT64_C(1000000))
 
@@ -265,7 +311,10 @@
  *****************************************************************************************************************************************
  */
 
-/* Monotonic state layout in a single 64-bit word:
+/**
+ * @brief The reservation state: the last reserved `(ms, seq)` pair, packed by V7_PACK(); initial value 0.
+ *
+ * Monotonic state layout in a single 64-bit word:
  *  - bits [63:12] (upper 52 bits): unix milliseconds (uint64_t)
  *  - bits [11:0]  (lower 12 bits) : 12-bit sequence counter
  *
@@ -278,25 +327,41 @@
  *  - global order: all threads must observe one coherent modification order
  *
  * They are not about publishing additional payload data to other threads.
+ *
+ * @ingroup uuid7_cmp_state
+ * @satisfies UUID7-SRS-007 UUID7-SRS-028 UUID7-SRS-050
  */
 static _Atomic uint64_t g_v7_state = 0;
 
-/* RNG function pointer stored atomically to avoid data races between
- * callers of `uuid7_gen()` and `uuid7_set_rng_func()`.
+/**
+ * @brief The active RNG callback; NULL until the first installation (the built-in RNG is installed on first use).
+ *
+ * Stored atomically to avoid data races between callers of `uuid7_gen()` and `uuid7_set_rng_func()`.
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-029 UUID7-SRS-050
  */
 static _Atomic(uuid7_rng_function_t) g_uuid_rng_func = NULL;
 
-/* Count of clock_gettime() failures. A failure still yields a UNIQUE id (random
- * tail + monotonic seq), but with a zero timestamp — operationally misleading,
- * so we expose the count as a metric for the operator to alert on rather than
- * failing silently. Relaxed: it is a diagnostic tally, not a synchronization point. */
+/**
+ * @brief Count of clock_gettime() failures since process start; initial value 0.
+ *
+ * A failure still yields a UNIQUE id (random tail + monotonic seq), but with a zero timestamp — operationally misleading, so we expose
+ * the count as a metric for the operator to alert on rather than failing silently. Relaxed: it is a diagnostic tally, not a
+ * synchronization point.
+ *
+ * @ingroup uuid7_cmp_clock
+ * @satisfies UUID7-SRS-026 UUID7-SRS-050
+ */
 static _Atomic uint64_t g_clock_failures = 0;
 
 #ifdef UUID7_TESTING
 #    include "uuid7_test.h" /* shared prototypes + uuid7_time_fn_t for the hooks below */
 
+/** @brief Test clock installed by uuid7_test_set_time_fn(); NULL selects CLOCK_REALTIME. @ingroup uuid7_cmp_hooks */
 static _Atomic(uuid7_time_fn_t) g_uuid_time_func = NULL;
-static _Atomic int              g_force_rng_fail = 0;
+/** @brief Non-zero forces the built-in RNG to fail (uuid7_test_set_default_rng_fail()). @ingroup uuid7_cmp_hooks */
+static _Atomic int g_force_rng_fail              = 0;
 
 int uuid7_test_set_time_fn(uuid7_time_fn_t fn)
 {
@@ -335,6 +400,9 @@ void uuid7_test_reset_state(void)
  *
  * @return 0 on success.
  * @return negative on failure (e.g., if /dev/urandom cannot be read).
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-019 UUID7-SRS-025 UUID7-SRS-070 UUID7-SRS-080
  */
 static int _default_rng(void* buf, size_t n);
 
@@ -351,6 +419,9 @@ static int _default_rng(void* buf, size_t n);
  * @return -1 if @p uuid7_buf is NULL.
  * @return -2 if @p uuid7_buf does not encode UUID version 7.
  * @return -3 if @p uuid7_buf does not encode the RFC variant bits.
+ *
+ * @ingroup uuid7_cmp_import
+ * @satisfies UUID7-SRS-014 UUID7-SRS-015 UUID7-SRS-017 UUID7-SRS-018
  */
 static int _raise_g_v7_state_from_uuid(const void* uuid7_buf);
 
@@ -364,6 +435,11 @@ static int _raise_g_v7_state_from_uuid(const void* uuid7_buf);
  *
  * This helper is used by initialization-time state import. It is intentionally raise-only: if the current state is already newer, it is
  * left unchanged.
+ *
+ * @param floor_state Packed `(ms, seq)` floor, as V7_PACK() builds it.
+ *
+ * @ingroup uuid7_cmp_state
+ * @satisfies UUID7-SRS-016
  */
 static inline void _raise_g_v7_state(uint64_t floor_state)
 {
@@ -382,6 +458,10 @@ static inline void _raise_g_v7_state(uint64_t floor_state)
  * @brief Get the current value of the monotonic state word `g_v7_state`
  *
  * `memory_order_relaxed` is enough for this read because the reservation state itself is the only shared datum that matters here.
+ *
+ * @return The packed `(ms, seq)` word last reserved.
+ *
+ * @ingroup uuid7_cmp_state
  */
 static inline uint64_t _get_g_v7_state(void)
 {
@@ -392,6 +472,9 @@ static inline uint64_t _get_g_v7_state(void)
  * @brief Load the current RNG function pointer atomically.
  *
  * @return The currently configured RNG function, or NULL if none is set.
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-029
  */
 static inline uuid7_rng_function_t _load_rng_func(void)
 {
@@ -403,6 +486,11 @@ static inline uuid7_rng_function_t _load_rng_func(void)
  *
  * The default RNG is installed lazily using compare-exchange so a concurrent explicit call to `uuid7_set_rng_func()` cannot be overwritten
  * by a racy fallback store from `uuid7_gen()`.
+ *
+ * @return The installed RNG callback, never NULL.
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-021 UUID7-SRS-022
  */
 static inline uuid7_rng_function_t _ensure_rng_func(void)
 {
@@ -423,6 +511,9 @@ static inline uuid7_rng_function_t _ensure_rng_func(void)
  *
  * @param fn The RNG function to set as the current RNG.
  *           May be NULL to indicate no RNG configured.
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-020
  */
 static inline void _set_rng_func(uuid7_rng_function_t fn)
 {
@@ -433,6 +524,9 @@ static inline void _set_rng_func(uuid7_rng_function_t fn)
  * @brief Returns current real time in milliseconds since Unix epoch.
  *
  * @return uint64_t Current time in ms. On failure, return 0.
+ *
+ * @ingroup uuid7_cmp_clock
+ * @satisfies UUID7-SRS-006 UUID7-SRS-026
  */
 static inline uint64_t _get_realtime_ms(void)
 {
@@ -459,6 +553,9 @@ static inline uint64_t _get_realtime_ms(void)
  * @param buf  Output buffer.
  * @param n    Number of bytes to fill.
  * @return 0 on success, negative on error (only detectable for default RNG).
+ *
+ * @ingroup uuid7_cmp_rng
+ * @satisfies UUID7-SRS-023
  */
 static inline int _fill_random(void* buf, size_t n)
 {
