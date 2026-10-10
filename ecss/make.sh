@@ -40,9 +40,12 @@ if (( ! DOCS_ONLY )); then
     tail -n 1 "${EV}/pipeline.txt"
     say "evidence: packages built again (reproducibility), hardening of the release library"
     cp build/debs/SHA256SUMS "${EV}/SHA256SUMS.first" 2> /dev/null || : > "${EV}/SHA256SUMS.first"
-    verdict=different
-    if ./utils/build_deb.sh > "${EV}/build_deb_again.txt" 2>&1 && [[ -s "${EV}/SHA256SUMS.first" ]] \
-        && cmp -s build/debs/SHA256SUMS "${EV}/SHA256SUMS.first"; then verdict=identical; fi
+    # the second build is a development build like the pipeline's package stage (host against host); a release is built
+    # inside the root (RELEASING), and a refused or failed build is reported as such, never as different bytes
+    if ! KYR_ALLOW_HOST_BUILD=1 ./utils/build_deb.sh > "${EV}/build_deb_again.txt" 2>&1; then verdict="different (the second build failed: build_deb_again.txt)"
+    elif [[ ! -s "${EV}/SHA256SUMS.first" ]]; then verdict="different (no first build)"
+    elif cmp -s build/debs/SHA256SUMS "${EV}/SHA256SUMS.first"; then verdict=identical
+    else verdict=different; fi
     { printf 'first build (pipeline stage package):\n'; cat "${EV}/SHA256SUMS.first"
       printf 'second build (utils/build_deb.sh):\n'; cat build/debs/SHA256SUMS 2> /dev/null; printf 'SHA256SUMS %s\n' "${verdict}"; } \
         > "${EV}/reproducible.txt"
