@@ -54,12 +54,12 @@ The SDP's <4.5>; independence: none (category D).
 | Binary checks | `check_hardening.sh`, `nm`, `readelf`, `size` |
 | Traceability analysis | `ecss/tools/ecss.py`: the `@satisfies` and `@verifies` tags against the rms links |
 | Coverage | gcov through gcovr (coverage profile, -O0) |
-| Inspection and review | the checklists of <6>; the rms for records |
+| Inspection and review | the checklists of \ref sverp_checklists "Annex A"; the rms for records |
 
 ## 5 Control procedures for verification process
 
 1. Problem reporting and resolution: an rms change-request per finding (\ref UUID7_DOC_SMP "SMP" <14>).
-2. Deviation and waiver policy: a deviation is recorded as an rms decision linked to what it affects and reviewed at the next milestone; none is granted.
+2. Deviation and waiver policy: a deviation is recorded as an rms decision linked to what it affects and reviewed at the next milestone. One deviation stands: the accessor name `uuid7_clock_failure_count()` against coding rule N3, kept to preserve the ABI (\ref UUID7_DOC_SPAMR "SPAMR" <6>); it has no record yet (\ref UUID7_DOC_SDP "SDP" <4.6>). No waiver.
 3. Control procedures: the SCMP's change control.
 
 ## 6 Verification activities
@@ -97,3 +97,35 @@ The verification cases' results in the \ref UUID7_DOC_SVR "SVR" and the SPAMR me
 #### 6.3.4 Methodology, tools and facilities
 
 `ecss/tools/ecss.py` compares each measure with its target and records the verdict with its evidence file under `build/ecss/evidence`.
+
+## Annex A Inspection and review checklists {#sverp_checklists}
+
+The means of review and inspection (ECSS-Q-ST-80 6.2.6.9, 6.2.6.10); a finding against an item is a RID (review) or a failed inspection result (verification case), each naming the checklist and the item.
+
+CL-DOC, a document of the data package against its DRD (reviews):
+
+1. Every section of the DRD is present in its order; a section the tailoring empties says why, with the clause.
+2. The document information names the document, its DRD, its reviews, its status and the configuration of the evidence; every configuration flag is explained.
+3. Every compliance statement points to an output that exists; nothing claims more than the evidence and the front page's claim.
+4. Generated parts are regenerated at the reviewed commit; nothing under `build/ecss/md` is edited by hand.
+5. No contradiction with the other documents of the data package (deviations, open items, problem reports, statuses).
+6. The standards are cited by clause, not copied.
+
+CL-REQ, a requirement (SRR, PDR; UUID7-IN cases on requirements):
+
+1. One obligation, one "shall", verifiable by the stated method.
+2. Rationale, criteria, method and upper-level source present; no TBD or TBC; values with units.
+3. Allocated to a component or stated as a property of the whole, and verified by at least one case.
+4. Security relevance considered against the SSAR's assets.
+
+CL-CODE, the code against the coding standard's rules that no gate enforces (UUID7-IN-008):
+
+1. Each rule whose "Enforced by" column names the inspection is read against the code at the reviewed commit; a breach is a finding.
+2. Every documented symbol carries its component (`@ingroup`) and the requirements it implements (`@satisfies`).
+3. Failure paths leave the caller's outputs untouched; no new dependency beyond the C library.
+
+CL-TEST, a verification case (CDR, QR):
+
+1. It names the requirements it verifies (`@verifies` or the case's links) and its pass and fail criteria.
+2. It is deterministic, or says where it uses the real clock or the entropy source.
+3. It ran in every cell its plan names; its result links its evidence.

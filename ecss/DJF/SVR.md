@@ -76,7 +76,7 @@ The quality requirements (SRS <5.10> and the SPAP's metrics):
 
 ### 5.1 Technical budgets and margins computation
 
-Memory: the sizes of the release object (`size`, `nm -S`): code, initialised and static data; the stack per call from the source (no recursion, no variable-length array). Processing: the mean cost per identifier of the single-thread benchmark (10 runs of 1,000,000 identifiers after a warm-up) in every profile and linkage; the margin is the budget of UUID7-SRS-040 minus the release measure. The budgets are measured, not estimated: the code exists.
+Memory: the sizes of the release object (`size`, `nm -S`): code, initialised and static data; the stack per call from `gcc -fstack-usage` on the release build, followed through the references between the functions (no recursion, no variable-length array). Processing: the mean cost per identifier of the single-thread benchmark (10 runs of 1,000,000 identifiers after a warm-up) in every profile and linkage; the margin is the budget of UUID7-SRS-040 minus the release measure. The budgets are measured, not estimated: the code exists.
 
 ### 5.2 Software budget (sizing and timing)
 

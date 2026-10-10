@@ -18,6 +18,10 @@ ECSS-Q-ST-80 6.2.2.1 (applicable at D) asks for the criticality classification o
 - Table D-1: software involved in category IV functions (negligible consequences) with no compensating provision is category D. The library is classified **D**; every component of the \ref UUID7_DOC_SDD "SDD" inherits D, and no component can cause the failure of a higher-criticality component through shared resources (ECSS-Q-ST-80 6.2.2.10): it holds no lock, allocates nothing and writes only into the caller's buffer.
 - Security sensitivity: assessed by the \ref UUID7_DOC_SSAR "SSAR": not security sensitive (the identifiers are not secrets; ECSS-Q-ST-80 6.2.9 and 6.2.10 are applied at the level the SSAR justifies).
 
+### 3.1 Two criticality scales {#tailoring_scales}
+
+<!-- ecss:criticality -->
+
 ## 4 Tailoring of ECSS-E-ST-40C Rev.1
 
 Annex R Table R-1 applies as written for category D. In addition, by agreement (Annex S, general tailoring):

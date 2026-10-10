@@ -39,6 +39,7 @@ KINDS = ["requirement", "document", "component", "verification-case", "verificat
 STATUSES = ["draft", "candidate", "proposed", "in-review", "needs-rework", "approved", "baselined", "implemented", "verified",
             "validated", "rejected", "obsolete", "superseded", "withdrawn"]
 METHODS = ["none", "test", "analysis", "inspection", "review", "demonstration", "simulation"]
+CRITICALITIES = ["none", "low", "medium", "high", "safety"]
 LINKS = ["derives-from", "refines", "allocates-to", "satisfies", "verifies", "validated-by", "references", "impacts", "duplicates",
          "conflicts-with", "implemented-by", "verified-by", "mitigates", "caused-by", "affects", "depends-on", "traces-to", "supersedes",
          "assumption-for", "justified-by", "constrained-by", "input-to", "output-of", "evidences", "reviews", "approves", "invalidates",
@@ -126,6 +127,7 @@ class Art:
         self.revision = row.get("revision")
         self.uuid = row.get("uuid")
         self.revs = []
+        self.criticality = row.get("criticality", "")
 
     def row(self):
         return [self.id, self.kind, self.title, self.body, self.rationale, self.criteria, self.method, self.status, self.owner,
@@ -167,7 +169,8 @@ def load_rms():
                "method": METHODS[r.get("method", 0)] if r.get("method", 0) < len(METHODS) else "none",
                "status": STATUSES[r.get("status", 0)] if r.get("status", 0) < len(STATUSES) else "draft", "owner": r.get("owner", ""),
                "source_ref": r.get("source_ref", ""), "applicability": r.get("applicability", ""), "notes": r.get("notes", ""),
-               "revision": r.get("number"), "uuid": a.get("uuid")}
+               "revision": r.get("number"), "uuid": a.get("uuid"),
+               "criticality": CRITICALITIES[r.get("criticality", 0)] if r.get("criticality", 0) < len(CRITICALITIES) else "none"}
         art = Art(row, "rms")
         art.revs = [{"n": x.get("number"), "at_ms": x.get("changed_at_ms", 0), "reason": x.get("reason", ""),
                      "status": STATUSES[x.get("status", 0)] if x.get("status", 0) < len(STATUSES) else "draft",
@@ -199,6 +202,7 @@ def load_rms():
                                               "by": r.get("latest_result_by", ""), "suspect": r.get("claim_suspect", "")}
     return {"project": pkg.get("project", {}), "arts": arts, "links": links, "baselines": baselines, "verdicts": verdicts,
             "exported_by": pkg.get("exported_by_name") or pkg.get("exported_by") or "",
+            "format": pkg.get("kyr_rms_package", "?"), "producer": pkg.get("kyr_rms_version", ""),
             "path": rel(pkg_path), "sha256": hashlib.sha256(read(pkg_path).encode()).hexdigest()}
 
 
@@ -1017,7 +1021,8 @@ def h_docinfo(M, a):
         ["Reviews (ECSS-E-ST-40 Table A-1)", d.notes.get("reviews", "").replace(",", ", ")],
         ["Status", status_text(M, d, rev)], ["Product", product_text(M)],
         ["Generated", "%s by ecss/make.sh from %s" % (M.generated, src)],
-        ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\""],
+        ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\"; the rms "
+                        "criticality field is another scale, \\ref tailoring_scales \"mapped there\""],
         ["Claim", "%s (basis: \\ref index \"the front page\")" % md_escape(claim(M)[0])]])
 
 
@@ -1070,7 +1075,8 @@ def req_block(M, r, level):
     lines = ["%s %s %s {#%s}" % ("#" * level, r.id, md_escape(r.title), anchor("req_" + r.id)), "", md_escape(r.body), "",
              "- Rationale: " + md_escape(r.rationale),
              "- Verification: %s (%s) — %s" % (ECSS_METHOD.get(r.method, r.method), r.method, md_escape(r.criteria)),
-             "- Source: %s · Criticality: %s · Status: %s" % (md_escape(r.source_ref), md_escape(r.applicability),
+             "- Source: %s · ECSS category: %s · rms criticality: %s (\\ref tailoring_scales \"not an ECSS category\") · Status: %s" % (
+                 md_escape(r.source_ref), md_escape(r.applicability), r.criticality or "not set",
                                                                 status_text(M, r, (" (rms revision %s)" % r.revision) if r.revision else "")),
              "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id])), ""]
     return "\n".join(lines)
@@ -1374,6 +1380,90 @@ def h_coverage(M, a):
                                                                        cref("UUID7-IN-002"), cref("UUID7-AN-012")))
 
 
+RMS_CRITICALITY = [
+    ("none", "no rule beyond the lifecycle"),
+    ("low", "no rule beyond the lifecycle"),
+    ("medium", "no rule beyond the lifecycle"),
+    ("high", "two different approvers before the item is approved (kyr_rms workflow)"),
+    ("safety", "two different approvers; it marks a safety function, which category D excludes (\\ref UUID7_DOC_TAILORING \"tailoring\" <3>)"),
+]
+
+
+def h_criticality(M, a):
+    """The one mapping between the rms criticality field and the ECSS software criticality category, with the items of this
+    project counted by both."""
+    count = collections.Counter((x.criticality or "not set", x.applicability or "-") for x in M.arts if x.kind == "requirement")
+    rows = []
+    for level, rule in RMS_CRITICALITY:
+        n = {cat: v for (lv, cat), v in count.items() if lv == level}
+        rows.append([level, rule, "none: an rms level never sets or changes the ECSS category", ", ".join(
+            "%d of category %s" % (v, c) for c, v in sorted(n.items())) or "0"])
+    if any(lv == "not set" for lv, _ in count):
+        rows.append(["not set", "the CSV import carries no criticality column", "-", ", ".join(
+            "%d of category %s" % (v, c) for (lv, c), v in sorted(count.items()) if lv == "not set")])
+    bad = [x.id for x in M.arts if x.kind == "requirement" and x.criticality == "safety"]
+    return ("Two scales, one mapping. The ECSS software criticality category (A to D, ECSS-Q-ST-80 Table D-1) belongs to the software "
+            "product and follows from the consequences of its failure (<3>): every item here is category D, in the `applicability` "
+            "field. The rms `criticality` field is a workflow priority of kyr_rms that decides how many approvers an item needs; it "
+            "is not an ECSS category and maps to none:\n\n" +
+            table(["rms criticality", "What it does in the rms", "ECSS category it maps to", "Requirements here"], rows) +
+            "\n\nAn item whose failure could reach the consequences of a category above D would reclassify the software (<3>), not "
+            "raise an rms level. %s" % (("**Inconsistent: %s carry rms criticality safety in a category D product.**" % ", ".join(bad))
+                                        if bad else "No item carries rms criticality safety."))
+
+
+def tool_version(M, spec):
+    kind, _, name = spec.partition(":")
+    if kind == "toolchain":
+        v = M.toolchain.get(name, "")
+        if name == "environment":
+            return ("release root %s" % v.split()[-1][:16]) if v.startswith("release root") else (v or "not recorded")
+        return (v + (" (release root)" if M.in_root else " (host)")) if v else "not recorded"
+    if kind == "pin":
+        pin = [l.split() for l in read(os.path.join(ROOT, "deps.txt")).splitlines() if l.startswith("own") and len(l.split()) > 4
+               and l.split()[1] == name]
+        return ("%s (sha256 %s…)" % (pin[0][2], pin[0][4][:12])) if pin else "not pinned"
+    if kind == "rms":
+        if M.mode != "rms":
+            return "no export in this refresh"
+        return ("%s; " % M.rms["producer"] if M.rms["producer"] else "version not carried by the export; ") + \
+            "package format %s, export sha256 %s…" % (M.rms["format"], M.rms["sha256"][:12])
+    if name == "python3":
+        return sys.version.split()[0] + " (workstation)"
+    if name == "doxygen":
+        return (tool(["doxygen", "--version"]).strip() or "-") + " (workstation)"
+    if name == "graphviz":
+        return (re.findall(r"version (\S+)", tool(["dot", "-V"])) or ["-"])[0] + " (workstation)"
+    if name == "plantuml":
+        return "%s; %s" % (os.path.basename(PLANTUML_JAR), "java present" if shutil.which("java") else "java absent: not rendered")
+    if name == "git":
+        return (tool(["git", "--version"]).split() or ["-"])[-1] + " (workstation)"
+    return "-"
+
+
+def h_tools(M, a):
+    """The tools and reused software of the life cycle with their version in this refresh, use, prior use and how their output
+    is checked (ECSS-Q-ST-80 5.6.1, 5.6.2; ECSS-E-ST-40 SDP <5.4>)."""
+    path = os.path.join(ECSS, "PAF", "tools.csv")
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    cols = a.get("columns", "tool,version,class,use,prior_use,output_checked_by,availability").split(",")
+    head = {"tool": "Tool", "version": "Version in this refresh", "class": "Class", "use": "Use", "prior_use": "Prior use (5.6.1.1)",
+            "output_checked_by": "How its output is checked (5.6.1.3)", "availability": "Availability (5.6.1.2)"}
+    body = [[md_escape(tool_version(M, r["version"])) if c == "version" else md_escape(r[c]) for c in cols] for r in rows]
+    return "Source: `ecss/PAF/tools.csv`.\n\n" + table([head[c] for c in cols], body)
+
+
+def stack_usage():
+    """{function: (bytes, qualifier)} from the gcc -fstack-usage file of the release build (evidence/stack)."""
+    out = {}
+    for line in read(os.path.join(EVID, "stack", "uuid7.su")).splitlines():
+        f = line.split("\t")
+        if len(f) == 3:
+            out[f[0].rsplit(":", 1)[-1]] = (int(f[1]), f[2])
+    return out
+
+
 def h_budgets(M, a):
     fp = M.checks.get("footprint", {})
     size = read(os.path.join(EVID, "footprint.txt"))
@@ -1382,17 +1472,47 @@ def h_budgets(M, a):
     stress = [r for r in M.stress if r["linkage"] == "static"]
     rows = [[r["profile"], r["bench"], r["status"], r["cost"], r["rate"]] for r in stress]
     margin = "not measured in this refresh"
+    margin_short = "-"
     m2 = re.search(r"mean ([0-9.]+) ns", M.checks.get("stress_budget", {}).get("detail", ""))
     if m2:
         cost = float(m2.group(1))
+        margin_short = "%.1f ns (%.0f %%)" % (100.0 - cost, 100.0 - cost)
         margin = "%.1f ns measured against the 100 ns budget of UUID7-SRS-040: a margin of %.1f ns (%.0f %%)" % (cost, 100.0 - cost,
                                                                                                              100.0 - cost)
-    return ("Memory (release object app__uuid7.c.o): code %s B, initialised data %s B, static data %s B (%s). No heap, no "
-            "thread-local storage; stack: one 8-byte tail buffer and a few scalars per uuid7_gen() call.\n\n"
+    su = stack_usage()
+    refs = {m["name"]: m["refs"] for m in getattr(M, "members", []) if m["kind"] == "function"}
+
+    def worst(fn, seen=()):
+        if fn in seen:
+            return 0
+        own = su.get(fn, (0, ""))[0]
+        return own + max([worst(r, seen + (fn,)) for r in refs.get(fn, []) if r in refs] or [0])
+    pub = sorted(n for n in su if n.startswith("uuid7_"))
+    stack_rows = [["%s()" % n, su[n][0], worst(n), su[n][1]] for n in pub]
+    deepest = max([r[2] for r in stack_rows] or [0])
+    dynamic = [n for n, (_, q) in su.items() if q != "static"]
+    st = "%s" % (("worst case %d B per call (%s)" % (deepest, "all frames static" if not dynamic else "**dynamic frames: %s**" %
+                                                     ", ".join(dynamic))) if su else "not measured in this refresh")
+    fp_sum = sum(int(x) for x in re.findall(r"(\d+) B", fp.get("detail", ""))) if fp.get("verdict") else None
+    budget_rows = [
+        ["Static data", "UUID7-SRS-050", "24 B", ("%d B" % fp_sum) if fp_sum is not None else "not measured",
+         ("%d B" % (24 - fp_sum)) if fp_sum is not None else "-"],
+        ["Heap", "UUID7-SRS-051", "0 B", M.checks.get("no_alloc", {}).get("detail", "not measured"), "-"],
+        ["Generation cost (release, one thread)", "UUID7-SRS-040", "100 ns", (m2.group(1) + " ns") if m2 else "not measured", margin_short],
+        ["Stack per call", "none (no requirement)", "not specified", st, "not computable without a budget"],
+        ["Code (.text of the release object)", "none (no requirement)", "not specified", "%s B" % text_b, "not computable without a budget"]]
+    return ("Budgets and margins of this refresh, measured in the evidence's environment (%s):\n\n" % md_escape(M.env_text) +
+            table(["Budget", "Requirement", "Budget value", "Measured", "Margin"], budget_rows) +
+            "\n\nStack and code size are measured and tracked here at every refresh but have no budget requirement; the budgets are "
+            "not yet recorded as rms results at the reviews (\\ref UUID7_DOC_SDP \"SDP\" <4.6>).\n\n"
+            "Memory (release object app__uuid7.c.o): code %s B, initialised data %s B, static data %s B (%s). No heap, no "
+            "thread-local storage.\n\nStack (`gcc -fstack-usage` on the release build; the worst case follows the references between "
+            "the functions, the callback counted as the built-in RNG; the C library's own frames are not counted):\n\n%s\n\n"
             "Processing (tests/stress, static linkage). `stress`: one thread, cost in ns per identifier, rate in identifiers per "
             "second. `stress_mt`: 10 threads on one reservation word, cost per identifier per thread under contention, aggregate "
             "rate.\n\n%s\n\nRelease single-thread: %s." %
             (text_b, data_b, bss_b, md_escape(fp.get("detail", "not measured")),
+             table(["Function", "Own frame (B)", "Worst case (B)", "Kind"], stack_rows) if stack_rows else "not measured in this refresh",
              table(["Profile", "Benchmark", "Status", "Cost", "Rate"], rows) if rows else "no stress run in this refresh", margin))
 
 
@@ -1769,7 +1889,7 @@ HANDLERS = {
     "doc-plan": h_doc_plan, "drl": h_drl, "review-docs": h_review_docs, "reviews": h_reviews, "baselines": h_baselines,
     "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
     "spr": h_spr, "jrr": h_jrr, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
-    "claim": h_claim, "open-items": h_open_items, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
+    "claim": h_claim, "open-items": h_open_items, "tools": h_tools, "criticality": h_criticality, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
 }
 DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
 

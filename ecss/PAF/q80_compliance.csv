@@ -48,11 +48,11 @@ clause,subject,category_D,compliance,reference,remark
 5.5.4,Identification,Y,C,deps.txt; DDF/SCF.md,Every tool and dependency pinned in deps.txt.
 5.5.5,Inspection,Y,C,DDF/SCF.md (receiving inspection),utils/deps.sh verifies the sha256 of the pinned kyr-build deb.
 5.5.6,Exportability,Y,C,DJF/SRF.md,"No export-controlled component (MIT library, GPL/LGPL toolchain)."
-5.6.1.1,Methods and tools,The proposed methods and tools shall have been successfully used at least in one project before (possibly a non- space project),C,PAF/SPAP.md <5.8>,Every tool in use across the platform's repositories before this project.
-5.6.1.2,Methods and tools,Expected output not required,NA,-,Category D: expected output not required.
-5.6.1.3,Methods and tools,Expected output not required,NA,-,Category D: expected output not required.
-5.6.2.1,Development environment selection,Expected output not required,NA,-,Category D: expected output not required.
-5.6.2.2,Development environment selection,Expected output not required,NA,-,Category D: expected output not required.
+5.6.1.1,Methods and tools,The proposed methods and tools shall have been successfully used at least in one project before (possibly a non- space project),PC,PAF/SPAP.md <5.8>,"Every tool identified and justified in the tools table; ecss.py and kyr_rms as source of truth have no prior project, and no customer agreed the list. Closes with OI-06, OI-02."
+5.6.1.2,Methods and tools,Expected output not required,C,PAF/SPAP.md <5.8>,"The tools table: use, prior use, how its output is checked, availability; the expected output (SPAMR) is not required at D and is given anyway (SPAMR <5>)."
+5.6.1.3,Methods and tools,Expected output not required,C,PAF/SPAMR.md <5>,"Each tool's output checked as the table says, in every refresh; a misused tool fails its gate."
+5.6.2.1,Development environment selection,Expected output not required,C,MGT/SDP.md <5.4>; PAF/SPAP.md <5.8>,"Availability (pinned and cached), compatibility (one root, recorded), maintenance and support per tool in the tools table."
+5.6.2.2,Development environment selection,Expected output not required,C,MGT/SDP.md <5.4>,Suitability of the environment justified in the SDP <5.4>.
 5.6.2.3,Development environment selection,Y,C,MGT/SDP.md <5.4>,utils/deps.sh sysroot verifies the environment before every build.
 5.7.1,Process assessment,N,NA,-,Not applicable to category D (Table D-2).
 5.7.2.1,Assessment process,N,NA,-,Not applicable to category D (Table D-2).
@@ -117,8 +117,8 @@ clause,subject,category_D,compliance,reference,remark
 6.2.6.6,Verification,N,NA,-,Not applicable to category D (Table D-2).
 6.2.6.7,Verification,Y,C,PAF/SPAMR.md <4>,
 6.2.6.8,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md,
-6.2.6.9,Verification,Y,PC,MGT/SRevP.md; DJF/SVerP.md <6>,The SRevP is the written review procedure; the inspection checklists the SVerP and SRevP point to are not written.
-6.2.6.10,Verification,Y,PC,MGT/SRevP.md; DJF/SVerP.md <6>,"The SRevP names items, person in charge, participants and the nature of the report; the checklists (means of inspection) are not written."
+6.2.6.9,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md Annex A,The SRevP is the review procedure; the inspections and reviews use the checklists of SVerP Annex A.
+6.2.6.10,Verification,Y,C,MGT/SRevP.md; DJF/SVerP.md Annex A,"Items, person in charge, participants and report in the SRevP; the means are the checklists of SVerP Annex A."
 6.2.6.11,Verification,Y,PC,DJF/JRR.md; DJF/SVR.md,"The JRR identifies the reviewed items and findings from the rms, but the reviewers were a scripted cast and the inspections have no report of their own. Closes with OI-01."
 6.2.6.12,Verification,Y,C,PAF/SPAMR.md <4>,
 6.2.6.13,Verification,N,NA,-,Not applicable to category D (Table D-2).
@@ -191,7 +191,7 @@ clause,subject,category_D,compliance,reference,remark
 6.3.5.15,Testing and validation,Y,C,DJF/SValP.md <6>,Every change reruns every suite.
 6.3.5.16,Testing and validation,Y,C,DJF/SValP.md <6>,Every change reruns every suite.
 6.3.5.17,Testing and validation,Y,C,DJF/SValP.md <6>,Every change reruns every suite.
-6.3.5.18,Testing and validation,Y,C,DJF/SValP.md <6>,Every change reruns every suite.
+6.3.5.18,Testing and validation,Y,C,DJF/SValP.md <6>; DDF/SCF.md,"Every run is the full regression and records its toolchain (SCF), so a tool change is a changed toolchain under a full regression."
 6.3.5.19,Testing and validation,N,NA,-,Not applicable to category D (Table D-2).
 6.3.5.20,Testing and validation,Y,NA,-,Not flight software.
 6.3.5.21,Testing and validation,Y,C,DJF/SUITP.md,

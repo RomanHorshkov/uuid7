@@ -32,13 +32,17 @@ Measures for critical software: none required (category D, no critical component
 
 ## 5 Methods and tools
 
-The methods and tools of the SDP <5.3> and <5.4> are suitable: they are the platform's, in use on its other repositories, and each run below shows them working on this commit. Their correct use is checked by the gates themselves (a tool misused fails its stage):
+The methods and tools of the SDP <5.3> and <5.4> are justified in the \ref UUID7_DOC_SPAP "SPAP" <5.8>; `ecss/tools/ecss.py` and kyr_rms have no prior use and are cross-checked instead. Their correct use in this refresh (ECSS-Q-ST-80 5.6.1.3), tool by tool:
+
+<!-- ecss:tools columns=tool,version,output_checked_by -->
+
+The gates themselves (a tool misused fails its stage):
 
 <!-- ecss:pipeline -->
 
 ## 6 Adherence to design and coding standards
 
-The coding standard's gated rules hold when the stages `format`, `template`, `abi`, `abi-exports` and the analyses below pass; the remaining rules were inspected (\ref tc_UUID7_IN_008 "UUID7-IN-008"). Finding of the inspection: `uuid7_clock_failure_count()` is an accessor named by its noun, against rule N3 (functions are verbs); renaming it changes the ABI (a major), so it is kept and recorded here as an accepted deviation.
+The coding standard's gated rules hold when the stages `format`, `template`, `abi`, `abi-exports` and the analyses below pass; the remaining rules were inspected (\ref tc_UUID7_IN_008 "UUID7-IN-008"). Finding of the inspection: `uuid7_clock_failure_count()` is an accessor named by its noun, against rule N3 (functions are verbs); renaming it changes the ABI (a major), so it is kept (use as is). It is a deviation without a nonconformance record: the rms has no nonconformance kind yet (\ref UUID7_DOC_SDP "SDP" <4.6>).
 
 <!-- ecss:checks -->
 

@@ -72,7 +72,7 @@ if (( ! DOCS_ONLY )); then
     say "pipeline: utils/run_pipeline.sh (gates, six profiles, suites and scenarios, coverage, stress, packages)"
     in_env ./utils/run_pipeline.sh > "${EV}/pipeline.txt" 2>&1 || rc=1
     tail -n 1 "${EV}/pipeline.txt"
-    say "evidence: packages built again (reproducibility), hardening of the release library"
+    say "evidence: packages built again (reproducibility), hardening of the release library, stack usage"
     cp build/debs/SHA256SUMS "${EV}/SHA256SUMS.first" 2> /dev/null || : > "${EV}/SHA256SUMS.first"
     # the second build is made where the first was: inside the root a release build, on the host a development build (a release
     # is refused there); a refused or failed build is reported as such, never as different bytes
@@ -84,6 +84,10 @@ if (( ! DOCS_ONLY )); then
       printf 'second build (utils/build_deb.sh):\n'; cat build/debs/SHA256SUMS 2> /dev/null; printf 'SHA256SUMS %s\n' "${verdict}"; } \
         > "${EV}/reproducible.txt"
     in_env ./utils/check_hardening.sh build/release/libuuid7.so build/release/libuuid7.a > "${EV}/hardening.txt" 2>&1 || rc=1
+    # the stack frame of every function of the release build (gcc -fstack-usage), for the technical budgets (SVR <5>)
+    mkdir -p "${EV}/stack"
+    in_env bash -c 'gcc $(./utils/gcc_build_profiles.sh print-cppflags release) $(./utils/gcc_build_profiles.sh print-cflags release) -Iapp \
+        -fstack-usage -c app/uuid7.c -o build/ecss/evidence/stack/uuid7.o' > "${EV}/stack/build.txt" 2>&1 || rc=1
 fi
 
 say "documents: ecss/tools/ecss.py"

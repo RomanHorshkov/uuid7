@@ -70,8 +70,8 @@ clause,expected_output,category_D,compliance,reference,remark
 5.3.6.1b,Flight software review phasing,Y,NA,-,Not flight software.
 5.3.6.2a,Ground software review phasing,Y,NA,-,Not ground segment software.
 5.3.7.1a,Interface management procedures,Y,C,MGT/SDP.md <5.2.3>; TS/ICD.md,ABI gate and SemVer.
-5.3.8.1a,Technical budgets and margin philosophy for the project,Y,C,DJF/SVR.md <5>,
-5.3.8.2a,Technical budgets and margin computation,Y,C,DJF/SVR.md <5>,
+5.3.8.1a,Technical budgets and margin philosophy for the project,Y,PC,DJF/SVR.md <5>,"No customer specified budgets (no RB); the supplier's budgets are UUID7-SRS-040, -050 and -051; stack and code size are measured without a budget and no budget is recorded in the rms at the reviews. Closes with OI-02, OI-08."
+5.3.8.2a,Technical budgets and margin computation,Y,PC,DJF/SVR.md <5>,"The computation is stated and run at every refresh, but not agreed with a customer. Closes with OI-02."
 5.3.8.2b,Technical budgets and margin computation,Y,C,DJF/SVR.md <5>,
 5.3.9.1a,E40 compliance matrix,Y,C,MGT/E40_COMPLIANCE.md,This matrix.
 5.3.9.2a,E40 compliance matrix,Y,C,MGT/E40_COMPLIANCE.md,This matrix.

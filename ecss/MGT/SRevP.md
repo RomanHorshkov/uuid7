@@ -62,7 +62,7 @@ Security is an agenda item of every review: the SSAR and its treatment status (E
 4. Data package readiness check: the entry criteria of <7>.
 5. Presentation: optional.
 6. Distribution: the site and the rms export.
-7. Study and RIDs: every document is read against its DRD and its checklist (\ref UUID7_DOC_SVERP "SVerP" <6>); each finding is an rms review-comment linked to the reviewed document (`reviews`).
+7. Study and RIDs: every document is read against its DRD and its checklist (\ref sverp_checklists "SVerP Annex A"); each finding is an rms review-comment linked to the reviewed document (`reviews`).
 8. Disposition of RIDs: accepted (change request), rejected (reason recorded).
 9. Meeting: the maintainer's decision, recorded on the review artifact.
 10. Actions closure: change requests implemented and verified, the package regenerated.

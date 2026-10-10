@@ -112,7 +112,7 @@ No part of the software is generated automatically (5.3.2.4 and 5.3.5e not appli
 
 ### 5.4 Software development and software testing environment
 
-The development and test environment is fixed by `deps.txt` and resolved by `utils/deps.sh sysroot` into `build/sysroot` without root; releases are built inside the pinned build root (Ubuntu 24.04 snapshot, kyr-build's `build_root.sh`) so that every machine produces the same bytes. C11 is the language: portable, close enough to the hardware for lock-free atomics, and the platform's language; no assembly.
+The development and test environment is fixed by `deps.txt` and resolved by `utils/deps.sh sysroot` into `build/sysroot` without root; releases are built inside the pinned build root (Ubuntu 24.04 snapshot, kyr-build's `build_root.sh`) so that every machine produces the same bytes. C11 is the language: portable, close enough to the hardware for lock-free atomics, and the platform's language; no assembly. The environment is suitable (ECSS-Q-ST-80 5.6.2.1, 5.6.2.2) because it is available offline from its pins, the same on every machine (the root's identity), maintained by the platform, and every tool in it is justified in the \ref UUID7_DOC_SPAP "SPAP" <5.8>.
 
 | Need | Tool |
 |---|---|

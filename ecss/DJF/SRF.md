@@ -49,7 +49,7 @@ b. Availability and quality of the information, for uuid7:
 | 8. Verification reports | SVR |
 | 9. Performance | SVR <5>: memory and cost per identifier |
 | 10. Operational performance | in use by the platform's libraries and products that pin it (kyr_lmdb, kyr_core, kyr_drive, kyr_estate, kyr_rms) |
-| 11. Residual nonconformances and waivers | none (\ref UUID7_DOC_SPR "problem reports") |
+| 11. Residual nonconformances and waivers | the open change requests of <8> and one deviation without a record (coding rule N3, \ref UUID7_DOC_SPAMR "SPAMR" <6>); no waiver |
 | 12. User documentation | SUM |
 | 13. Code quality | the coding standard's gates and analyses (SPAMR <6>) |
 
@@ -69,7 +69,9 @@ The detailed results are the verification and validation reports of this package
 
 ## 8 Corrective actions
 
-None identified. Implemented: none.
+Identified: the change requests below (implemented: those whose status says so); the deviation from coding rule N3 is kept (use as is).
+
+<!-- ecss:spr -->
 
 ## 9 Configuration status
 
