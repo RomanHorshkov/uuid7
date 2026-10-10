@@ -93,15 +93,15 @@ clause,subject,category_D,compliance,reference,remark
 6.2.3.7,Handling of critical software,N,NA,-,Not applicable to category D (Table D-2).
 6.2.3.8,Handling of critical software,N,NA,-,Not applicable to category D (Table D-2).
 6.2.4.1,Software configuration management,Y,C,MGT/SCMP.md,ECSS-M-ST-40 not available here: the SCMP states the practice and points to it.
-6.2.4.2,Software configuration management,Y,C,MGT/SCMP.md,
-6.2.4.3,Software configuration management,Y,C,DDF/SCF.md; DDF/SRelD.md,
+6.2.4.2,Software configuration management,Y,PC,MGT/SCMP.md,The SCMP regenerates any version from its tag; the configuration of this evidence has no tag yet (to be created at release) and the rms baselines name no commit. Closes with OI-04.
+6.2.4.3,Software configuration management,Y,PC,DDF/SCF.md; DDF/SRelD.md,Regenerated with every refresh; no release of this configuration has been delivered yet. Closes with OI-04.
 6.2.4.4,Software configuration management,Y,C,DDF/SCF.md,
 6.2.4.5,Software configuration management,Y,C,MGT/SCMP.md,No code generation tool.
 6.2.4.6,Software configuration management,Y,C,MGT/SCMP.md; DDF/SCF.md,
 6.2.4.7,Software configuration management,Y,C,MGT/SCMP.md,
 6.2.4.8,Software configuration management,Y,C,PAF/SPAP.md <6.5>,
 6.2.4.9,Software configuration management,Y,C,"PAF/SPAP.md <6.4>, <6.5>",
-6.2.4.10,Software configuration management,Y,C,DDF/SCF.md,
+6.2.4.10,Software configuration management,Y,PC,DDF/SCF.md,"The SCF lists the SHA-256 of every file and package of the refresh; no delivery of this configuration yet, and the packages are development builds when the evidence is a host build. Closes with OI-04."
 6.2.4.11,Software configuration management,Y,C,DDF/SRelD.md,
 6.2.4.12,Software configuration management,Y,C,MGT/SCMP.md,
 6.2.5.1,Process metrics,Y,C,PAF/SPAP.md <6.6>; PAF/SPAMR.md <7>,

@@ -150,9 +150,9 @@ clause,expected_output,category_D,compliance,reference,remark
 5.6.4.3a,Software user manual (update),Y,C,DDF/SUM.md,
 5.6.4.4a,QR,Y,NY,MGT/SRevP.md; DJF/JRR.md,The QR in the rms was played by a scripted cast. Closes with OI-01.
 5.6.5a,Software validation control,Y,C,DJF/SValP.md <8>,
-5.7.2.1a eo a,Software product,Y,C,DDF/SCF.md,The debs built by utils/build_deb.sh.
+5.7.2.1a eo a,Software product,Y,PC,DDF/SCF.md,"The debs are built where the evidence runs (SCF: environment, configuration flags); the version is not released. Closes with OI-04."
 5.7.2.1a eo b,Software release document,Y,C,DDF/SRelD.md,
-5.7.2.1b,Secured software delivery,Y,NY,DDF/SCF.md; SF/SSAR.md,"No release of this configuration is published, so no SHA256SUMS is; the sums in the SCF are of development builds. Closes with the release of the configuration."
+5.7.2.1b,Secured software delivery,Y,NY,DDF/SCF.md; SF/SSAR.md,"No release of this configuration is published, so no SHA256SUMS is; the sums in the SCF are of the packages of this refresh. Closes with OI-04."
 5.7.2.2a,Training material,Y,C,DDF/SUM.md <11>,
 5.7.2.3a,Installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
 5.7.2.3b,Secured installation procedures,Y,C,"DDF/SUM.md <9.2>, <9.9>",
@@ -162,7 +162,7 @@ clause,expected_output,category_D,compliance,reference,remark
 5.7.2.4d,Installation report,Y,C,DJF/SValR.md (installation),package-smoke stage.
 5.7.3.1a,Acceptance test plan,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
 5.7.3.2a,Acceptance test report,Y,NA,-,"Customer activity (""the customer shall""): each consumer pins a release after its own pipeline passes."
-5.7.3.3a,Software product,Y,NY,DDF/SCF.md,"The packages of this package's evidence are development builds, not built from a release tag. Closes with the release of the configuration and OI-03."
+5.7.3.3a,Software product,Y,NY,DDF/SCF.md,The packages of this evidence are not built from a release tag. Closes with OI-04 and OI-03.
 5.7.3.4a,Joint review report,Y,NY,-,No customer acceptance has taken place to support. Closes with OI-03.
 5.7.3.4b,Joint review report,Y,NY,-,No customer acceptance has taken place to support. Closes with OI-03.
 5.7.3.5a,Traceability of acceptance tests to the requirements baseline,Y,NA,PAF/TAILORING.md,No requirements baseline.

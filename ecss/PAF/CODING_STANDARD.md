@@ -102,7 +102,7 @@ The release profile's flags, as the pinned catalog prints them:
 
 | Tool | Use | Version |
 |---|---|---|
-| gcc | compiler, `-fanalyzer` | the build root's (13.3) or the host's |
+| gcc | compiler, `-fanalyzer` | the one the evidence records (\ref UUID7_DOC_SCF "SCF", build environment) |
 | clang-format | F1 | 18 (CI's) |
 | kyr-build | profiles, wrappers, gates, packaging | pinned in deps.txt |
 | CMocka, gcovr | tests, coverage | distribution's (deps.txt minimum) |

@@ -24,7 +24,7 @@ The library issues 16-byte identifiers that sort by creation time (RFC 9562 UUID
 
 1. Physical environment: none of its own; the library runs inside its caller's process.
 2. Hardware environment: x86-64, the platform's only target; any CPU with 64-bit atomic compare-and-swap.
-3. Operating environment: Linux with glibc (Ubuntu 24.04 is the build root); `getrandom(2)` when present, `/dev/urandom` otherwise.
+3. Operating environment: Linux with glibc (the pinned build root's, see the \ref UUID7_DOC_SCF "SCF"); `getrandom(2)` when present, `/dev/urandom` otherwise.
 
 ### 4.3 Relation to other systems
 

@@ -11,8 +11,12 @@ One configuration item: uuid7, identified by its repository (`RomanHorshkov/uuid
 ## Identification and baselines
 
 - Every change is a git commit; a release is an annotated, signed tag `v<VERSION>` on a commit whose pipeline is green on `master` (NAMING.md).
-- A review closes with an rms baseline named after it (`PDR`, `CDR`, ...) and, for QR/AR, the release tag; the baseline package (`kyr-rms-cli package baseline <NAME>`) carries a SHA-256 per section and reproduces byte for byte.
+- A review closes with an rms baseline named after it (`PDR`, `CDR`, ...) that names the uuid7 commit it froze (a `commit` field, or the commit in its description; `ecss/tools/ecss.py` flags a baseline without one, or with one outside the evidence's history), and, for QR/AR, the release tag; the baseline package (`kyr-rms-cli package baseline <NAME>`) carries a SHA-256 per section and reproduces byte for byte.
 - Any reference version is regenerated from the tag: the source from git, the packages by `utils/build_deb.sh` in the pinned build root, byte-identical (ECSS-Q-ST-80 6.2.4.2).
+
+The tags as they are (the earlier ones predate this plan; the current version is tagged at release):
+
+<!-- ecss:tags -->
 
 ## Change control
 

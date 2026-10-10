@@ -20,7 +20,7 @@ uuid7 is software developed for intended reuse: every platform repository that n
 |---|---|---|
 | 1. Name and main features | uuid7: RFC 9562 UUIDv7, monotonic, thread-safe, lock-free, floor import | glibc: clock_gettime, getrandom, open/read/close, memset |
 | 2. Developer | Roman Horshkov | the GNU project, as packaged by Ubuntu |
-| 3. Version and components | VERSION of this package; one component file app/uuid7.c behind app/uuid7.h | the distribution's (2.39 in the build root) |
+| 3. Version and components | VERSION of this package; one component file app/uuid7.c behind app/uuid7.h | the one the evidence ran with (\ref UUID7_DOC_SCF "SCF", build environment) |
 | 4. Licensing | MIT (LICENSE) | LGPL-2.1-or-later |
 | 5. Industrial property, exportability | none known; no cryptographic function of its own (it consumes the kernel's entropy) | the distribution's |
 | 6. Language | C11 | C |

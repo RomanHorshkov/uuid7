@@ -8,6 +8,7 @@ pipeline summary, the ELF files and deps.txt.
 
 Only the standard library; run from anywhere, paths resolve from the repository root.
 """
+import collections
 import csv
 import datetime
 import glob
@@ -150,12 +151,15 @@ def load_rms():
     pkg = json.loads(read(pkg_path))
     by_uuid = {}
     arts = []
+    rev_status = {}
     for a in pkg.get("artifacts", []):
         if a.get("deleted"):
             continue
         revs = sorted(a.get("revisions", []), key=lambda r: r.get("number", 0))
         if not revs:
             continue
+        for x in revs:
+            rev_status[x.get("uuid")] = STATUSES[x.get("status", 0)] if x.get("status", 0) < len(STATUSES) else "draft"
         r = revs[-1]
         kind = KINDS[a["kind"]] if a.get("kind", -1) < len(KINDS) else str(a.get("kind"))
         row = {"human_id": a.get("human_id", ""), "kind": kind, "title": r.get("title", ""), "body": r.get("body", ""),
@@ -182,6 +186,8 @@ def load_rms():
                           "by": b.get("created_by_name") or b.get("created_by") or "",
                           "approved_by": b.get("approved_by_name") or b.get("approved_by") or "",
                           "approved_at_ms": b.get("approved_at_ms", 0), "approval_exported": "approved_by" in b,
+                          "commit": b.get("commit", "") or ((HEX_RE.search(b.get("description", "")) or [""])[0]),
+                          "member_status": collections.Counter(rev_status.get(m.get("revision"), "unknown") for m in b.get("members", [])),
                           "members": len(b.get("members", []))})
     verdicts = {}
     vpath = os.path.join(RMS_EXPORT, "verification.csv")
@@ -200,6 +206,7 @@ def load_rms():
 # The repository's sources: doc comments, tags, tests
 # ---------------------------------------------------------------------------------------------------------------------------------
 
+HEX_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
 DOC_RE = re.compile(r"/\*\*(?!<)(.*?)\*/", re.S)
 ID_RE = re.compile(r"UUID7-[A-Z]+-[A-Za-z0-9_-]+")
 
@@ -483,6 +490,109 @@ def git(*args):
     return out.strip() if rc == 0 else ""
 
 
+def read_kv(path):
+    out = {}
+    for line in read(path).splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            out.setdefault(k.strip(), v.strip())
+    return out
+
+
+def buildinfos():
+    out = []
+    for p in sorted(glob.glob(os.path.join(ROOT, "build", "debs", "*.buildinfo"))):
+        kv = read_kv(p)
+        tools = dict(re.findall(r"^ (gcc|libc): (.*)$", read(p), re.M))
+        out.append({"deb": kv.get("Deb", os.path.basename(p)), "sha256": kv.get("Deb-Sha256", ""), "root": kv.get("Build-Root", "?"),
+                    "commit": kv.get("Git-Commit", ""), "gcc": tools.get("gcc", ""), "libc": tools.get("libc", "")})
+    return out
+
+
+def configuration(M):
+    """What the evidence is of and where it was produced (evidence/configuration.txt and toolchain.txt, written by make.sh where
+    the gates run), the release tag, the packages' buildinfo, the baselines' commits; every disagreement becomes a flag."""
+    M.ev = read_kv(os.path.join(EVID, "configuration.txt"))
+    M.toolchain = read_kv(os.path.join(EVID, "toolchain.txt"))
+    M.ev_commit = M.ev.get("commit", "")
+    env = M.toolchain.get("environment", "")
+    M.in_root = env.startswith("release root")
+    M.env_text = (("the release root, identity %s" % env.split()[-1]) if M.in_root else env) if env else \
+        "not recorded (no evidence/toolchain.txt: run ecss/make.sh)"
+    M.tag = "v" + M.version
+    tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag in git("tag", "--list", M.tag).split() else ""
+    M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if tag_commit else "%s: to be created at release" % M.tag
+    M.debs = buildinfos()
+    flags = []
+    if not M.ev_commit:
+        flags.append("no evidence configuration is recorded (run ecss/make.sh)")
+    else:
+        if M.ev_commit != M.commit:
+            flags.append("the evidence is of commit %s; these documents are generated at commit %s" % (M.ev_commit[:12], M.short))
+        if M.ev.get("state") != "clean":
+            flags.append("the evidence ran with uncommitted changes on top of commit %s" % M.ev_commit[:12])
+    if env and not M.in_root:
+        flags.append("the evidence is a host build, not the release environment")
+    if tag_commit and tag_commit != M.ev_commit:
+        flags.append("tag %s is at commit %s, not the evidence commit" % (M.tag, tag_commit[:12]))
+    for d in M.debs:
+        if d["commit"] and M.ev_commit and d["commit"] != M.ev_commit:
+            flags.append("%s was built from commit %s, not the evidence commit" % (d["deb"], d["commit"][:12]))
+    for b in M.baselines:
+        c = b["commit"]
+        full = git("rev-parse", "--verify", "--quiet", c + "^{commit}") if c else ""
+        if not c:
+            b["check"] = "**none recorded**"
+            flags.append("rms baseline %s carries no uuid7 commit" % b["name"])
+        elif not full:
+            b["check"] = "**mismatch**: %s is not a commit of this repository" % c
+            flags.append("rms baseline %s names %s, which is not a commit of this repository" % (b["name"], c))
+        elif M.ev_commit and run(["git", "merge-base", "--is-ancestor", full, M.ev_commit])[0] != 0:
+            b["check"] = "**mismatch**: %s is not in the history of the evidence commit" % full[:12]
+            flags.append("rms baseline %s froze commit %s, which is not in the history of the evidence commit" % (b["name"], full[:12]))
+        else:
+            b["check"] = full[:12] + (" (the evidence commit)" if full == M.ev_commit else "")
+        b["full_commit"] = full
+        loose = {k: v for k, v in b["member_status"].items() if k in ("draft", "candidate", "proposed", "in-review", "needs-rework", "unknown")}
+        if loose:
+            flags.append("rms baseline %s froze %d member(s) not approved (%s)" % (b["name"], sum(loose.values()),
+                                                                                 ", ".join("%d %s" % (v, k) for k, v in sorted(loose.items()))))
+    reviewed = [b for b in M.baselines if any(b["name"].upper().startswith(rv) for rv in REVIEWS)]
+    if reviewed and reviewed[-1].get("full_commit") and M.ev_commit and reviewed[-1]["full_commit"] != M.ev_commit:
+        flags.append("the newest review baseline, %s, froze commit %s; the evidence is of commit %s" % (
+            reviewed[-1]["name"], reviewed[-1]["full_commit"][:12], M.ev_commit[:12]))
+    M.config_flags = flags
+
+
+def h_configuration(M, a):
+    tc = M.toolchain
+    rows = [["Product", "uuid7 %s (libuuid7, libuuid7-dev)" % M.version],
+            ["Evidence of", ("commit %s (%s), branch %s, produced %s" % (M.ev_commit, M.ev.get("state", "?"), M.ev.get("branch", "?"),
+                                                                        M.ev.get("at", "?"))) if M.ev_commit else "not recorded"],
+            ["Environment", md_escape(M.env_text)],
+            ["Toolchain (read where the evidence ran)", ", ".join("%s %s" % (k, md_escape(tc[k])) for k in
+                                                                  ("os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3")
+                                                                  if tc.get(k)) or "not recorded"],
+            ["Documents generated at", "commit %s%s" % (M.commit, " (uncommitted changes)" if M.dirty else "")],
+            ["Release tag", M.tag_text],
+            ["Configuration flags", "; ".join(md_escape(f) for f in M.config_flags) if M.config_flags else "none"]]
+    return table(["Item", "Value"], rows)
+
+
+def h_toolchain(M, a):
+    tc = M.toolchain
+    if not tc:
+        return "The toolchain is not recorded: `ecss/make.sh` writes `evidence/toolchain.txt` where the gates run."
+    rows = [[k, md_escape(tc[k])] for k in ("environment", "os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3",
+                                            "kernel") if tc.get(k)]
+    host = [["doxygen", tool(["doxygen", "--version"]).strip() or "-"],
+            ["graphviz", (re.findall(r"version (\S+)", tool(["dot", "-V"])) or ["-"])[0]],
+            ["python3", sys.version.split()[0]], ["binutils (nm, readelf, size)", (tool(["nm", "--version"]).splitlines() or ["-"])[0].split()[-1]]]
+    return ("The gates, the tests, the coverage and the packages ran here (`evidence/toolchain.txt`, read at run time where they "
+            "ran):\n\n" + table(["Tool", "Version"], rows) + "\n\nThe documents, the binary analyses and the site are made on the "
+            "workstation, outside that environment:\n\n" + table(["Tool", "Version"], host))
+
+
 def build_model():
     M = Model()
     M.version = read(os.path.join(ROOT, "VERSION")).strip()
@@ -555,6 +665,7 @@ def build_model():
     M.drift = [l for l in M.repo_links if key(l) not in rms_keys] if M.rms else []
     M.baselines = M.rms["baselines"] if M.rms else []
     M.open_items = load_open_items()
+    configuration(M)
     # Results
     M.stages, M.green, M.pipeline_ran = pipeline_summary()
     M.checks = evidence_checks(M.stages)
@@ -846,6 +957,16 @@ def diagram_md(M, name, caption=None):
     return ("**%s** (%s). Rendering waits for java; the PlantUML source:\n\n~~~{.txt}\n%s~~~" % (md_escape(caption), link, src))
 
 
+def product_text(M):
+    ev = ("evidence of commit %s (%s) in %s" % (M.ev_commit, M.ev.get("state", "?"), md_escape(M.env_text))) if M.ev_commit else \
+        "no evidence recorded"
+    docs = "" if M.ev_commit == M.commit and not M.dirty else "; documents generated at commit %s%s" % (
+        M.short, " (uncommitted changes)" if M.dirty else "")
+    return "uuid7 %s; %s%s; release tag %s%s" % (M.version, ev, docs, M.tag_text,
+                                                 ("; **%d configuration flag(s)**, \\ref UUID7_DOC_SCF \"SCF\"" % len(M.config_flags))
+                                                 if M.config_flags else "")
+
+
 def status_text(M, d, rev=""):
     """An rms status with who set it, and, when the reviews were a scripted demonstration, that the status belongs to it."""
     if not d.revs or d.status not in ("approved", "baselined", "implemented", "verified", "validated", "rejected"):
@@ -865,7 +986,7 @@ def h_docinfo(M, a):
         ["Document", "%s — %s" % (d.id, md_escape(d.title))], ["ECSS file", d.notes.get("file", "")],
         ["DRD", md_escape(d.notes.get("drd", "-"))], ["Called from", md_escape(d.rationale)],
         ["Reviews (ECSS-E-ST-40 Table A-1)", d.notes.get("reviews", "").replace(",", ", ")],
-        ["Status", status_text(M, d, rev)], ["Product", "uuid7 %s, commit %s%s" % (M.version, M.short, " (uncommitted changes)" if M.dirty else "")],
+        ["Status", status_text(M, d, rev)], ["Product", product_text(M)],
         ["Generated", "%s by ecss/make.sh from %s" % (M.generated, src)],
         ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\""],
         ["Claim", "%s (basis: \\ref index \"the front page\")" % md_escape(claim(M)[0])]])
@@ -1361,7 +1482,8 @@ def claim(M):
     green = M.green if M.pipeline_ran else False
     if n_ver == len(M.reqs) and M.reqs and green:
         basis.append(("documented and self-verified after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D",
-                      "%d of %d requirements verified; pipeline GREEN; every verification performed by the developer" % (n_ver, len(M.reqs))))
+                      "%d of %d requirements verified; pipeline GREEN; evidence of commit %s (%s) in %s; every verification performed "
+                      "by the developer" % (n_ver, len(M.reqs), M.ev_commit[:12] or "?", M.ev.get("state", "?"), md_escape(M.env_text))))
     else:
         basis.append(("documented after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D, self-verification "
                       "incomplete", "%d of %d requirements verified; pipeline %s" % (n_ver, len(M.reqs), (
@@ -1421,8 +1543,23 @@ def h_reviews(M, a):
 def h_baselines(M, a):
     if not M.baselines:
         return "No baseline: %s." % ("the rms export holds none" if M.mode == "rms" else "baselines live in the rms; no export is present")
-    return table(["Baseline", "Frozen", "By", "Members"], [[b["name"], datetime.datetime.fromtimestamp(b["created_at_ms"] / 1000).strftime(
-        "%Y-%m-%d %H:%M"), b["by"], b["members"]] for b in M.baselines])
+    return ("Each rms baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description); the "
+            "members are counted by the status they were frozen at.\n\n" +
+            table(["Baseline", "Frozen", "By", "Approved by", "uuid7 commit", "Members by status"],
+                  [[md_escape(b["name"]), ms_time(b["created_at_ms"], "%Y-%m-%d %H:%M"), who(b["by"]),
+                    (who(b["approved_by"]) if b["approved_by"] else "**no**") if b["approval_exported"] else "not in this export", b["check"],
+                    ", ".join("%d %s" % (v, k) for k, v in sorted(b["member_status"].items()))] for b in M.baselines]))
+
+
+def h_tags(M, a):
+    rows = []
+    for line in git("for-each-ref", "--sort=v:refname", "refs/tags/v*", "--format=%(refname:short) %(objecttype)").splitlines():
+        name, kind = line.split()
+        signed = kind == "tag" and bool(re.search(r"-----BEGIN (PGP|SSH) SIGNATURE-----", git("cat-file", "tag", name)))
+        rows.append(["`%s`" % name, "annotated" if kind == "tag" else "**lightweight**", "yes" if signed else "**no**",
+                     git("rev-list", "-n", "1", name)[:12]])
+    note = "" if any(r[0] == "`%s`" % M.tag for r in rows) else "\n\nNo tag `%s` exists: it is created at release." % M.tag
+    return (table(["Tag", "Kind", "Signed", "Commit"], rows) if rows else "No release tag.") + note
 
 
 def h_matrix_csv(M, a):
@@ -1472,10 +1609,14 @@ def h_release(M, a):
     prev = tags[0] if tags else ""
     log = git("log", "--oneline", "%s..HEAD" % prev) if prev else git("log", "--oneline", "-20")
     rows = [["`%s`" % l.split()[1], "`%s`" % l.split()[0]] for l in sums if len(l.split()) == 2]
-    return ("Version %s, commit %s on %s%s. Previous release tag: %s.\n\n**Packages** (build/debs/SHA256SUMS):\n\n%s\n\n"
-            "**Changes since %s**:\n\n~~~{.txt}\n%s\n~~~" % (M.version, M.commit, M.branch, " (uncommitted changes)" if M.dirty else "",
-                                                          prev or "none", table(["Package", "SHA-256"], rows) if rows else "not built",
-                                                          prev or "the start", log or "none"))
+    bi = {d["deb"]: d for d in M.debs}
+    rows = [r + [md_escape(bi.get(r[0].strip("`"), {}).get("root", "?")), bi.get(r[0].strip("`"), {}).get("commit", "?")[:12],
+                 md_escape(bi.get(r[0].strip("`"), {}).get("gcc", "?")), md_escape(bi.get(r[0].strip("`"), {}).get("libc", "?"))] for r in rows]
+    return ("Version %s; evidence of commit %s (%s); release tag %s. Previous release tag: %s.\n\n**Packages** (build/debs/SHA256SUMS, "
+            "and each package's .buildinfo: a Build-Root of `none` is a development build, not a release):\n\n%s\n\n"
+            "**Changes since %s**:\n\n~~~{.txt}\n%s\n~~~" % (M.version, M.ev_commit or "not recorded", M.ev.get("state", "?"), M.tag_text,
+                                                          prev or "none", table(["Package", "SHA-256", "Build-Root", "Commit", "gcc", "libc"], rows)
+                                                          if rows else "not built", prev or "the start", log or "none"))
 
 
 def h_receiving(M, a):
@@ -1528,9 +1669,9 @@ def h_jrr(M, a):
                                                          who(f["closed"]["by"]) if f["closed"] else "-",
                                                          "scripted cast" if f["scripted"] else "cast not shown scripted"),
                 "- Decision: %s" % (md_escape(f["closed"]["reason"]) if f["closed"] else "none recorded"),
-                "- Baseline: %s" % (("%s, frozen %s by %s, %d members; approved %s" % (
+                "- Baseline: %s" % (("%s, frozen %s by %s, %d members, uuid7 commit %s; approved %s" % (
                     md_escape(f["baseline"]["name"]), ms_time(f["baseline"]["created_at_ms"]), who(f["baseline"]["by"]),
-                    f["baseline"]["members"], ("by %s %s" % (who(f["baseline"]["approved_by"]), ms_time(f["baseline"]["approved_at_ms"])))
+                    f["baseline"]["members"], f["baseline"]["check"], ("by %s %s" % (who(f["baseline"]["approved_by"]), ms_time(f["baseline"]["approved_at_ms"])))
                     if f["baseline"]["approved_by"] else ("(not in this export)" if not f["baseline"]["approval_exported"] else "**no**")))
                     if f["baseline"] else "none"), ""]
         if f["revs"]:
@@ -1598,7 +1739,7 @@ HANDLERS = {
     "doc-plan": h_doc_plan, "drl": h_drl, "review-docs": h_review_docs, "reviews": h_reviews, "baselines": h_baselines,
     "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
     "spr": h_spr, "jrr": h_jrr, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
-    "claim": h_claim, "open-items": h_open_items,
+    "claim": h_claim, "open-items": h_open_items, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
 }
 DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
 
@@ -1637,9 +1778,7 @@ def gen_index(M):
          "\\ref UUID7_DOC_README \"the ECSS pipeline\".", "",
          "## Claim", "", h_claim(M, {}), "",
          "Open items: %d (\\ref UUID7_DOC_SDP \"SDP\" <4.6>)." % len([o for o in M.open_items if o["status"] == "open"]), "",
-         "## Identification", "", table(["Item", "Value"], [
-             ["Product", "uuid7 %s (libuuid7, libuuid7-dev)" % M.version],
-             ["Commit", "%s on %s%s" % (M.commit, M.branch, " (uncommitted changes)" if M.dirty else "")],
+         "## Identification", "", h_configuration(M, {}), "", table(["Item", "Value"], [
              ["Generated", M.generated], ["Criticality", "category D (ECSS-Q-ST-80 Table D-1), \\ref UUID7_DOC_TAILORING \"tailoring\""],
              ["Diagrams", "%d PlantUML sources; %s" % (len(M.diagrams), M.render_note or "rendered to SVG")]]), "",
          h_source(M, {}), "", "## Status", "", h_summary(M, {}), "", "## Documents by ECSS file", ""]
@@ -1744,7 +1883,8 @@ def summary(M):
           "tests": len([t for t in M.tests if t["exe"]]), "scenarios": len([t for t in M.tests if t["suite"] == "SD"]),
           "documents": len([d for d in M.docs if d.applicability != "N"]), "tailored_out": len([d for d in M.docs if d.applicability == "N"]),
           "diagrams": len(M.diagrams), "svg": len(glob.glob(os.path.join(SVG, "*.svg"))), "render_note": M.render_note,
-          "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0],
+          "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0], "evidence_commit": M.ev_commit,
+          "evidence_state": M.ev.get("state", ""), "environment": M.env_text, "config_flags": M.config_flags, "tag": M.tag_text,
           "open_items": len([o for o in M.open_items if o["status"] == "open"])}
     write(os.path.join(OUT, "summary.json"), json.dumps(js, indent=1) + "\n")
     return js

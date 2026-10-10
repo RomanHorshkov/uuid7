@@ -16,7 +16,10 @@ This SRelD describes the version of uuid7 this package is generated for: what it
 
 ## 4 Software release overview
 
-1. Configuration file: the \ref UUID7_DOC_SCF "SCF" of the same refresh.
+1. Configuration file: the \ref UUID7_DOC_SCF "SCF" of the same refresh; the configuration this release document describes:
+
+<!-- ecss:configuration -->
+
 2. Version of the configuration item, packages and changes:
 
 <!-- ecss:release -->

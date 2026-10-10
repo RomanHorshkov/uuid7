@@ -116,7 +116,7 @@ The development and test environment is fixed by `deps.txt` and resolved by `uti
 
 | Need | Tool |
 |---|---|
-| Compiler | gcc (the build root's 13.3; the host's) with the kyr-build profile catalog: debug, audit (-fanalyzer), sanitize (ASan, UBSan, LSan), release, native, extreme, coverage |
+| Compiler | gcc (the version below) with the kyr-build profile catalog: debug, audit (-fanalyzer), sanitize (ASan, UBSan, LSan), release, native, extreme, coverage |
 | Requirements analysis | kyr-rms-cli (rms) |
 | Image generation | kyr-build lib/build.sh and lib/deb.sh (archive, shared object with version script, debs) |
 | Configuration management | git, GitHub releases |
@@ -124,6 +124,10 @@ The development and test environment is fixed by `deps.txt` and resolved by `uti
 | Static analysis | the catalog's warning set, gcc -fanalyzer (audit profile), clang-format 18 |
 | Test scripts | C with CMocka; bash for the pipeline |
 | Testing | CMocka, gcovr, the sanitizers, the stress benchmarks, kyr-build pipeline.sh |
+
+The environment and the versions of the last `ecss/make.sh` run, read where it ran:
+
+<!-- ecss:toolchain -->
 
 ### 5.5 Software documentation plan
 

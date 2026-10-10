@@ -68,7 +68,7 @@ Every requirement of the TS has at least one case; the method of the requirement
 
 ## 7 Software validation testing facilities
 
-The facility of <4.6>: the workstation (Ubuntu, gcc, glibc) and the pinned build root (Ubuntu 24.04 snapshot, gcc 13.3, glibc 2.39) for releases; the CI runners of the shared cicd workflow `c-quality.yml`. The test configuration of each run is identified by the commit and the sysroot of `deps.txt`. No RB validation, so one environment only.
+The facility of <4.6>: the pinned build root, in which `ecss/make.sh` runs the gates when it exists, else the workstation (then a host build, not the release environment); the environment and toolchain of each run are read where it ran and printed in the \ref UUID7_DOC_SCF "SCF"; the CI runners of the shared cicd workflow `c-quality.yml`. The test configuration of each run is identified by the commit and the sysroot of `deps.txt`. No RB validation, so one environment only.
 
 ## 8 Control procedures for software validation process
 
