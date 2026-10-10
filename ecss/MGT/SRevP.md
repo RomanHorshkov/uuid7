@@ -22,7 +22,7 @@ RID: review item discrepancy, recorded as an rms review-comment.
 
 | Review | Exact name | Combined with |
 |---|---|---|
-| \anchor rev_srr <span class="ecss-def">SRR</span> | uuid7 software requirements review | SWRR and PDR (one meeting, three decisions) |
+| \anchor rev_srr <span class="ecss-def">SRR</span> | uuid7 system requirements review | SWRR (software requirements review) and PDR (one meeting, three decisions) |
 | \anchor rev_pdr <span class="ecss-def">PDR</span> | uuid7 preliminary design review | SRR, SWRR |
 | \anchor rev_cdr <span class="ecss-def">CDR</span> | uuid7 critical design review | DDR, software validation specification review |
 | \anchor rev_qr <span class="ecss-def">QR</span> | uuid7 qualification review | software delivery review board |

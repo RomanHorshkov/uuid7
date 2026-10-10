@@ -40,7 +40,7 @@ uuid7 is a foundation library (tier 1): it knows nothing of the platform. The pl
 
 ### 5.1 General
 
-Each requirement has a unique identifier `UUID7-SRS-nnn` (`UUID7-ICD-nnn` for the interface, in the ICD), a verification method (T test, A analysis, I inspection, R review) and an upper-level source: RFC 9562, a platform rule or a platform need. The requirements are characterised by the software criticality category (all D) and the rms lifecycle status. Section <7> gives the traceability to the sources.
+Each requirement has a unique identifier `UUID7-SRS-nnn` (`UUID7-ICD-nnn` for the interface, in the ICD), a verification method (T test, A analysis, I inspection, R review) and an upper-level source: RFC 9562, a platform rule or a platform need. The requirements are characterised by the software criticality category (all D) and the rms lifecycle status with who set it; those statuses come from the scripted rms demonstration (\ref UUID7_DOC_JRR "JRR"), and the rms criticality is a workflow priority, not an ECSS category (\ref tailoring_scales "tailoring <3.1>"). Section <7> gives the traceability to the sources.
 
 ### 5.2 Functional requirements
 

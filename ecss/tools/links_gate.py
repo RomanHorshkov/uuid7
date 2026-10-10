@@ -3,7 +3,7 @@
 the site must be a link. It reads the HTML of every page made from the documents (and the component and trace pages) and reports
 each reference that is not inside a link: a section (<9.7>), a document name or id, a requirement, component, verification case,
 review, RID, change request, open item or baseline, an ECSS clause, a tool, an evidence file, a source file, an API symbol, a test,
-a figure or a table. Definitions are not references: headings, the anchored cell of a register row, a figure's or a table's own
+a figure or a table. Definitions are not references: headings, column titles, the anchored cell of a register row, a figure's or a table's own
 number. Code blocks are not read. A link doxygen could not resolve is a broken anchor and fails too.
 Exit 1 with the list (page: kind 'text' in '...context...'), else 0 with the count of links read."""
 import html
@@ -28,14 +28,15 @@ def main():
         ("section", re.compile(r"<\d+(?:\.\d+)*>")),
         ("ECSS clause", re.compile(r"(?<![\w-])(?:" + STD + r")(?:\s+(?:clauses?\s+)?(?:\d+(?:\.\d+)+[a-z]?|Annex(?:es)? [A-Z][\w.-]*|"
                                                            r"Table [A-Z]-\d+|Figure [A-Z]-\d+))?(?![\w-])")),
-        ("document", re.compile(r"(?<![\w-])(?:" + words(reg["abbr"]) + r")(?![\w-])")),
-        ("review", re.compile(r"(?<![\w-])(?:" + words(reg["reviews"]) + r")(?![\w-])")),
-        ("ECSS file", re.compile(r"(?<![\w-])(?:" + words(reg["files"]) + r")(?![\w-])")),
+        ("document", re.compile(r"(?<![\w/.-])(?:" + words(reg["abbr"]) + r")(?![\w/-])")),
+        ("review", re.compile(r"(?<![\w/.-])(?:" + words(reg["reviews"]) + r")(?![\w/-])")),
+        ("ECSS file", re.compile(r"(?<![\w/.-])(?:" + words(reg["files"]) + r")(?![\w/-])")),
         ("tool", re.compile(r"(?<![\w/.-])(?:" + words(reg["tools"]) + r")(?![\w/-]|\.\w)")),
         ("figure or table", re.compile(r"\b(?:Figure|Table) \d+\b(?![-.]\w)")),
     ]
     any_rules = [
         ("identifier", re.compile(r"\bUUID7-[A-Z]+-[A-Z0-9][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*|\bOI-\d{2}\b")),
+        ("identifier (short form)", re.compile(r"(?:,|\bto|\band)\s+-\d{3}\b")),
         ("evidence file", re.compile(r"(?<![\w/.-])(?:build/ecss/)?evidence/[\w./-]*\w")),
         ("source file", re.compile(r"(?<![\w/.-])(?:" + words(reg["sources"]) + r")(?![\w/-]|\.\w)")),
         ("API symbol", re.compile(r"(?<![\w.-])(?:" + words(reg["symbols"]) + r")\b(?!\.(?:puml|svg|h|c)\b)")),
@@ -56,6 +57,7 @@ def main():
         body = re.sub(r'<div class="fragment">.*?</div><!-- fragment -->', " ", body, flags=re.S)
         body = re.sub(r"<pre\b.*?</pre>", " ", body, flags=re.S)
         body = re.sub(r"<h([1-6])\b.*?</h\1>", " ", body, flags=re.S)
+        body = re.sub(r"<th\b.*?</th>", " ", body, flags=re.S)   # column titles
         body = re.sub(r'<span class="ecss-def">.*?</span>', " ", body, flags=re.S)
         body = re.sub(r"<a\b[^>]*\bhref=[^>]*>.*?</a>", " ", body, flags=re.S)
         body = re.sub(r'<div class="(?:memproto|memdoc-head)">.*?</div>', " ", body, flags=re.S)

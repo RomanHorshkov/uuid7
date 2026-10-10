@@ -24,7 +24,7 @@ CLAUSE = r"\d+(?:\.\d+)+[a-z]?(?: eo [a-z])?"
 PART = r"(?:Annex(?:es)? [A-Z](?:\.\d+)*(?: Table [A-Z]-\d+|\s+" + SECREF + r")?|Table [A-Z]-\d+|Figure [A-Z]-\d+|" + CLAUSE + ")"
 PARTLIST = PART + r"(?:" + SEP + PART + r")*"
 DEF = re.compile(r"^(#+)\s+(.*?)\s*(?:\{#([\w-]+)\})?\s*$")
-FENCE = re.compile(r"^\s*(~~~|```)")
+FENCE = re.compile(r"^\s*(~~~|```|\\verbatim\b|\\endverbatim\b)")
 TABLE_SEP = re.compile(r"^\|(?:\s*:?-+:?\s*\|)+\s*$")
 PROTECT = re.compile(r"(`[^`\n]*`|\\ref\s+[\w.:-]+(?:\(\))?(?:\s+\"[^\"]*\")?|\\anchor\s+\S+|\\image\s+.*$|"
                      r"<span class=\"ecss-def\">.*?</span>|<a\b[^>]*>.*?</a>|<[A-Za-z/!][^>\n]*>|\{#[\w-]+\}|\[[^\]\n]*\]\([^)\n]*\)|"
@@ -84,17 +84,18 @@ class Index:
             r"|(?P<docannex>\b(?P<aabbr>" + self.abbr_re + r")\s+Annex\s+(?P<annex>[A-Z])\b)"
             r"|(?P<sec>" + SECLIST + r")"
             r"|(?P<clause>(?<![\w-])(?P<std>" + STD_RE + r")(?:\s+(?:clauses?\s+)?(?P<parts>" + PARTLIST + r"))?(?![\w-]))"
-            r"|(?P<id>\bUUID7-[A-Z]+-[A-Z0-9][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*)"
+            r"|(?P<id>\bUUID7-[A-Z]+-[A-Z0-9][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*)(?P<idmore>(?:(?:,\s+|\s+to\s+|\s+and\s+)-\d{3}\b)*)"
             r"|(?P<oi>\bOI-\d{2}\b)"
-            r"|(?P<bl>\bbaseline\s+(?P<blname>" + "|".join(re.escape(b) for b in sorted(reg["baselines"], key=len, reverse=True) or ["@@"]) + r")\b)"
-            r"|(?P<abbr>\b(?:[A-Z]{2,3}/)?(?P<abbr1>" + self.abbr_re + r")(?:\.md)?\b)"
+            r"|(?P<bl>\b[Bb]aseline:?\s+(?P<blname>" + "|".join(re.escape(b) for b in sorted(reg["baselines"], key=len, reverse=True) or ["@@"]) + r")\b)"
+            r"|(?P<abbr>(?<![\w/.-])(?:ecss/)?(?:[A-Z]{2,3}/)?(?P<abbr1>" + self.abbr_re + r")(?:\.md)?(?![\w/-]))"
             r"|(?P<rev>\b(?:" + "|".join(re.escape(r) for r in rev) + r")\b)"
-            r"|(?P<file>\b(?:" + "|".join(re.escape(f) for f in files) + r")\b)"
+            r"|(?P<file>(?<![\w/.-])(?:" + "|".join(re.escape(f) for f in files) + r")(?![\w/-]))"
             r"|(?P<tool>(?<![\w/.-])(?:" + "|".join(re.escape(t) for t, _ in tools) + r")(?![\w/-]|\.\w))"
             r"|(?P<ev>(?<![\w/.-])(?:build/ecss/)?evidence/[\w./-]*[\w/])"
             r"|(?P<src>\"(?:" + self.src_re + r")\"|(?<![\w/.-])(?:" + self.src_re + r")(?![\w/-]|\.\w))"
             r"|(?P<sym>(?<![\w.-])(?:" + self.sym_re + r")\b(?:\(\))?(?!\.(?:puml|svg|h|c)\b))"
-            r"|(?P<bare>(?<![\w.;&<>-])\d\.\d+(?:\.\d+)+[a-z]?(?![\w.]|&gt;|>))")
+            r"|(?P<annexref>(?<![\w-])(?:Annex [A-Z](?:\.\d+)*(?: Table [A-Z]-\d+)?|Table [A-Z]-\d+)(?![\w-]))"
+            r"|(?P<bare>(?<![\w.;&<>-])\d\.\d+(?:\.\d+)+[a-z]?(?: eo [a-z]\b)?(?![\w.]|&gt;|>))")
 
     # -- structure ---------------------------------------------------------------------------------------------------------------
 
@@ -264,9 +265,10 @@ class Index:
             short = self.short_of(doc) if doc else None
             return (self.sec_label(short, dm.group(2), self.pages_any(), part) if short else None) or doc
         key = re.sub(r"^Annex(?:es)?\s+", "Annex ", part)
-        for k in (key, re.sub(r"\.\d+.*$", "", key), re.sub(r" Table .*$", "", key)):
-            if (std, k) in self.reg["std_parts"]:
-                return self.reg["std_parts"][(std, k)]
+        for st in [std] + [x for x in ("e40", "q80", "m40") if x != std]:   # a table only one standard has is that one's
+            for k in (key, re.sub(r"\.\d+.*$", "", key), re.sub(r" Table .*$", "", key)):
+                if (st, k) in self.reg["std_parts"] and (st == std or k.startswith("Table")):
+                    return self.reg["std_parts"][(st, k)]
         return self.reg["std_pages"].get(std)
 
     def link_text(self, p, seg, state):
@@ -302,8 +304,18 @@ class Index:
                     pos = pm.end()
                 out.append(parts[pos:])
                 return "".join(out)
-            if m.group("id") or m.group("oi"):
-                return self.ref(self.reg["ids"].get(s), s, unresolved=(p.rel, s) if s in self.reg["ids"] or m.group("oi") else None)
+            if m.group("id"):
+                i = m.group("id")
+                out = self.ref(self.reg["ids"].get(i), i, unresolved=(p.rel, i) if i in self.reg["ids"] else None)
+                # UUID7-SRS-019, -025 to -027: the short forms name ids of the same series
+                stem = i.rsplit("-", 1)[0]
+
+                def short(x):
+                    full = stem + x.group(0)
+                    return self.ref(self.reg["ids"].get(full), x.group(0), unresolved=(p.rel, full))
+                return out + re.sub(r"-\d{3}\b", short, m.group("idmore"))
+            if m.group("oi"):
+                return self.ref(self.reg["ids"].get(s), s, unresolved=(p.rel, s))
             if m.group("bl"):
                 return s[:m.start("blname") - m.start()] + self.ref(self.reg["baselines"].get(m.group("blname")), m.group("blname"))
             if m.group("abbr"):
@@ -325,6 +337,13 @@ class Index:
                 href = re.sub(r"^build/ecss/", "", s)
                 self.count["links"] += 1
                 return '<a href="%s">%s</a>' % (href, s)
+            if m.group("annexref"):
+                # an annex or table without its standard: the document's own annex, else the standard of the sentence
+                own = re.match(r"Annex ([A-Z])$", s)
+                lb = self.sections.get((p.short, own.group(1))) if own else None
+                std = state.get("std") or p.std
+                lb = lb or self.clause_label(std, s)
+                return self.ref(lb, s) if lb else s
             if m.group("bare"):
                 std = state.get("std") or p.std
                 lb = self.clause_label(std, s)
@@ -376,7 +395,11 @@ class Index:
     def link(self, rel, text):
         p = self.pages[rel]
         out, fence = [], False
-        for line in text.split("\n"):
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if line.startswith("|") and i + 1 < len(lines) and TABLE_SEP.match(lines[i + 1]):
+                out.append(line)   # a table's header row: column titles, not references
+                continue
             if FENCE.match(line):
                 fence = not fence
                 out.append(line)
@@ -401,6 +424,7 @@ class Index:
                 return m.group(0)
             return self.link_sections(p, short, m.group(3), m.group(2))
         line = re.sub(r"\\ref\s+(\w+)\s+\"([^\"]*)\"\s+(" + SECLIST + ")", docref, line)
+        line = re.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", r"<b>\1</b>", line)   # doxygen leaves ** around a link as text
         state = {"std": getattr(p, "section_std", None)}
         out, pos = [], 0
         for m in PROTECT.finditer(line):

@@ -16,17 +16,19 @@ This SPAMR reports the product assurance activities performed on uuid7 up to the
 
 ## 4 Verification activities performed
 
-1. Reviews: the reviews recorded so far in the rms and their outcome (a scripted demonstration, \ref UUID7_DOC_JRR "JRR"):
+1\. Reviews: the reviews recorded so far in the rms and their outcome (a scripted demonstration, \ref UUID7_DOC_JRR "JRR"):
 
 <!-- ecss:reviews -->
 
-2. Inspections and analyses: the non-test verification cases and their results are in the \ref UUID7_DOC_SVR "SVR" <4> and the \ref UUID7_DOC_SVS "SVS" <9>.
-3. Walk-throughs: the scenario sequence diagrams (\ref UUID7_DOC_SUM "SUM" <11>) are the walk-through of the behaviour; each is a passing test.
-4. Traceability matrices (ECSS-Q-ST-80 6.2.6.12): verified by generation at this refresh; the gaps:
+2\. Inspections and analyses: the non-test verification cases and their results are in the \ref UUID7_DOC_SVR "SVR" <4> and the \ref UUID7_DOC_SVS "SVS" <9>.
+
+3\. Walk-throughs: the scenario sequence diagrams (SUM <9>, SDD <5.2>, SVS <7>) are the walk-through of the behaviour; each is the record of a passing test.
+
+4\. Traceability matrices (ECSS-Q-ST-80 6.2.6.12): verified by generation at this refresh; the gaps:
 
 <!-- ecss:gaps -->
 
-5. Documents reviewed: the data package of the review (\ref UUID7_DOC_SREVP "SRevP" <10>).
+5\. Documents reviewed: the data package of the review (\ref UUID7_DOC_SREVP "SRevP" <10>).
 
 Measures for critical software: none required (category D, no critical component).
 

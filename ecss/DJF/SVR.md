@@ -40,8 +40,9 @@ At category D the requirements verification report (5.8.3.2a eo b), the architec
 
 ### 4.4 Software design and implementation engineering process verification (for CDR)
 
-1. Traceability: the detailed design, code and unit test traceability matrices are not required at D (5.8.3.4a, 5.8.3.5a eo a, 5.8.3.6a); the code-level trace exists anyway, generated from the tags (\ref UUID7_DOC_TRACE "matrices"; in this site, the "Satisfies" and "Verifies" lists).
-2. Feasibility: the analyses performed on the code and the artifacts, with their results:
+1\. Traceability: the detailed design, code and unit test traceability matrices are not required at D (5.8.3.4a, 5.8.3.5a eo a, 5.8.3.6a); the code-level trace exists anyway, generated from the tags (\ref UUID7_DOC_TRACE "matrices"; in this site, the "Satisfies" and "Verifies" lists).
+
+2\. Feasibility: the analyses performed on the code and the artifacts, with their results:
 
 <!-- ecss:checks -->
 
@@ -58,7 +59,7 @@ Deactivated and configurable code (ECSS-Q-ST-80 6.2.6.5, 6.2.6.6: N at D): the o
 
 ### 4.6 Software validation process verification (for CDR, QR, AR)
 
-1. Traceability: validation specification to the TS (5.8.3.8a eo b):
+1\. Traceability: validation specification to the TS (5.8.3.8a eo b):
 
 <!-- ecss:req-results -->
 
@@ -68,7 +69,7 @@ The scenario runs, each recorded as a sequence diagram in the SVS:
 
 <!-- ecss:scenario-results -->
 
-2. Feasibility: the validation report w.r.t. the TS is evaluated in the \ref UUID7_DOC_SVALR "SValR"; the requirements not covered by testing (ECSS-Q-ST-80 7.2.3.6) are verified by the analyses, inspections and reviews of the \ref UUID7_DOC_SVS "SVS" <9>, whose results are above.
+2\. Feasibility: the validation report w.r.t. the TS is evaluated in the \ref UUID7_DOC_SVALR "SValR"; the requirements not covered by testing (ECSS-Q-ST-80 7.2.3.6) are verified by the analyses, inspections and reviews of the \ref UUID7_DOC_SVS "SVS" <9>, whose results are above.
 
 ### 4.7 Software quality requirements verification
 

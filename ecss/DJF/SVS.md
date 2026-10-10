@@ -133,10 +133,10 @@ A Linux x86-64 host with the sysroot of `deps.txt` (the CPU family and C library
 
 ## 11 Software validation specification additional information
 
-1. and 2. Test/analysis/inspection/review to requirement, and requirement to case: the matrices below and \ref UUID7_DOC_TRACE "the traceability matrices".
+1\. and 2\. Test/analysis/inspection/review to requirement, and requirement to case: the matrices below and \ref UUID7_DOC_TRACE "the traceability matrices".
 
 <!-- ecss:case-matrix -->
 
-3. and 4. Procedures to cases and cases to procedures: TP-1 runs every `UUID7-TC-*`; TP-2 every case whose record carries a `check`; TP-3 every case whose record carries a recorded verdict (some cases carry both: their verdict needs both).
+3\. and 4\. Procedures to cases and cases to procedures: TP-1 runs every `UUID7-TC-*`; TP-2 every case whose record carries a `check`; TP-3 every case whose record carries a recorded verdict (some cases carry both: their verdict needs both).
 
-5. and 6. Test scripts and detailed procedures: <8.2.3> and <8.2.4>.
+5\. and 6\. Test scripts and detailed procedures: <8.2.3> and <8.2.4>.

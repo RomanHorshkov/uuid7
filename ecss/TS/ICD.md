@@ -22,7 +22,7 @@ See the \ref UUID7_DOC_SRS "SRS" <4>.
 
 ### 5.1 General provisions to the requirements in the IRD
 
-There is no IRD (\ref UUID7_DOC_TAILORING "the tailoring"). Each interface requirement has a unique identifier `UUID7-ICD-nnn` and an upper-level source, traced in <7>.
+There is no IRD (\ref UUID7_DOC_TAILORING "the tailoring"). Each interface requirement has a unique identifier `UUID7-ICD-nnn` and an upper-level source, traced in <7>. Statuses and rms criticality read as in the SRS <5.1>.
 
 ### 5.2 Interface requirements
 
