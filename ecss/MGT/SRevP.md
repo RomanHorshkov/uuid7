@@ -39,8 +39,8 @@ The project documentation applicable to every review: the \ref UUID7_DOC_SDP "SD
 
 ## 6 Review objectives
 
-- SRR (with SWRR and PDR): agree that the requirements of the TS capture what the library must do, given its upper-level sources (no RB); release the TS (SRS, ICD); check the plans (SDP, SRevP, SCMP, SPAP, SVerP, SValP, SSMP) and the security analysis; verify the technical budgets' estimates; evaluate the reuse file; release the architecture (SDD); evaluate known issues; decide to proceed.
-- CDR (with DDR and SVSR): baseline the detailed design (SDD, code, doc comments); check the unit test plan and its results; check the validation specification against the TS and baseline it; verify the coverage, the technical budgets and the reuse file; release the SUM; check that the configuration item is a formal version; evaluate known issues; decide to proceed.
+- SRR (with SWRR and PDR): agree that the requirements of the TS capture what the library must do, given its upper-level sources (no RB); release the TS (SRS, ICD); check the plans (SDP, SRevP, SCMP, SPAP, SVerP, SValP, SSMP) and the security analysis; verify the technical budgets' estimates; evaluate the reuse file; release the architecture (SDD) and its trade-offs (DTJ); evaluate known issues; decide to proceed.
+- CDR (with DDR and SVSR): baseline the detailed design (SDD, code, doc comments) and its justification (DTJ); check the unit test plan and its results; check the validation specification against the TS and baseline it; verify the coverage, the technical budgets and the reuse file; release the SUM; check that the configuration item is a formal version; evaluate known issues; decide to proceed.
 - QR: verify that the library meets every TS requirement (validation and verification complete, the verification and traceability matrices, coverage); release the SRelD; verify the maintenance plan; check the delivery (packages, checksums, SCF); decide to deliver.
 - AR: verify that the delivered packages are the ones the QR verified; accept them for pinning by the consumers; evaluate the known problems; close the delivery.
 

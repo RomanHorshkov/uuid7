@@ -64,7 +64,13 @@ The library depends on ISO C11 and four POSIX calls; the only Linux-specific cal
 4. Naming conventions: rules N1 to N6 of the coding standard (NAMING.md).
 5. Programming standards: the coding standard.
 6. Intended reuse components: the whole library (\ref UUID7_DOC_SRF "SRF").
-7. Main design trade-offs: one atomic word instead of a lock (no blocking, but sequence and time share 64 bits: 52 bits of milliseconds, 12 of sequence); borrowing future milliseconds instead of waiting (non-blocking, bounded by `UUID7_MAX_AHEAD_MS`); entropy before reservation (a failed RNG wastes nothing, at the cost of drawing entropy for calls that later refuse); binary-only interface (smaller, but the caller formats).
+7. Main design trade-offs, each summarised here with its full record (alternatives, consequences, rationale, the requirements it answers, what justifies it) in the DTJ <4> (ECSS-E-ST-40 4.2.4, 4.2.5):
+<!-- ecss:tradeoffs-summary -->
+   - one atomic word instead of a lock: no blocking, but sequence and time share 64 bits (52 bits of milliseconds, 12 of sequence);
+   - borrowing future milliseconds instead of waiting: non-blocking, bounded by `UUID7_MAX_AHEAD_MS`;
+   - entropy before reservation: a failed RNG wastes nothing, at the cost of drawing entropy for calls that later refuse;
+   - binary-only interface: smaller, but the caller formats.
+<!-- ecss:end -->
 
 ## 5 Software design
 

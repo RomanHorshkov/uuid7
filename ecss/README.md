@@ -38,7 +38,7 @@ Every diagram is a numbered figure and every table a numbered table of its docum
 | MGT | SDP (with the ECSS-E-ST-40 compliance matrix and the open items, `open_items.csv`), SRevP, SCMP | `MGT/` |
 | TS | SRS, ICD, the requirements | `TS/` |
 | DDF | SDD, SUM, SRelD, SCF | `DDF/` |
-| DJF | SVerP, SValP, SUITP, SVS, SVR, SRF, unit test report, validation report, traceability matrices, problem reports, joint review reports | `DJF/` |
+| DJF | SVerP, SValP, SUITP, SVS, SVR, SRF, design trade-offs and justification (DTJ), unit test report, validation report, traceability matrices, problem reports, joint review reports | `DJF/` |
 | PAF | SPAP (with the SSMP, the ECSS-Q-ST-80 compliance matrix and the tools register, `tools.csv`), SPAMR, tailoring and criticality, coding standard | `PAF/` |
 | MF | SMP | `MF/` |
 | SF | SSAR with the risk treatment plan | `SF/` |
@@ -51,8 +51,8 @@ Every diagram is a numbered figure and every table a numbered table of its docum
 | Review | Data package |
 |---|---|
 | SRR (held with SWRR and PDR) | SDP, SRevP, SCMP, SPAP and SSMP, SVerP, SRF, SSAR, SVR, SPAMR, tailoring |
-| PDR | SRS, ICD, SDD, SCF, SValP, SDP, SPAP, coding standard, SVR, SPAMR |
-| CDR (held with DDR) | ICD, SDD, SCF, SUM, unit test plan and report, SVS, validation report, SVR, SPAMR |
+| PDR | SRS, ICD, SDD, DTJ, SCF, SValP, SDP, SPAP, coding standard, SVR, SPAMR |
+| CDR (held with DDR) | ICD, SDD, DTJ, SCF, SUM, unit test plan and report, SVS, validation report, SVR, SPAMR |
 | QR | SCF, SRelD, SUM, SMP, SVR, SPAMR |
 | AR | SCF, SRelD, SUM, SMP, installation report, SVR, SPAMR |
 
@@ -73,5 +73,7 @@ ecss/make.sh                                            # now generated from the
 ```
 
 An export in which a decision (approval, review outcome, RID disposition, verification) or a baseline names no actor is refused: RED, exit 1, the front page says why. Each baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description), else it is a configuration flag. `ECSS_RMS_EXPORT=<dir>` reads another export.
+
+Design decisions are rms artifacts of kind `decision` (alternatives and consequences as `Alternatives:` / `Consequences:` paragraphs of the body or `alternatives=` / `consequences=` notes), with `rationale` and `assumption` artifacts linked to them; any link joins a decision to the requirements it answers, the components it shapes and the verification cases that justify it. `DJF/DTJ.md` is generated from them (empty, with a note, while the export has none), the SDD <4.7> summarises them, and the SRS and SDD name them back. A document of `documents.csv` the export does not hold is produced anyway and listed as drift.
 
 Without `rms_export/package.json` the generator uses the CSVs and the tags. With it, the rms's artifacts, links and baselines are the truth, the fresh run's results are shown with the rms's recorded verdicts, and any tag or note the rms does not hold is listed as drift in `DJF/TRACE.md`.

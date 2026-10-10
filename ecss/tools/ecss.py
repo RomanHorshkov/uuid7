@@ -647,6 +647,14 @@ def build_model():
     arts = list(M.rms["arts"]) if M.rms else list(csv_arts)
     M.mode = "rms" if M.rms else "csv"
     by_id = {a.id: a for a in arts}
+    # a document of the register (ecss/documents.csv) the rms export does not hold yet is still produced, and reported as drift
+    M.doc_drift = []
+    if M.rms:
+        for a in csv_arts:
+            if a.kind == "document" and a.id not in by_id:
+                arts.append(a)
+                by_id[a.id] = a
+                M.doc_drift.append(a.id)
     for t in M.tests:
         if t["id"] not in by_id:
             row = {"human_id": t["id"], "kind": "verification-case", "title": t["brief"] or t["name"], "body": t["detail"],
@@ -667,6 +675,8 @@ def build_model():
     M.reviews = [a for a in arts if a.kind == "review"]
     M.cases = [a for a in arts if a.kind == "verification-case"]
     M.crs = [a for a in arts if a.kind == "change-request"]
+    M.decisions = sorted([a for a in arts if a.kind == "decision"], key=lambda a: a.id)
+    M.rationales = sorted([a for a in arts if a.kind in ("rationale", "assumption")], key=lambda a: (a.kind, a.id))
     # Links: the rms's when exported; the repository's facts always (tags, CSV notes), kept to report drift.
     repo_links = []
     for t in M.tests:
@@ -737,7 +747,10 @@ def build_model():
             M.result[c.id]["rms"] = M.rms["verdicts"][c.id]
     # Requirement status
     M.cases_of, M.comps_of, M.reqs_of_comp, M.reqs_of_case = {}, {}, {}, {}
+    dkinds = ("decision", "rationale", "assumption")
     for s, t, d, _ in M.links:
+        if (s in by_id and by_id[s].kind in dkinds) or (d in by_id and by_id[d].kind in dkinds):
+            continue   # a design decision's links are read below, whatever their type
         if t == "verified-by":
             M.cases_of.setdefault(s, []).append(d)
             M.reqs_of_case.setdefault(d, []).append(s)
@@ -750,6 +763,17 @@ def build_model():
         elif t == "allocates-to":
             M.comps_of.setdefault(s, []).append(d)
             M.reqs_of_comp.setdefault(d, []).append(s)
+    # design decisions: whatever an rms link joins a decision, a rationale or an assumption to, in either direction
+    M.dlinks = {}
+    for s_, t, d, _ in M.links:
+        for x, y in ((s_, d), (d, s_)):
+            xa, ya = by_id.get(x), by_id.get(y)
+            if xa and ya and xa.kind in ("decision", "rationale", "assumption"):
+                M.dlinks.setdefault(x, set()).add(y)
+    M.decisions_of = {}
+    for dec in M.decisions:
+        for y in M.dlinks.get(dec.id, ()):
+            M.decisions_of.setdefault(y, set()).add(dec.id)
     M.symbols_of = {}
     for s in M.symbols.values():
         for r in s["satisfies"]:
@@ -1129,7 +1153,8 @@ def req_block(M, r, level):
              "- Source: %s · ECSS category: %s · rms criticality: %s (\\ref tailoring_scales \"not an ECSS category\") · Status: %s" % (
                  md_escape(r.source_ref), md_escape(r.applicability), r.criticality or "not set",
                                                                 status_text(M, r, (" (rms revision %s)" % r.revision) if r.revision else "")),
-             "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id])), ""]
+             "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id]))] + \
+        (["- Design decisions: %s" % ", ".join(dec_ref(x) for x in sorted(M.decisions_of[r.id]))] if M.decisions_of.get(r.id) else []) + [""]
     return "\n".join(lines)
 
 
@@ -1212,7 +1237,8 @@ def h_components(M, a):
                 "- Interfaces: %s" % ("; ".join(sig(s) for s in funcs) or "data only"),
                 "- Resources: static storage only (see `Data`); no allocation, no file descriptor except the built-in RNG's transient one",
                 "- References: %s" % md_escape(c.source_ref),
-                "- Data: %s" % (", ".join("`%s`" % s["name"] for s in data) or "none"), ""]
+                "- Data: %s" % (", ".join("`%s`" % s["name"] for s in data) or "none")] + \
+               (["- Shaped by the design decisions: %s" % ", ".join(dec_ref(x) for x in sorted(M.decisions_of[c.id]))] if M.decisions_of.get(c.id) else []) + [""]
     return "\n".join(out)
 
 
@@ -1395,6 +1421,9 @@ def h_gaps(M, a):
         out.append(table(["Requirement", "Status"], [[rref(r.id), status_word(M.req_status[r.id])] for r in gaps], "Requirements not verified"))
     if unref:
         out.append("\nCases that verify no requirement: " + ", ".join(cref(c.id) for c in unref) + ".")
+    if M.doc_drift:
+        out.append("\nDocuments of the register (ecss/documents.csv) absent from the rms export, produced anyway: " +
+                   ", ".join(M.doc_drift) + ".")
     if M.drift:
         out.append("\nRepository links absent from the rms export (re-run the loader): " +
                    "; ".join("%s %s %s" % l[:3] for l in M.drift[:40]) + ("…" if len(M.drift) > 40 else ""))
@@ -1964,6 +1993,101 @@ def h_flags(M, a):
     return "~~~{.txt}\n%s\n~~~" % "\n".join(l.strip() for l in flags.splitlines() if l.strip())
 
 
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Design decisions: the DJF's trade-offs and design rationale (ECSS-E-ST-40 4.2.4, 4.2.5), from the rms decision, rationale and
+# assumption artifacts; the SDD summarises them (Annex F <4.7> b.7)
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def dec_ref(i):
+    return '\\ref %s "%s"' % (anchor("dec_" + i), i)
+
+
+def decision_parts(d):
+    """The decision, its alternatives and its consequences: notes alternatives=/consequences=, or 'Alternatives:' and
+    'Consequences:' paragraphs of the body."""
+    body, alt, con = d.body, d.notes.get("alternatives", ""), d.notes.get("consequences", "")
+    for key in ("Consequences", "Alternatives"):
+        m = re.search(r"(?:^|\n|\s)%s(?: considered)?:\s*(.*?)(?=\n\s*(?:Alternatives|Consequences)(?: considered)?:|$)" % key, body, re.S)
+        if m:
+            if key == "Alternatives" and not alt:
+                alt = m.group(1).strip()
+            if key == "Consequences" and not con:
+                con = m.group(1).strip()
+            body = (body[:m.start()] + body[m.end():]).strip()
+    return body.strip(), alt, con
+
+
+def linked(M, i, kinds):
+    return sorted(y for y in M.dlinks.get(i, ()) if M.by_id[y].kind in kinds)
+
+
+def none_yet(M, what):
+    if M.mode != "rms":
+        return "No %s: they are rms artifacts and no rms export is present." % what
+    return ("No %s yet: the rms export (%s) holds no artifact of kind decision, rationale or assumption, so this record is present "
+            "and empty until the design decisions are recorded in the rms." % (what, M.rms["path"]))
+
+
+def h_decisions(M, a):
+    if not M.decisions:
+        return none_yet(M, "design decision is recorded")
+    out = ["%d design decision(s) from the rms export, each with what it answers, what it shapes and what justifies it." % len(M.decisions), ""]
+    for d in M.decisions:
+        text, alt, con = decision_parts(d)
+        cases = linked(M, d.id, ("verification-case",))
+        out += ["### %s %s {#%s}" % (d.id, md_escape(d.title), anchor("dec_" + d.id)), "",
+                "- Decision: %s" % (md_escape(text) or "not stated"),
+                "- Alternatives considered: %s" % (md_escape(alt) or "**not recorded**"),
+                "- Consequences: %s" % (md_escape(con) or "**not recorded**"),
+                "- Rationale: %s" % ("; ".join(x for x in [md_escape(d.rationale).rstrip(".")] + [dec_ref(r) for r in linked(M, d.id, ("rationale",))] if x)
+                                     or "**not recorded**"),
+                "- Assumptions: %s" % (", ".join(dec_ref(x) for x in linked(M, d.id, ("assumption",))) or "none"),
+                "- Answers: %s" % (", ".join(rref(x) for x in linked(M, d.id, ("requirement",))) or "**no requirement linked**"),
+                "- Shapes: %s" % (", ".join('\\ref %s "%s"' % (anchor("cmp_" + x), md_escape(M.by_id[x].title)) for x in linked(M, d.id, ("component",)))
+                                  or "no component linked"),
+                "- Justified by: %s" % (", ".join("%s (%s)" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in cases)
+                                        or "**no analysis or test linked**"),
+                "- Status: %s" % status_text(M, d, (" (rms revision %s)" % d.revision) if d.revision else ""), ""]
+    return "\n".join(out)
+
+
+def h_rationale(M, a):
+    if not M.rationales:
+        return none_yet(M, "rationale or assumption is recorded")
+    rows = [[defn(anchor("dec_" + x.id), x.id), x.kind, md_escape(x.title), md_escape(x.body),
+             ", ".join(dec_ref(y) if M.by_id[y].kind == "decision" else (rref(y) if M.by_id[y].kind == "requirement" else y)
+                       for y in sorted(M.dlinks.get(x.id, ()))) or "-", x.status] for x in M.rationales]
+    return table(["Id", "Kind", "Title", "Statement", "For", "Status"], rows, "Rationale and assumptions")
+
+
+def h_decision_trace(M, a):
+    if not M.decisions:
+        return none_yet(M, "decision to trace")
+    rows = [[dec_ref(d.id), ", ".join(rref(x) for x in linked(M, d.id, ("requirement",))) or "-",
+             ", ".join('\\ref %s "%s"' % (anchor("cmp_" + x), md_escape(M.by_id[x].title)) for x in linked(M, d.id, ("component",))) or "-",
+             ", ".join("%s %s" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in linked(M, d.id, ("verification-case",))) or "-"]
+            for d in M.decisions]
+    back = [['\\ref %s "%s"' % (anchor("cmp_" + c.id), md_escape(c.title)), ", ".join(dec_ref(x) for x in sorted(M.decisions_of.get(c.id, ()))) or "-"]
+            for c in sorted(M.comps, key=lambda c: c.id)]
+    return (table(["Decision", "Answers", "Shapes", "Justified by"], rows, "Decision to requirement, component and justification") + "\n\n" +
+            table(["Component", "Shaped by"], back, "Component to the decisions that shape it"))
+
+
+def h_tradeoffs_summary(M, a):
+    """The SDD's main design trade-offs: one line per rms decision, linked to its record in the DTJ; without any, the template's
+    own statement of the design as it stands (a["body"]) under a note."""
+    if M.decisions:
+        def gist(d):
+            t = decision_parts(d)[0].split(". ")[0].rstrip(".")
+            return (t[:1].lower() + t[1:]) if t[1:2].islower() else t
+        return "\n".join("   - %s: %s (%s)%s" % (md_escape(d.title), md_escape(gist(d)), dec_ref(d.id), "." if d is M.decisions[-1] else ";")
+                         for d in M.decisions)
+    return ("   Not yet recorded as rms decisions, so the DTJ <4> is empty; the trade-offs as the design stands:\n\n" + a.get("body", "")).replace(
+        "DTJ <4>", "\\ref UUID7_DOC_DTJ \"DTJ\" <4>")
+
+
+
 HANDLERS = {
     "docinfo": h_docinfo, "refs": h_refs, "terms": h_terms, "reqs": h_reqs, "validation-matrix": h_validation_matrix,
     "upward-trace": h_upward_trace, "reqtable": h_reqtable, "components": h_components, "allocation": h_allocation,
@@ -1972,14 +2096,29 @@ HANDLERS = {
     "gaps": h_gaps, "summary": h_summary, "pipeline": h_pipeline, "coverage": h_coverage, "budgets": h_budgets, "checks": h_checks,
     "doc-plan": h_doc_plan, "drl": h_drl, "review-docs": h_review_docs, "reviews": h_reviews, "baselines": h_baselines,
     "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
-    "spr": h_spr, "jrr": h_jrr, "scenario-results": h_scenario_results, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
+    "spr": h_spr, "jrr": h_jrr, "scenario-results": h_scenario_results, "decisions": h_decisions, "rationale": h_rationale,
+    "decision-trace": h_decision_trace, "tradeoffs-summary": h_tradeoffs_summary, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
     "claim": h_claim, "open-items": h_open_items, "tools": h_tools, "criticality": h_criticality, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
 }
 DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
 
 
+BLOCK = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->\n((?:(?!<!--[ \t]*ecss:).)*?)\n<!--[ \t]*ecss:end[ \t]*-->[ \t]*$",
+                   re.M | re.S)
+
+
 def expand(M, text, where):
+    """The directives of a template: <!-- ecss:name args --> becomes the handler's text; a block, closed by <!-- ecss:end -->,
+    hands its lines to the handler as a["body"]."""
     M.placed = set()   # the diagrams this document shows so far
+
+    def block(m):
+        args = {k: v.strip('"') for k, v in re.findall(r"([\w-]+)=(\"[^\"]*\"|\S+)", m.group(2))}
+        args["body"] = m.group(3)
+        h = HANDLERS.get(m.group(1))
+        return h(M, args) if h else m.group(0)
+    text = BLOCK.sub(block, text)
+
     def one(m):
         args = {k: v.strip('"') for k, v in re.findall(r"([\w-]+)=(\"[^\"]*\"|\S+)", m.group(2))}
         h = HANDLERS.get(m.group(1))
@@ -2030,6 +2169,8 @@ def link_registry(M):
         ids[c.id] = anchor("cr_" + c.id)
     for o in M.open_items:
         ids[o["id"]] = anchor("oi_" + o["id"])
+    for x in M.decisions + M.rationales:
+        ids[x.id] = anchor("dec_" + x.id)
     tools = []
     with open(os.path.join(ECSS, "PAF", "tools.csv"), newline="", encoding="utf-8") as f:
         for r in csv.DictReader(f):
