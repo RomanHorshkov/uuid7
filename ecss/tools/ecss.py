@@ -582,21 +582,36 @@ def configuration(M):
     M.in_root = env.startswith("release root")
     M.env_text = (("the release root, identity %s" % env.split()[-1]) if M.in_root else env) if env else \
         "not recorded (no evidence/toolchain.txt: run ecss/make.sh)"
-    M.tag = "v" + M.version
-    tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag in git("tag", "--list", M.tag).split() else ""
-    M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if tag_commit else "%s: to be created at release" % M.tag
+    # a release (ecss/release.sh): its tag, or none on a rehearsal, and the baseline it was built from (ecss/baseline/<name>/)
+    M.release, M.release_tag = os.environ.get("ECSS_RELEASE", ""), os.environ.get("ECSS_RELEASE_TAG", "")
+    M.manifest = manifest_of(os.path.join(BASELINES, M.release)) if M.release else ({}, {}, [])
+    if M.release:
+        M.tag = M.release_tag
+        tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag else ""
+        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of release %s before its tag" % (
+            M.commit[:12], M.release)
+    else:
+        M.tag = "v" + M.version
+        tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag in git("tag", "--list", M.tag).split() else ""
+        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if tag_commit else "%s: to be created at release" % M.tag
+    # the evidence commit stands for this one when the release's baseline froze it and its product (everything outside ecss/) is
+    # this commit's: the release commit adds the frozen baseline and may change the documents' sources, never the product
+    fields, _, product = M.manifest
+    M.same_product = bool(M.release and M.ev_commit and fields.get("commit") == M.ev_commit and product == product_of("HEAD"))
+    M.ev_known = bool(M.ev_commit) and run(["git", "cat-file", "-e", M.ev_commit + "^{commit}"])[0] == 0
+    anc = M.ev_commit if M.ev_known else (M.commit if M.same_product else M.ev_commit)
     M.debs = buildinfos()
     flags = []
     if not M.ev_commit:
         flags.append("no evidence configuration is recorded (run ecss/make.sh)")
     else:
-        if M.ev_commit != M.commit:
+        if M.ev_commit != M.commit and not M.same_product:
             flags.append("the evidence is of commit %s; these documents are generated at commit %s" % (M.ev_commit[:12], M.short))
         if M.ev.get("state") != "clean":
             flags.append("the evidence ran with uncommitted changes on top of commit %s" % M.ev_commit[:12])
     if env and not M.in_root:
         flags.append("the evidence is a host build, not the release environment")
-    if tag_commit and tag_commit != M.ev_commit:
+    if tag_commit and tag_commit != M.ev_commit and not (M.same_product and tag_commit == M.commit):
         flags.append("tag %s is at commit %s, not the evidence commit" % (M.tag, tag_commit[:12]))
     for d in M.debs:
         if d["commit"] and M.ev_commit and d["commit"] != M.ev_commit:
@@ -604,13 +619,18 @@ def configuration(M):
     for b in M.baselines:
         c = b["commit"]
         full = git("rev-parse", "--verify", "--quiet", c + "^{commit}") if c else ""
+        if c and not full and M.same_product and b["name"] == M.release and c == M.ev_commit:
+            b["check"] = "%s, the evidence commit, outside this commit's history; its product is this commit's (ecss/baseline/%s/MANIFEST)" % (
+                c[:12], M.release)
+            b["full_commit"] = c
+            continue
         if not c:
             b["check"] = "**none recorded**"
             flags.append("rms baseline %s carries no uuid7 commit" % b["name"])
         elif not full:
             b["check"] = "**mismatch**: %s is not a commit of this repository" % c
             flags.append("rms baseline %s names %s, which is not a commit of this repository" % (b["name"], c))
-        elif M.ev_commit and run(["git", "merge-base", "--is-ancestor", full, M.ev_commit])[0] != 0:
+        elif M.ev_commit and run(["git", "merge-base", "--is-ancestor", full, anc])[0] != 0:
             b["check"] = "**mismatch**: %s is not in the history of the evidence commit" % full[:12]
             flags.append("rms baseline %s froze commit %s, which is not in the history of the evidence commit" % (b["name"], full[:12]))
         else:
@@ -627,17 +647,23 @@ def configuration(M):
     M.config_flags = flags
 
 
+def same_product_text(M):
+    return ("; its product, everything outside ecss/, is this commit's (baseline %s, ecss/baseline/%s/MANIFEST)" % (M.release, M.release)
+            if M.same_product else "")
+
+
 def h_configuration(M, a):
     tc = M.toolchain
     rows = [["Product", "uuid7 %s (libuuid7, libuuid7-dev)" % M.version],
-            ["Evidence of", ("commit %s (%s), branch %s, produced %s" % (M.ev_commit, M.ev.get("state", "?"), M.ev.get("branch", "?"),
-                                                                        M.ev.get("at", "?"))) if M.ev_commit else "not recorded"],
+            ["Evidence of", ("commit %s (%s), branch %s, produced %s%s" % (M.ev_commit, M.ev.get("state", "?"), M.ev.get("branch", "?"),
+                                                                          M.ev.get("at", "?"), same_product_text(M))) if M.ev_commit else "not recorded"],
             ["Environment", md_escape(M.env_text)],
             ["Toolchain (read where the evidence ran)", ", ".join("%s %s" % (k, md_escape(tc[k])) for k in
                                                                   ("os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3")
                                                                   if tc.get(k)) or "not recorded"],
             ["Documents generated at", "commit %s%s" % (M.commit, " (uncommitted changes)" if M.dirty else "")],
-            ["Release tag", M.tag_text],
+            ["Release tag", M.tag_text]] + ([["Release", "%s, from the frozen baseline ecss/baseline/%s/" % (M.release, M.release)]]
+                                            if M.release else []) + [
             ["Configuration flags", "; ".join(md_escape(f) for f in M.config_flags) if M.config_flags else "none"]]
     return table(["Item", "Value"], rows, "Configuration of the evidence and of these documents")
 
@@ -664,7 +690,9 @@ def build_model():
     M.branch = git("rev-parse", "--abbrev-ref", "HEAD")
     M.dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
     M.date = git("log", "-1", "--format=%cs") or datetime.date.today().isoformat()
-    M.generated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    sde = os.environ.get("SOURCE_DATE_EPOCH", "")   # a release: the commit's time, so that two builds give one package
+    M.generated = datetime.datetime.fromtimestamp(int(sde), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if sde.isdigit() \
+        else datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     M.symbols, M.tests = scan_sources()
     M.rms = load_rms()
     csv_arts = (load_csv(os.path.join(ECSS, "TS", "requirements.csv"), "csv") + load_csv(os.path.join(ECSS, "documents.csv"), "csv") +
@@ -875,7 +903,10 @@ def api_doxyfile():
     return "\n".join([
         "PROJECT_NAME = uuid7", "OUTPUT_DIRECTORY = build/ecss/xml_api",
         "INPUT = app/uuid7.h app/uuid7.c app/uuid7_test.h build/ecss/md/components.dox",
-        "FILE_PATTERNS = *.h *.c *.dox", "GENERATE_HTML = NO", "GENERATE_LATEX = NO", "GENERATE_XML = YES", "XML_PROGRAMLISTING = NO",
+        "FILE_PATTERNS = *.h *.c *.dox", "GENERATE_LATEX = NO", "GENERATE_XML = YES", "XML_PROGRAMLISTING = NO",
+        # HTML too: doxygen 1.9 checks the @param and @return of a member only while writing a format that parses its documentation,
+        # so with XML alone it reports every documented function as undocumented
+        "GENERATE_HTML = YES", "HTML_OUTPUT = html",
         "EXTRACT_ALL = NO", "EXTRACT_STATIC = YES", "OPTIMIZE_OUTPUT_FOR_C = YES", "WARN_IF_UNDOCUMENTED = YES", "WARN_NO_PARAMDOC = YES",
         "WARN_LOGFILE = build/ecss/xml_api/warnings.txt", "QUIET = YES", "REFERENCES_RELATION = YES", "REFERENCED_BY_RELATION = YES",
         "ENABLE_PREPROCESSING = YES", "MACRO_EXPANSION = YES", "EXPAND_ONLY_PREDEF = YES",
@@ -1145,8 +1176,8 @@ GENERATED = {"class_uuid7": "the declarations of app/uuid7.h (the doxygen pre-pa
 def product_text(M):
     env = "the release root" if M.in_root else md_escape(M.env_text)
     ev = ("evidence of commit %s (%s) in %s" % (M.ev_commit[:12], M.ev.get("state", "?"), env)) if M.ev_commit else "no evidence recorded"
-    docs = "" if M.ev_commit == M.commit and not M.dirty else "; documents generated at commit %s%s" % (
-        M.short, " (uncommitted changes)" if M.dirty else "")
+    docs = "" if M.ev_commit == M.commit and not M.dirty else "; documents generated at commit %s%s%s" % (
+        M.short, " (uncommitted changes)" if M.dirty else "", ", the same product" if M.same_product else "")
     return "uuid7 %s; %s%s; release tag %s%s" % (M.version, ev, docs, M.tag_text,
                                                  ("; **%d configuration flag(s)**, \\ref UUID7_DOC_SCF \"SCF\"" % len(M.config_flags))
                                                  if M.config_flags else "")
@@ -1166,7 +1197,7 @@ def h_docinfo(M, a):
     d = M.by_id.get(a.get("id"))
     if not d:
         return "> Document %s is not in the register." % a.get("id")
-    src = "rms export (%s, project %s)" % (M.rms["path"], PROJECT_KEY) if M.mode == "rms" else "repository CSVs (no rms export present)"
+    src = "rms export (`%s`, project %s)" % (M.rms["path"], PROJECT_KEY) if M.mode == "rms" else "repository CSVs (no rms export present)"
     rev = (" (rms revision %s)" % d.revision) if d.revision else ""
     return table(["Item", "Value"], [
         ["Document", "%s — %s" % (d.id, md_escape(d.title))], ["ECSS file", d.notes.get("file", "")],
@@ -1941,12 +1972,14 @@ def h_baselines(M, a):
 
 def h_tags(M, a):
     rows = []
-    for line in git("for-each-ref", "--sort=v:refname", "refs/tags/v*", "--format=%(refname:short) %(objecttype)").splitlines():
+    refs = ["refs/tags/v*"] + (["refs/tags/" + M.tag] if M.tag and not M.tag.startswith("v") else [])
+    for line in git("for-each-ref", "--sort=v:refname", *refs, "--format=%(refname:short) %(objecttype)").splitlines():
         name, kind = line.split()
         signed = kind == "tag" and bool(re.search(r"-----BEGIN (PGP|SSH) SIGNATURE-----", git("cat-file", "tag", name)))
         rows.append(["`%s`" % name, "annotated" if kind == "tag" else "**lightweight**", "yes" if signed else "**no**",
                      git("rev-list", "-n", "1", name)[:12]])
-    note = "" if any(r[0] == "`%s`" % M.tag for r in rows) else "\n\nNo tag `%s` exists: it is created at release." % M.tag
+    note = "" if any(r[0] == "`%s`" % M.tag for r in rows) else ("\n\nNo tag `%s` exists: it is created at release." % M.tag) if M.tag else \
+        "\n\nThis build of release %s is untagged: the tag is set on the release commit." % M.release
     return (table(["Tag", "Kind", "Signed", "Commit"], rows, "Release tags") if rows else "No release tag.") + note
 
 
@@ -2013,9 +2046,9 @@ def h_release(M, a):
                  md_escape(bi.get(r[0].strip("`"), {}).get("gcc", "?")), md_escape(bi.get(r[0].strip("`"), {}).get("libc", "?"))] for r in rows]
     return ("Version %s; evidence of commit %s (%s); release tag %s. Previous release tag: %s.\n\n**Packages** (build/debs/SHA256SUMS, "
             "and each package's .buildinfo: a Build-Root of `none` is a development build, not a release):\n\n%s\n\n"
-            "**Changes since %s**:\n\n\\verbatim\n%s\n\\endverbatim" % (M.version, M.ev_commit or "not recorded", M.ev.get("state", "?"), M.tag_text,
+            "**%s**:\n\n\\verbatim\n%s\n\\endverbatim" % (M.version, M.ev_commit or "not recorded", M.ev.get("state", "?"), M.tag_text,
                                                           prev or "none", table(["Package", "SHA-256", "Build-Root", "Commit", "gcc", "libc"], rows, "Packages of this refresh")
-                                                          if rows else "not built", prev or "the start", log or "none"))
+                                                          if rows else "not built", ("Changes since " + prev) if prev else "The last 20 commits", log or "none"))
 
 
 def h_receiving(M, a):
@@ -2167,7 +2200,7 @@ def none_yet(M, what):
     if M.mode != "rms":
         return "No %s: they are rms artifacts and no rms export is present." % what
     return ("No %s yet: the rms export (%s) holds no artifact of kind decision, rationale or assumption, so this record is present "
-            "and empty until the design decisions are recorded in the rms." % (what, M.rms["path"]))
+            "and empty until the design decisions are recorded in the rms." % (what, "`%s`" % M.rms["path"]))
 
 
 def h_decisions(M, a):

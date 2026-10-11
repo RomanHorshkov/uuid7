@@ -66,7 +66,7 @@ def main():
     refused("the MANIFEST names another commit than its export", "names commit")
     restore()
     open(os.path.join(ev, "configuration.txt"), "w").write("commit: %s\nstate: clean\n" % ("1" * 40))
-    sh("python3", "-c", "import sys; sys.path.insert(0, 'ecss/tools'); import ecss; ecss.evidence_tar(%r, 0)" % os.path.join(d, "evidence.tar.gz"))
+    sh("python3", "-B", "-c", "import sys; sys.path.insert(0, 'ecss/tools'); import ecss; ecss.evidence_tar(%r, 0)" % os.path.join(d, "evidence.tar.gz"))
     man = open(os.path.join(d, "MANIFEST")).read().splitlines()
     sha = sh("sha256sum", os.path.join(d, "evidence.tar.gz"))[1].split()[0]
     open(os.path.join(d, "MANIFEST"), "w").write("\n".join((sha + "  evidence.tar.gz") if l.endswith("  evidence.tar.gz") else l for l in man) + "\n")

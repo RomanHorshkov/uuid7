@@ -115,6 +115,9 @@ cp -r "${EV}/." "${OUT}/html/evidence/" 2> /dev/null
 cp "${OUT}"/puml/*.puml "${OUT}/html/diagrams/" 2> /dev/null
 cp "${OUT}"/svg/*.svg "${OUT}/html/diagrams/" 2> /dev/null
 
+# the API names doxygen 1.9 leaves bare in inline code and member lists, linked from its tag file (1.10 and later link them itself)
+python3 ecss/tools/site_links.py "${OUT}/html" "${OUT}/uuid7.tag" "${OUT}/links.json" | sed 's/^/   /'
+
 # the frozen baselines' tooling: freeze and every refusal of a release, in a scratch clone of HEAD
 say "baselines: ecss/tools/test_baseline.py"
 if python3 ecss/tools/test_baseline.py > "${OUT}/test_baseline.txt" 2>&1; then tail -n 1 "${OUT}/test_baseline.txt"; else cat "${OUT}/test_baseline.txt"; rc=1; fi
