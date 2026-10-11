@@ -580,6 +580,9 @@ def docx_part(name, data, footer):
     elif name == "word/styles.xml":
         # table cells are Compact paragraphs: 8 pt (rPr after pPr, as the schema orders them)
         text = re.sub(r'(<w:style [^>]*w:styleId="Compact"[^>]*>.*?</w:pPr>)', r'\1<w:rPr><w:sz w:val="16"/></w:rPr>', text, count=1, flags=re.S)
+        # code in a table cell or a paragraph takes the paragraph's size
+        text = re.sub(r'<w:style [^>]*w:styleId="VerbatimChar".*?</w:style>', lambda m: re.sub(r'<w:sz w:val="\d+"\s*/>', "", m.group(0)),
+                      text, count=1, flags=re.S)
         if 'w:styleId="Footer"' not in text:
             text = text.replace("</w:styles>", '<w:style w:type="paragraph" w:styleId="Footer"><w:name w:val="footer"/>'
                                 '<w:basedOn w:val="Normal"/><w:rPr><w:sz w:val="14"/></w:rPr></w:style></w:styles>')

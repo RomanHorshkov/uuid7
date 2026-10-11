@@ -588,7 +588,7 @@ def configuration(M):
     if M.release:
         M.tag = M.release_tag
         tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag else ""
-        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of release %s before its tag" % (
+        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of baseline %s before its tag" % (
             M.commit[:12], M.release)
     else:
         M.tag = "v" + M.version
@@ -620,7 +620,7 @@ def configuration(M):
         c = b["commit"]
         full = git("rev-parse", "--verify", "--quiet", c + "^{commit}") if c else ""
         if c and not full and M.same_product and b["name"] == M.release and c == M.ev_commit:
-            b["check"] = "%s, the evidence commit, outside this commit's history; its product is this commit's (ecss/baseline/%s/MANIFEST)" % (
+            b["check"] = "%s, the evidence commit, outside this commit's history; its product is this commit's (`ecss/baseline/%s/MANIFEST`)" % (
                 c[:12], M.release)
             b["full_commit"] = c
             continue
@@ -648,7 +648,7 @@ def configuration(M):
 
 
 def same_product_text(M):
-    return ("; its product, everything outside ecss/, is this commit's (baseline %s, ecss/baseline/%s/MANIFEST)" % (M.release, M.release)
+    return ("; its product, everything outside ecss/, is this commit's (baseline %s, `ecss/baseline/%s/MANIFEST`)" % (M.release, M.release)
             if M.same_product else "")
 
 
@@ -662,7 +662,7 @@ def h_configuration(M, a):
                                                                   ("os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3")
                                                                   if tc.get(k)) or "not recorded"],
             ["Documents generated at", "commit %s%s" % (M.commit, " (uncommitted changes)" if M.dirty else "")],
-            ["Release tag", M.tag_text]] + ([["Release", "%s, from the frozen baseline ecss/baseline/%s/" % (M.release, M.release)]]
+            ["Release tag", M.tag_text]] + ([["Release", "baseline %s, frozen in `ecss/baseline/%s/`" % (M.release, M.release)]]
                                             if M.release else []) + [
             ["Configuration flags", "; ".join(md_escape(f) for f in M.config_flags) if M.config_flags else "none"]]
     return table(["Item", "Value"], rows, "Configuration of the evidence and of these documents")
