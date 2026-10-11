@@ -67,13 +67,40 @@ Round trip (the project is created by a platform OWNER, who grants the loading a
 ```sh
 ecss/make.sh                                            # also writes build/ecss/rms/: artifacts.csv, links.tsv, results.tsv, load.sh, export.sh
 build/ecss/rms/load.sh <db-root> <actor-uid>            # import the artifacts, create the links, record this run's results
-kyr-rms-cli <db-root> baseline PDR --project UUID7 --actor <actor-uid>   # at the review
+kyr-rms-cli <db-root> baseline PDR --project UUID7 --commit <sha> --actor <actor-uid>   # at the review, at the evidence's commit
 build/ecss/rms/export.sh <db-root> <actor-uid>          # package export -> rms_export/package.json, matrix verification -> rms_export/verification.csv
 ecss/make.sh                                            # now generated from the rms; repository links missing there are reported
 ```
+
+load.sh records each result against the full commit the evidence is of (`--env`) and names `results.tsv` by its sha256 (`--evidence`); an import the rms refuses (items already in their lifecycle, an actor without config-master) is reported and the links and results still go in. `ecss/tools/test_rms_load.sh` (a make.sh stage) runs it as the verification engineer on a copy of rms_tests' local database and checks every result.
 
 An export in which a decision (approval, review outcome, RID disposition, verification) or a baseline names no actor is refused: RED, exit 1, the front page says why. Each baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description), else it is a configuration flag. `ECSS_RMS_EXPORT=<dir>` reads another export.
 
 Design decisions are rms artifacts of kind `decision` (alternatives and consequences as `Alternatives:` / `Consequences:` paragraphs of the body or `alternatives=` / `consequences=` notes), with `rationale` and `assumption` artifacts linked to them; any link joins a decision to the requirements it answers, the components it shapes and the verification cases that justify it. `DJF/DTJ.md` is generated from them (empty, with a note, while the export has none), the SDD <4.7> summarises them, and the SRS and SDD name them back. A document of `documents.csv` the export does not hold is produced anyway and listed as drift.
 
 Without `rms_export/package.json` the generator uses the CSVs and the tags. With it, the rms's artifacts, links and baselines are the truth, the fresh run's results are shown with the rms's recorded verdicts, and any tag or note the rms does not hold is listed as drift in `DJF/TRACE.md`.
+
+## Release package
+
+The repository owns the prose and the code, the rms the requirements, approvals, links and baselines, the pipeline the evidence; the release build owns nothing: it reads the tag, the frozen baseline and its evidence, and writes the package.
+
+1. Engineer: writes the requirements in the rms and cites their ids in the code (`@satisfies`) and the tests (`@verifies`).
+2. Pipeline: `ecss/make.sh` at the candidate commit inside the release root; `build/ecss/rms/load.sh` records its results in the rms against that commit's full hash.
+3. Approver: freezes the baseline in the rms at that commit (kyr rms: the config-master runs `baseline <name> --commit <sha>`, an approver approves it); a recorded decision with its actors.
+4. Owner: exports the rms (`build/ecss/rms/export.sh`), freezes the baseline into the repository from the checkout whose last `make.sh` ran at that commit (`python3 ecss/tools/ecss.py freeze <name>`) and commits `ecss/baseline/<name>/` once, as data.
+5. Owner: tags that commit `<name>`, the baseline's name.
+6. Documentation build: `ecss/release.sh <name> --baseline <name>`: a clean clone of the tag, inside the documentation root, gives `build/docs/<name>/`; a second build of the commit must give the same `SHA256SUMS`.
+7. Publication: `build/docs/<name>/` goes with the release.
+
+```sh
+KYR_BUILD_ROOT_SH=<kyr-build 2.1.6+>/share/build_root.sh ecss/docs_root.sh create   # once per machine: the documentation root
+python3 ecss/tools/ecss.py freeze <name>              # ecss/baseline/<name>/ from ecss/rms_export/ and build/ evidence
+ecss/release.sh <tag-or-ref> --baseline <name>        # build/docs/<name>/; another ref is labelled "untagged <sha12>"
+```
+
+`ecss/baseline/<name>/`: `package.json` and `verification.csv` (the rms export as frozen), `evidence.tar.gz` (what make.sh left for the baseline's commit: the pipeline's results, logs, coverage, the release objects, the debs' buildinfo) and `MANIFEST` (the commit, its product, who froze and approved, the sha256 of each file). The evidence travels as committed data rather than being regenerated, because a new run differs (timings, dates): the package depends only on the commit. `release.sh` refuses a release whose baseline directory is missing or changed, whose MANIFEST names another commit than its export or its evidence, or whose product (everything outside `ecss/`) is not the one the baseline's commit froze; the documents then say the evidence commit's product is this commit's.
+
+The documentation root (`ecss/docs_root.sh`) is kyr-build's build root from the release root's pins (Ubuntu Base 24.04.5, snapshot.ubuntu.com 20260901T000000Z) with doxygen, graphviz, a headless JRE, pandoc, WeasyPrint, rsvg-convert and fonts instead of the compilers; its identity is printed in the package index. WeasyPrint is the PDF engine: HTML and CSS paged media (the footer is an `@page` margin box, a wide table a landscape page), +183 MiB installed against +350 MiB for xelatex in that snapshot. The PlantUML jar is checked against the sha256 pinned in `docs_root.sh`, never downloaded.
+
+`build/docs/<name>/`: `index.html` (the package index: tag, full commit, baseline, build date, both roots' identities, the tools, every document in every format), `html/` (the site), `pdf/`, `docx/`, `odt/` (each document and `index.*`), `SHA256SUMS`. Every page of every format has the footer: the tag (or `untagged <sha12>`), the commit, the baseline, the build date (SOURCE_DATE_EPOCH, the commit's time). `ecss/tools/package.py` turns the doxygen Markdown into pandoc's, every reference into a link to the same format or to the site, and fails on a bare reference or anything past a PDF page's edge.
+
