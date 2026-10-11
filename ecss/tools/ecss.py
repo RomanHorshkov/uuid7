@@ -588,7 +588,7 @@ def configuration(M):
     if M.release:
         M.tag = M.release_tag
         tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag else ""
-        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of baseline %s before its tag" % (
+        M.tag_text = ("`%s` (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of baseline %s before its tag" % (
             M.commit[:12], M.release)
     else:
         M.tag = "v" + M.version
