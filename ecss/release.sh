@@ -4,8 +4,8 @@
 # ecss/baseline/<name>/ checked against that commit (ecss.py baseline: refused when missing, changed, of another commit or of
 # another product) and its evidence unpacked; then, inside the documentation root (ecss/docs_root.sh, offline), make.sh --docs-only
 # against that export and evidence and ecss/tools/package.py: each document in PDF, DOCX and ODT, the site, the package index and
-# SHA256SUMS, into build/docs/<name>/ (DIR). SOURCE_DATE_EPOCH is the commit's time; a tag ref names the release's tag, any other
-# ref is an untagged build. A second build of the same commit must give the same SHA256SUMS: it is compared with the package it
+# SHA256SUMS, into build/docs/<name>/ (DIR). SOURCE_DATE_EPOCH is the commit's time; a tag ref gives the footer its tag, any other
+# ref says "untagged <sha12>". A second build of the same commit must give the same SHA256SUMS: it is compared with the package it
 # replaces and exit 1 lists every file that differs. The deb cache is only read (a private copy of the pinned kyr-build deb).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,9 +53,12 @@ jar="$("${S}/ecss/docs_root.sh" jar "${S}/build/tools")" || die "no PlantUML jar
 snapshot="$("${S}/build/sysroot/share/kyr-build/build_root.sh" show | awk '$1=="snapshot:" {print $2}')"
 
 epoch="$(git -C "${S}" log -1 --format=%ct "${commit}")"
+if [[ -n "${tag}" ]]; then t="tag ${tag}"; else t="untagged ${commit:0:12}"; fi
 export SOURCE_DATE_EPOCH="${epoch}" ECSS_RELEASE="${name}" ECSS_RELEASE_TAG="${tag}" ECSS_RMS_EXPORT="/src/ecss/baseline/${name}" \
-    PLANTUML_JAR="/src/build/tools/$(basename "${jar}")" ECSS_DOCS_SNAPSHOT="${snapshot}"
-export KYR_BUILD_ROOT_ENV="ECSS_RELEASE ECSS_RELEASE_TAG ECSS_RMS_EXPORT PLANTUML_JAR ECSS_DOCS_SNAPSHOT"
+    PLANTUML_JAR="/src/build/tools/$(basename "${jar}")" ECSS_DOCS_SNAPSHOT="${snapshot}" \
+    ECSS_FOOTER="uuid7 $(tr -d '[:space:]' < "${S}/VERSION") · ${t} · commit ${commit:0:12} · baseline ${name} · built $(date -u -d "@${epoch}" '+%Y-%m-%d %H:%M UTC')"
+export KYR_BUILD_ROOT_ENV="ECSS_RELEASE ECSS_RELEASE_TAG ECSS_RMS_EXPORT PLANTUML_JAR ECSS_DOCS_SNAPSHOT ECSS_FOOTER"
+printf '   footer: %s\n' "${ECSS_FOOTER}"
 
 say "baseline: ecss/baseline/${name}"
 "${S}/ecss/docs_root.sh" enter --src "${S}" -- python3 -B ecss/tools/ecss.py baseline "${name}" --unpack || die "the release is refused"

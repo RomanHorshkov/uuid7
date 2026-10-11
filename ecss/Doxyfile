@@ -46,6 +46,7 @@ GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 HTML_DYNAMIC_SECTIONS  = YES
 HTML_EXTRA_STYLESHEET  = ecss/tools/site.css
+HTML_FOOTER            = $(ECSS_HTML_FOOTER)
 GENERATE_TREEVIEW      = YES
 FULL_SIDEBAR           = NO
 SEARCHENGINE           = YES

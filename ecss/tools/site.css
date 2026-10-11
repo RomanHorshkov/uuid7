@@ -19,3 +19,5 @@ table.markdownTable td { overflow-wrap: break-word; }
 table.markdownTable td span.tt, table.markdownTable td code { white-space: normal; overflow-wrap: anywhere; }
 div.contents div.fragment { overflow-x: auto; max-width: 100%; box-sizing: border-box; }
 div.contents pre.fragment { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; box-sizing: border-box; }
+#nav-path li.ecss-provenance { float: left; padding-left: 10px; font-weight: bold; color: var(--page-foreground-color, #222); }
+address.footer .ecss-provenance { font-weight: bold; }

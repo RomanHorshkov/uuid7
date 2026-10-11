@@ -106,6 +106,24 @@ python3 ecss/tools/ecss.py generate; g=$?
 (( g == 0 || g == 3 || g == 4 )) || exit 1
 mkdir -p "${OUT}/svg"
 
+# the footer of every page: the tag (or untagged), the commit, the baseline, the build date; ecss/release.sh sets ECSS_FOOTER
+if [[ -z "${ECSS_FOOTER:-}" ]]; then
+    c="$(git rev-parse HEAD)"; t="$(git describe --tags --exact-match HEAD 2> /dev/null || true)"
+    [[ -n "${t}" ]] && t="tag ${t}" || t="untagged ${c:0:12}"
+    c="${c:0:12}"; [[ -z "$(git status --porcelain --untracked-files=no)" ]] || c="${c} (uncommitted changes)"
+    ECSS_FOOTER="uuid7 $(tr -d '[:space:]' < VERSION) · ${t} · commit ${c} · baseline none (the rms export as it stands) · built $(date -u '+%Y-%m-%d %H:%M UTC')"
+fi
+mkdir -p "${OUT}/doxy"
+( cd "${OUT}/doxy" && rm -f footer.html && doxygen -w html header.html footer.html style.css > /dev/null 2>&1 ) || exit 1
+python3 - "${OUT}/doxy/footer.html" "${ECSS_FOOTER}" << 'PY'
+import html, sys
+p, text = sys.argv[1], html.escape(sys.argv[2])
+s = open(p, encoding="utf-8").read()
+s = s.replace('<li class="footer">', '<li class="footer ecss-provenance">%s</li>\n    <li class="footer">' % text, 1)
+s = s.replace('<address class="footer"><small>', '<address class="footer"><small><span class="ecss-provenance">%s</span><br/>' % text, 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+export ECSS_HTML_FOOTER="${OUT}/doxy/footer.html"
 say "site: doxygen ecss/Doxyfile ($(doxygen --version), $(dot -V 2>&1 | awk '{print $1, $5}'))"
 ECSS_VERSION="$(tr -d '[:space:]' < VERSION)" ECSS_ROOT="${ROOT}" doxygen ecss/Doxyfile || exit 1
 mkdir -p "${OUT}/html/evidence" "${OUT}/html/diagrams"

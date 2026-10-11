@@ -6,15 +6,17 @@ by ecss/release.sh, from the repository root.
 
 The Markdown is the doxygen dialect the site reads; dialect() rewrites what doxygen alone understands (\\ref, \\anchor, \\verbatim,
 the HTML of figures, captions and lists) into pandoc's, every reference into a link: to the same document, to the other document
-of the same format, or to the site for the API reference and the evidence.
+of the same format, or to the site for the API reference and the evidence. Every page of every format carries the footer
+ECSS_FOOTER; a table too wide for a portrait page gets a landscape page and a smaller font in the PDF, and wraps everywhere.
 
-Environment: ECSS_RELEASE (the baseline's name), ECSS_RELEASE_TAG (empty: untagged), SOURCE_DATE_EPOCH,
+Environment: ECSS_FOOTER, ECSS_RELEASE (the baseline's name), ECSS_RELEASE_TAG (empty: untagged), SOURCE_DATE_EPOCH,
 KYR_BUILD_ROOT_ID (the documentation root's identity). Only the standard library, pandoc, rsvg-convert and weasyprint.
 """
 import datetime
 import glob
 import hashlib
 import html
+import io
 import json
 import os
 import re
@@ -22,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 
 sys.dont_write_bytecode = True
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -31,6 +34,10 @@ WORK = os.path.join(ROOT, "build", "tmp", "package")
 FMT = ("markdown-implicit_figures-raw_tex-tex_math_dollars-citations-subscript-superscript-strikeout-yaml_metadata_block"
        "-example_lists")
 EXT = {"pdf": "pdf", "docx": "docx", "odt": "odt", "html": "html"}
+# a table is wide, and gets a landscape page in the PDF, by (columns, characters its longest row shows): 7 columns, 6 with a row of
+# 200 characters, 5 with a row of 600 (the traceability and validation matrices); a narrower one wraps on a portrait page
+WIDE = ((7, 0), (6, 200), (5, 600))
+ZIP_TIME = (1980, 1, 1, 0, 0, 0)
 
 
 def read(path):
@@ -256,21 +263,58 @@ def dialect(text, here, fmt, L, images):
         else:
             out.append(line_inline(line, here, fmt, L))
         i += 1
-    return "\n".join(out)
+    return wide_tables("\n".join(out), fmt)
 
 
 def visible(row):
     return len(re.sub(r"\]\([^)]*\)|\{[#.][^}]*\}|[\[\]*`]", "", row))
 
 
+def wide_tables(text, fmt):
+    """A wide pipe table (WIDE) goes into a .wide div with the caption above it: a landscape page and a smaller font in the PDF."""
+    lines = text.split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        if lines[i].startswith("|") and i + 1 < len(lines) and re.match(r"^\|(?:\s*:?-+:?\s*\|)+\s*$", lines[i + 1]):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
+                j += 1
+            rows = lines[i:j]
+            cols = lines[i + 1].count("|") - 1
+            longest = max(visible(r) for r in rows)
+            if any(cols >= c and longest >= n for c, n in WIDE):
+                cap = []
+                k = len(out)
+                while k > 0 and out[k - 1] == "":
+                    k -= 1
+                if k > 0 and out[k - 1] == ":::":   # the table's caption div, written just above
+                    s = k - 1
+                    while s > 0 and not out[s].startswith("::: {"):
+                        s -= 1
+                    if "ecss-tcap" in out[s]:
+                        cap, out = out[s:k], out[:s]
+                out += ["", ":::: wide", ""] + cap + [""] + rows + ["", "::::", ""]
+            else:
+                out += rows
+            i = j
+            continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out)
+
+
 # ---------------------------------------------------------------------------------------------------------------------------------
 # The formats
 # ---------------------------------------------------------------------------------------------------------------------------------
 
-PRINT_CSS = """@page { size: A4; margin: 18mm 15mm 20mm 15mm; }
+PRINT_CSS = """@page { size: A4; margin: 18mm 15mm 20mm 15mm;
+  @top-left { content: string(doctitle); font: 7.5pt "Liberation Sans", "DejaVu Sans", sans-serif; color: #555; }
+  @bottom-left { content: "%(footer)s"; font: 7.5pt "Liberation Sans", "DejaVu Sans", sans-serif; color: #333; }
+  @bottom-right { content: "page " counter(page) " of " counter(pages); font: 7.5pt "Liberation Sans", "DejaVu Sans", sans-serif; color: #333; } }
+@page wide { size: A4 landscape; margin: 15mm 12mm 18mm 12mm; }
 html { font: 9.5pt/1.35 "Liberation Sans", "DejaVu Sans", sans-serif; color: #111; }
 body { margin: 0; }
-h1 { font-size: 17pt; margin: 0 0 8pt; }
+h1 { font-size: 17pt; string-set: doctitle content(); margin: 0 0 8pt; }
 h2 { font-size: 13pt; margin: 14pt 0 5pt; break-after: avoid; }
 h3 { font-size: 11pt; margin: 11pt 0 4pt; break-after: avoid; }
 h4, h5, h6 { font-size: 10pt; margin: 9pt 0 3pt; break-after: avoid; }
@@ -285,6 +329,9 @@ th { background: #e8e8e8; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
 td code, th code { font-size: 7.5pt; }
+div.wide { page: wide; }
+div.wide table { font-size: 7pt; }
+div.wide td code { font-size: 6.5pt; }
 .ecss-caption { font-size: 8.5pt; color: #222; margin: 4pt 0; break-after: avoid; }
 .ecss-figure { break-inside: avoid; text-align: center; margin: 8pt 0; }
 .ecss-figure .ecss-caption { text-align: left; }
@@ -300,12 +347,14 @@ th, td { border: 1px solid #bbb; padding: 3px 6px; text-align: left; vertical-al
 th { background: #eee; }
 code { font-size: 12.5px; }
 a { color: #0b4f8a; }
+footer.ecss-provenance { margin-top: 24px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 12px; color: #333; }
 """
 
 
 class Builder:
     def __init__(self, out):
         self.out = out
+        self.footer = os.environ.get("ECSS_FOOTER", "")
         self.release = os.environ.get("ECSS_RELEASE", "")
         self.tag = os.environ.get("ECSS_RELEASE_TAG", "")
         self.epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "0"))
@@ -315,6 +364,7 @@ class Builder:
         shutil.rmtree(WORK, ignore_errors=True)
         os.makedirs(WORK)
         self.pngs = {}
+        self.overflow = []
 
     # -- images: SVG for the PDF, PNG (rsvg-convert) for the editable formats, at most the text width
     def images(self, name, fmt):
@@ -352,21 +402,31 @@ class Builder:
             self.pdf(page, target)
         elif fmt == "html":
             run(common + ["--to", "html5", "--standalone", "--embed-resources", "--css", os.path.join(WORK, "screen.css"),
-                          "--include-in-header", os.path.join(WORK, "meta.html"), "--output", target, src])
+                          "--include-in-header", os.path.join(WORK, "meta.html"), "--include-after-body", os.path.join(WORK, "footer.html"),
+                          "--output", target, src])
         else:
-            run(common + ["--to", fmt, "--output", target, src])
+            run(common + ["--to", fmt, "--reference-doc", os.path.join(WORK, "reference." + fmt), "--output", target, src])
 
     def pdf(self, page, target):
         from weasyprint import HTML
         doc = HTML(filename=page).render()
+        for n, p in enumerate(doc.pages, 1):
+            for why in clipped(p):
+                self.overflow.append("%s page %d: %s" % (os.path.basename(target), n, why))
         doc.write_pdf(target, pdf_identifier=hashlib.md5(os.path.basename(target).encode() + self.commit.encode()).hexdigest().encode())
 
+    # -- reference documents: styles and the footer of every page
     def references(self):
-        write(os.path.join(WORK, "print.css"), PRINT_CSS % {})
+        write(os.path.join(WORK, "print.css"), PRINT_CSS % {"footer": self.footer.replace("\\", "\\\\").replace('"', '\\"')})
         write(os.path.join(WORK, "screen.css"), SCREEN_CSS)
         stamp = self.date.strftime("%Y-%m-%dT%H:%M:%SZ")
         write(os.path.join(WORK, "meta.html"), '<meta name="dcterms.created" content="%s">\n<meta name="dcterms.modified" content="%s">\n'
               % (stamp, stamp))
+        write(os.path.join(WORK, "footer.html"), '<footer class="ecss-provenance">%s</footer>\n' % html.escape(self.footer))
+        docx = subprocess.run(["pandoc", "--print-default-data-file", "reference.docx"], capture_output=True, check=True).stdout
+        rezip(docx, os.path.join(WORK, "reference.docx"), lambda n, b: docx_part(n, b, self.footer))
+        odt = subprocess.run(["pandoc", "--print-default-data-file", "reference.odt"], capture_output=True, check=True).stdout
+        rezip(odt, os.path.join(WORK, "reference.odt"), lambda n, b: odt_part(n, b, self.footer))
 
     def build(self):
         texts = {name: read(os.path.join(MD, r)) for r, name in pages()}
@@ -445,6 +505,113 @@ def weasy_version():
     return weasyprint.__version__
 
 
+def clipped(page):
+    """What runs past the page's right edge: a box wider than the page, which the reader would never see."""
+    out = []
+    width = page.width
+
+    def walk(box, depth=0):
+        x = getattr(box, "position_x", None)
+        w = box.margin_width() if hasattr(box, "margin_width") else None
+        if x is not None and w is not None and x + w > width + 1 and type(box).__name__ in ("TableBox", "BlockBox", "LineBox", "TableWrapperBox"):
+            text = "".join(getattr(b, "text", "") for b in walk_text(box))[:60]
+            out.append("%s %.0f pt past the edge: %s" % (type(box).__name__, x + w - width, text))
+            return
+        for c in getattr(box, "children", []):
+            walk(c, depth + 1)
+    walk(page._page_box)
+    return out
+
+
+def walk_text(box):
+    if hasattr(box, "text"):
+        yield box
+    for c in getattr(box, "children", []):
+        yield from walk_text(c)
+
+
+def rezip(data, target, change):
+    """A zip again with every member through change(name, bytes), sorted as given, at one fixed time."""
+    src = zipfile.ZipFile(io.BytesIO(data))
+    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+        names = src.namelist()
+        extra = change("", b"") or {}
+        for n in names:
+            b = change(n, src.read(n))
+            info = zipfile.ZipInfo(n, ZIP_TIME)
+            info.compress_type = zipfile.ZIP_STORED if n == "mimetype" else zipfile.ZIP_DEFLATED
+            z.writestr(info, b)
+        for n, b in sorted(extra.items()):
+            info = zipfile.ZipInfo(n, ZIP_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, b)
+
+
+W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+
+
+def docx_part(name, data, footer):
+    """The reference docx: A4 with narrow margins, a footer (the provenance and the page number), small table text."""
+    if name == "":
+        ftr = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:ftr %s %s><w:p><w:pPr><w:pStyle w:val="Footer"/></w:pPr>'
+               '<w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:t xml:space="preserve">%s · page </w:t></w:r>'
+               '<w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:sz w:val="14"/></w:rPr>'
+               '<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>'
+               '<w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:t>1</w:t></w:r><w:r><w:rPr><w:sz w:val="14"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+               '</w:p></w:ftr>\n' % (W, R, html.escape(footer)))
+        return {"word/footer1.xml": ftr.encode()}
+    text = data.decode("utf-8", "replace") if name.endswith((".xml", ".rels")) else None
+    if text is None:
+        return data
+    if name == "[Content_Types].xml":
+        text = text.replace("</Types>", '<Override PartName="/word/footer1.xml" '
+                            'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>')
+    elif name == "word/_rels/document.xml.rels":
+        text = text.replace("</Relationships>", '<Relationship Id="rIdKyrFooter" '
+                            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>')
+    elif name == "word/document.xml":
+        sect = ('<w:sectPr><w:footerReference w:type="default" r:id="rIdKyrFooter"/><w:pgSz w:w="11906" w:h="16838"/>'
+                '<w:pgMar w:top="1021" w:right="851" w:bottom="1134" w:left="851" w:header="567" w:footer="454" w:gutter="0"/></w:sectPr>')
+        text = re.sub(r"<w:sectPr\b.*?</w:sectPr>|<w:sectPr\b[^>]*/>", "", text, flags=re.S)
+        text = text.replace("</w:body>", sect + "</w:body>")
+        if "xmlns:r=" not in text.split(">", 2)[1]:
+            text = text.replace("<w:document ", "<w:document %s " % R, 1)
+    elif name == "word/styles.xml":
+        # table cells are Compact paragraphs: 8 pt (rPr after pPr, as the schema orders them)
+        text = re.sub(r'(<w:style [^>]*w:styleId="Compact"[^>]*>.*?</w:pPr>)', r'\1<w:rPr><w:sz w:val="16"/></w:rPr>', text, count=1, flags=re.S)
+        if 'w:styleId="Footer"' not in text:
+            text = text.replace("</w:styles>", '<w:style w:type="paragraph" w:styleId="Footer"><w:name w:val="footer"/>'
+                                '<w:basedOn w:val="Normal"/><w:rPr><w:sz w:val="14"/></w:rPr></w:style></w:styles>')
+    return text.encode()
+
+
+def odt_part(name, data, footer):
+    """The reference odt: A4 with narrow margins, the standard page's footer (the provenance and the page number), small table
+    text."""
+    if name == "":
+        return {}
+    if name != "styles.xml":
+        return data
+    text = data.decode()
+    foot = ('<style:footer><text:p text:style-name="Footer">%s · page <text:page-number text:select-page="current">1</text:page-number>'
+            '</text:p></style:footer>' % html.escape(footer))
+    text = re.sub(r"<style:footer>.*?</style:footer>", lambda m: foot, text, count=1, flags=re.S)
+    if foot not in text:
+        text = re.sub(r"(<style:master-page [^>]*?)/>", lambda m: m.group(1) + ">" + foot + "</style:master-page>", text, count=1)
+    for k, v in (("page-width", "21cm"), ("page-height", "29.7cm"), ("margin-top", "1.5cm"), ("margin-bottom", "1.2cm"),
+                 ("margin-left", "1.5cm"), ("margin-right", "1.5cm")):
+        text = re.sub(r'(<style:page-layout-properties\b[^>]*?\bfo:%s=")[^"]*"' % k, lambda m: m.group(1) + v + '"', text, count=1)
+    add = ""
+    if 'style:name="Footer"' not in text:
+        add += ('<style:style style:name="Footer" style:family="paragraph" style:class="extra">'
+                '<style:text-properties fo:font-size="7pt"/></style:style>')
+    if 'style:name="Table_20_Contents"' not in text:
+        add += ('<style:style style:name="Table_20_Contents" style:display-name="Table Contents" style:family="paragraph">'
+                '<style:text-properties fo:font-size="8pt"/></style:style>')
+    return text.replace("</office:styles>", add + "</office:styles>", 1).encode()
+
+
 def sums(out):
     files = sorted(os.path.relpath(os.path.join(d, f), out) for d, _, fs in os.walk(out) for f in fs)
     lines = ["%s  %s" % (sha256(os.path.join(out, f)), f) for f in files if f != "SHA256SUMS"]
@@ -462,10 +629,13 @@ def main():
     b = Builder(out)
     L = b.build()
     n = sums(out)
-    print("package.py: %s: %d files; references left bare: %d" % (os.path.relpath(out, ROOT), n, len(L.unresolved)))
+    print("package.py: %s: %d files; references left bare: %d; PDF content past the page edge: %d" % (
+        os.path.relpath(out, ROOT), n, len(L.unresolved), len(b.overflow)))
     for u in sorted(L.unresolved):
         print("  bare reference: " + u)
-    return 1 if L.unresolved else 0
+    for o in b.overflow:
+        print("  past the edge: " + o)
+    return 1 if (L.unresolved or b.overflow) else 0
 
 
 if __name__ == "__main__":
