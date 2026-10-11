@@ -2540,6 +2540,161 @@ def write_snapshots():
     return 0
 
 
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Baselines: the rms export and the evidence of the commit a baseline names, frozen once as data (ecss/baseline/<name>/)
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+BASELINES = os.path.join(ECSS, "baseline")
+# What a run of make.sh leaves that the documents read: the evidence of one commit, the pipeline's results for it.
+EVIDENCE = ["build/ecss/evidence/configuration.txt", "build/ecss/evidence/toolchain.txt", "build/ecss/evidence/pipeline.txt",
+            "build/ecss/evidence/deps.txt", "build/ecss/evidence/SHA256SUMS.first", "build/ecss/evidence/build_deb_again.txt",
+            "build/ecss/evidence/reproducible.txt", "build/ecss/evidence/hardening.txt", "build/ecss/evidence/stack",
+            "build/ecss/puml/sd_*.puml", "tests/results/logs/it", "tests/results/ITs/coverage", "tests/results/stress/stress_summary.tsv",
+            "build/release/libuuid7.so*", "build/release/libuuid7.a", "build/release/obj/app__uuid7.c.o", "build/pipeline/*.log",
+            "build/debs/*.buildinfo", "build/debs/SHA256SUMS"]
+
+
+def product_of(commit):
+    """The commit's top-level tree entries outside ecss/ (git ls-tree): the product a baseline froze. ecss/ holds the documents'
+    sources and the frozen baselines, which may follow the baseline's commit; everything else must be what was verified."""
+    return sorted(l for l in git("ls-tree", commit).splitlines() if l.split("\t", 1)[-1] != "ecss")
+
+
+def sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def evidence_tar(path, epoch):
+    """The EVIDENCE files as one gzip'd tar: sorted, owner 0, mode 0644/0755, mtime the baseline commit's, no gzip name or time."""
+    import gzip
+    import tarfile
+    members = []
+    for pat in EVIDENCE:
+        for p in sorted(glob.glob(os.path.join(ROOT, pat))):
+            if os.path.isdir(p) and not os.path.islink(p):
+                members += [os.path.join(d, f) for d, _, fs in os.walk(p) for f in fs]
+            else:
+                members.append(p)
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=9) as gz, \
+            tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tar:
+        for p in sorted(set(members), key=rel):
+            ti = tar.gettarinfo(p, rel(p))
+            ti.uid = ti.gid = 0
+            ti.uname = ti.gname = ""
+            ti.mtime = epoch
+            ti.mode = 0o777 if ti.issym() else (0o755 if ti.mode & 0o111 else 0o644)
+            if ti.isreg():
+                with open(p, "rb") as f:
+                    tar.addfile(ti, f)
+            else:
+                tar.addfile(ti)
+    return len(set(members))
+
+
+def manifest_of(d):
+    """MANIFEST of a frozen baseline: its fields, its sums {file: sha256} and the product lines."""
+    fields, sums, product = {}, {}, []
+    for line in read(os.path.join(d, "MANIFEST")).splitlines():
+        m = re.match(r"^([0-9a-f]{64})  (\S+)$", line)
+        if m:
+            sums[m.group(2)] = m.group(1)
+        elif line.startswith("product: "):
+            product.append(line[len("product: "):])
+        elif ": " in line and not line.startswith("#"):
+            k, v = line.split(": ", 1)
+            fields[k] = v
+    return fields, sums, sorted(product)
+
+
+def freeze(name):
+    """ecss/baseline/<name>/: the rms export now (package.json, verification.csv), the evidence of the commit the baseline names
+    (evidence.tar.gz, from this checkout's last ecss/make.sh run at that commit) and a MANIFEST of their sha256 with that commit and
+    its product. A baseline is frozen once; the release build reads it and refuses a release it does not match (release.sh)."""
+    def no(why):
+        print("ecss.py freeze: %s" % why, file=sys.stderr)
+        return 5
+    rms = load_rms()
+    if not rms:
+        return no("no rms export under %s" % rel(RMS_EXPORT))
+    b = next((b for b in rms["baselines"] if b["name"] == name), None)
+    if not b:
+        return no("the export holds no baseline %s (it holds %s)" % (name, ", ".join(x["name"] for x in rms["baselines"]) or "none"))
+    commit = b["commit"]
+    if not re.fullmatch(r"[0-9a-f]{40}", commit or ""):
+        return no("baseline %s names no full commit (%r)" % (name, commit))
+    if run(["git", "cat-file", "-e", commit + "^{commit}"])[0] != 0:
+        return no("baseline %s names %s, which this repository does not hold" % (name, commit))
+    ev, tc = read_kv(os.path.join(EVID, "configuration.txt")), read_kv(os.path.join(EVID, "toolchain.txt"))
+    if ev.get("commit") != commit or ev.get("state") != "clean":
+        return no("the evidence in build/ecss/evidence is of commit %s (%s), not of %s clean: run ecss/make.sh in a checkout of %s, "
+                  "then freeze from there" % (ev.get("commit", "none")[:12], ev.get("state", "?"), commit[:12], commit[:12]))
+    if not tc.get("environment", "").startswith("release root"):
+        return no("the evidence of %s is a host build, not the release root's" % commit[:12])
+    d = os.path.join(BASELINES, name)
+    if os.path.exists(d):
+        return no("%s exists: a baseline is frozen once" % rel(d))
+    os.makedirs(d)
+    files = ["package.json"] + (["verification.csv"] if os.path.exists(os.path.join(RMS_EXPORT, "verification.csv")) else [])
+    for f in files:
+        shutil.copyfile(os.path.join(RMS_EXPORT, f), os.path.join(d, f))
+    n = evidence_tar(os.path.join(d, "evidence.tar.gz"), int(git("log", "-1", "--format=%ct", commit) or 0))
+    files.append("evidence.tar.gz")
+    L = ["# ecss/baseline/%s/MANIFEST, written by ecss/tools/ecss.py freeze; ecss/release.sh refuses a release this does not match" % name,
+         "baseline: " + name, "commit: " + commit, "frozen-by: " + (b["by"] or "?"), "approved-by: " + (b["approved_by"] or "?"),
+         "exported-by: " + (rms["exported_by"] or "?"), "kyr-rms: " + (rms["producer"] or "?"),
+         "evidence: %d files of the run at %s, %s" % (n, ev.get("at", "?"), tc.get("environment", "?"))]
+    L += ["product: " + l for l in product_of(commit)]
+    L += ["%s  %s" % (sha256_file(os.path.join(d, f)), f) for f in files]
+    write(os.path.join(d, "MANIFEST"), "\n".join(L) + "\n")
+    print("ecss.py freeze: %s: %s, commit %s, %d evidence files" % (rel(d), ", ".join(files), commit[:12], n))
+    return 0
+
+
+def baseline_check(name, unpack=False):
+    """A release's baseline: ecss/baseline/<name>/ present, its files those the MANIFEST sums, its export's baseline <name> naming the
+    MANIFEST's commit, its evidence of that commit, and the product of HEAD (outside ecss/) the one that commit froze. With unpack, the
+    evidence goes where make.sh leaves it, for make.sh --docs-only. Exit 5 and why when the release must be refused."""
+    import tarfile
+    d = os.path.join(BASELINES, name)
+
+    def no(why):
+        print("ecss.py baseline: refused: %s" % why, file=sys.stderr)
+        return 5
+    if not os.path.isfile(os.path.join(d, "MANIFEST")):
+        return no("%s/MANIFEST is missing: freeze the baseline (ecss.py freeze %s) and commit it before the release" % (rel(d), name))
+    fields, sums, product = manifest_of(d)
+    if fields.get("baseline") != name:
+        return no("%s/MANIFEST names baseline %s" % (rel(d), fields.get("baseline")))
+    for f in ("package.json", "evidence.tar.gz"):
+        if f not in sums:
+            return no("%s/MANIFEST sums no %s" % (rel(d), f))
+    for f, s in sums.items():
+        if not os.path.isfile(os.path.join(d, f)) or sha256_file(os.path.join(d, f)) != s:
+            return no("%s/%s is not the file the MANIFEST sums" % (rel(d), f))
+    commit = fields.get("commit", "")
+    pkg = json.loads(read(os.path.join(d, "package.json")))
+    b = next((x for x in pkg.get("baselines", []) if x.get("name") == name), {})
+    named = b.get("commit", "") or ((HEX_RE.search(b.get("description", "")) or [""])[0])
+    if not b or named != commit:
+        return no("the frozen export's baseline %s names commit %s, the MANIFEST %s" % (name, named or "none", commit))
+    with tarfile.open(os.path.join(d, "evidence.tar.gz")) as tar:
+        conf = tar.extractfile("build/ecss/evidence/configuration.txt").read().decode()
+        ev = re.search(r"^commit: (\S+)$", conf, re.M)
+        if not ev or ev.group(1) != commit:
+            return no("the frozen evidence is of commit %s, the baseline names %s" % (ev.group(1) if ev else "none", commit))
+        head = product_of("HEAD")
+        if head != product:
+            names = sorted({l.split("\t", 1)[-1] for l in set(head) ^ set(product)})
+            return no("baseline %s names commit %s, whose product differs from this commit's in %s: the release would not be what "
+                      "was verified" % (name, commit[:12], ", ".join(names)))
+        if unpack:
+            tar.extractall(ROOT, filter="data")
+    print("ecss.py baseline: %s: commit %s, product identical to HEAD's outside ecss/, files as the MANIFEST sums%s"
+          % (name, commit[:12], "; evidence unpacked" if unpack else ""))
+    return 0
+
+
 def summary(M):
     js = {"version": M.version, "commit": M.commit, "mode": M.mode, "requirements": len(M.reqs),
           "srs": len([r for r in M.reqs if r.notes.get("doc") == "SRS"]), "icd": len([r for r in M.reqs if r.notes.get("doc") == "ICD"]),
@@ -2563,6 +2718,8 @@ def main():
         return 0
     if cmd == "snapshot":
         return write_snapshots()
+    if cmd in ("freeze", "baseline") and len(sys.argv) > 2:
+        return freeze(sys.argv[2]) if cmd == "freeze" else baseline_check(sys.argv[2], "--unpack" in sys.argv[3:])
     if cmd == "components-dox":
         rms = load_rms()
         comps = [a for a in rms["arts"] if a.kind == "component"] if rms else load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv")

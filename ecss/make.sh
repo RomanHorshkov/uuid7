@@ -115,6 +115,10 @@ cp -r "${EV}/." "${OUT}/html/evidence/" 2> /dev/null
 cp "${OUT}"/puml/*.puml "${OUT}/html/diagrams/" 2> /dev/null
 cp "${OUT}"/svg/*.svg "${OUT}/html/diagrams/" 2> /dev/null
 
+# the frozen baselines' tooling: freeze and every refusal of a release, in a scratch clone of HEAD
+say "baselines: ecss/tools/test_baseline.py"
+if python3 ecss/tools/test_baseline.py > "${OUT}/test_baseline.txt" 2>&1; then tail -n 1 "${OUT}/test_baseline.txt"; else cat "${OUT}/test_baseline.txt"; rc=1; fi
+
 # the links gate: every reference the reader meets in the site is a link (links_gate.py says what counts); RED lists each bare one
 say "links: ecss/tools/links_gate.py"
 if python3 ecss/tools/links_gate.py "${OUT}/html" "${OUT}/links.json" "${OUT}/doxygen_warnings.txt" > "${OUT}/links.txt"; then

@@ -1,0 +1,24 @@
+# ecss/baseline/QR-2/MANIFEST, written by ecss/tools/ecss.py freeze; ecss/release.sh refuses a release this does not match
+baseline: QR-2
+commit: af55b12a4da526550621445f188d319ed00c9157
+frozen-by: Sarah Collins
+approved-by: Oliver Hughes
+exported-by: Sarah Collins
+kyr-rms: 0.40.0
+evidence: 78 files of the run at 2026-10-10 18:03:53, release root 93d04deda79f9beedf5267b5e9690d17b21586ee126275c7218ea9deefb9efbc
+product: 040000 tree 2a53d38836773688db04a25b409f3c00f6cb9ba9	utils
+product: 040000 tree 3255d695a4b9754cd836d774c5e87b0d61db5355	debian
+product: 040000 tree 92adf5e1638760cdbdca30c5ac9442ffbf5f59f7	.github
+product: 040000 tree c64d293d394d4700093699870e3cbc610c08fa60	docs
+product: 040000 tree cb238ba35a55f45bdc55a6c683c4e1db57235b9e	app
+product: 040000 tree ee74cc7055cf6a424b8c347c27367b23296a0a68	abi
+product: 040000 tree f448c3ea2d687b00d5265b433cd1343138890f90	tests
+product: 100644 blob 326d40213ce2e135d0b038aa5b23f05076a9d8be	.gitignore
+product: 100644 blob 4063ad25d66ee4fbf4db2a0fefb035491fd56d08	.clang-format
+product: 100644 blob 45769d2d457a6d02d693e78391c7f2b46dc086b8	deps.txt
+product: 100644 blob 65087b4f5ecea6cde723520ad02722f600ab7f49	VERSION
+product: 100644 blob de2a6349e0ade68f40c392bce8cd28ba375c63e0	README.md
+product: 100644 blob e9e1f0286a8afd3c9969356908eb44b5ed7f71b3	LICENSE
+3f0eb06f87f71949df7a1782e65f563b181b54941d15d17c327ec277772db26d  package.json
+7be0aaa11598e190b1d18f55219991cb480fa4b90e4fcda1866da66c906489bb  verification.csv
+4e70d9439a8e5d439713cdf17850c63b4f10967c502d30f15ffd109123ecc9af  evidence.tar.gz
