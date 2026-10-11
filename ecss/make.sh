@@ -140,6 +140,10 @@ python3 ecss/tools/site_links.py "${OUT}/html" "${OUT}/uuid7.tag" "${OUT}/links.
 say "baselines: ecss/tools/test_baseline.py"
 if python3 ecss/tools/test_baseline.py > "${OUT}/test_baseline.txt" 2>&1; then tail -n 1 "${OUT}/test_baseline.txt"; else cat "${OUT}/test_baseline.txt"; rc=1; fi
 
+# the evidence into the rms: load.sh against a copy of the scripted story's local database records every result against the full commit
+say "rms: ecss/tools/test_rms_load.sh"
+if bash ecss/tools/test_rms_load.sh > "${OUT}/test_rms_load.txt" 2>&1; then tail -n 1 "${OUT}/test_rms_load.txt"; else cat "${OUT}/test_rms_load.txt"; rc=1; fi
+
 # the links gate: every reference the reader meets in the site is a link (links_gate.py says what counts); RED lists each bare one
 say "links: ecss/tools/links_gate.py"
 if python3 ecss/tools/links_gate.py "${OUT}/html" "${OUT}/links.json" "${OUT}/doxygen_warnings.txt" > "${OUT}/links.txt"; then
