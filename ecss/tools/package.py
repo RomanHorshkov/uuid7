@@ -605,14 +605,24 @@ def odt_part(name, data, footer):
     for k, v in (("page-width", "21cm"), ("page-height", "29.7cm"), ("margin-top", "1.5cm"), ("margin-bottom", "1.2cm"),
                  ("margin-left", "1.5cm"), ("margin-right", "1.5cm")):
         text = re.sub(r'(<style:page-layout-properties\b[^>]*?\bfo:%s=")[^"]*"' % k, lambda m: m.group(1) + v + '"', text, count=1)
-    add = ""
-    if 'style:name="Footer"' not in text:
-        add += ('<style:style style:name="Footer" style:family="paragraph" style:class="extra">'
-                '<style:text-properties fo:font-size="7pt"/></style:style>')
-    if 'style:name="Table_20_Contents"' not in text:
-        add += ('<style:style style:name="Table_20_Contents" style:display-name="Table Contents" style:family="paragraph">'
-                '<style:text-properties fo:font-size="8pt"/></style:style>')
-    return text.replace("</office:styles>", add + "</office:styles>", 1).encode()
+    # code takes its paragraph's size, in a table cell as in the text (the reference fixes it at 10 pt)
+    text = re.sub(r'(<style:style\s[^>]*style:name="Source_Text"[^>]*>.*?</style:style>)',
+                  lambda m: re.sub(r'\s(?:fo:font-size|style:font-size-asian|style:font-size-complex)="[^"]*"', "", m.group(1)),
+                  text, count=1, flags=re.S)
+    # the footer at 7 pt, table cells at 8 pt: the reference's own styles when it has them, else new ones
+    for style, size in (("Footer", "7pt"), ("Table_20_Contents", "8pt")):
+        props = '<style:text-properties fo:font-size="%s"/>' % size
+        m = re.search(r'<style:style\s[^>]*style:name="%s"[^>]*?(/?)>' % style, text)
+        if not m:
+            text = text.replace("</office:styles>", '<style:style style:name="%s" style:family="paragraph">%s</style:style></office:styles>'
+                                % (style, props), 1)
+        elif m.group(1):
+            text = text[:m.start()] + m.group(0)[:-2] + ">" + props + "</style:style>" + text[m.end():]
+        else:
+            end = text.index("</style:style>", m.end())
+            body = re.sub(r"<style:text-properties\b[^>]*/>", "", text[m.end():end])
+            text = text[:m.end()] + body + props + text[end:]
+    return text.encode()
 
 
 def sums(out):
