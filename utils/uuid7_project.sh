@@ -51,6 +51,3 @@ KYR_ABI_FUNC_PREFIX="uuid7_"
 KYR_ABI_CONST_PREFIX="UUID7_"
 KYR_ABI_NODE="UUID7"
 
-# The legacy-names gate until kyr-build 3.0.0 is pinned and runs it as its own stage: its check and patterns, copied, and the test.
-KYR_REPO_GATES+=(check_legacy_names.sh legacy_names.pat)
-KYR_PIPELINE_EXTRA+=("checks|legacy-names|./utils/check_legacy_names.sh" "checks|legacy-names-test|bash tests/legacy_names_test.sh")
