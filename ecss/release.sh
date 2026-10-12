@@ -41,7 +41,7 @@ git -C "${S}" for-each-ref --format='%(refname:short)' refs/heads | xargs -r git
 
 say "kyr-build: the commit's pin (utils/deps.sh sysroot from a private copy of the cached deb)"
 read -r kver < <(awk '$1=="own" && $2=="kyr-build" {print $3}' "${S}/deps.txt") || die "deps.txt pins no kyr-build"
-cache="${KYR_DEPS_CACHE:-${RH_DEPS_CACHE:-${HOME}/.cache/rh-deps}}"
+cache="${KYR_DEPS_CACHE:-${HOME}/.cache/rh-deps}"
 cp "${cache}/debs/kyr-build_${kver}_all.deb" "${W}/cache/debs/" 2> /dev/null || die "kyr-build ${kver} is not in ${cache}/debs (utils/deps.sh fetch)"
 ( cd "${S}" && KYR_DEPS_CACHE="${W}/cache" ./utils/deps.sh sysroot > "${W}/deps.txt" 2>&1 ) || { tail -n 5 "${W}/deps.txt"; die "deps.sh sysroot failed"; }
 export KYR_DEPS_CACHE="${W}/cache"   # build_root.sh enter binds the deb cache: this copy, never the shared one
