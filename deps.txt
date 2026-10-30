@@ -6,4 +6,4 @@ apt     build-essential
 apt     pkg-config
 apt     libcmocka-dev             >=1.1.7
 apt     gcovr
-own     kyr-build                 2.1.0      RomanHorshkov/kyr_build 420cc1f7ddcb5590b4576cb8730df705b5ae101086a37c00c316e0ff3761f924
+own     kyr-build                 3.1.1      RomanHorshkov/kyr_build 91121e30506799e254aaadbe49bc6d4c57bbf08b551ed6694cfd29f8a364fc6e
