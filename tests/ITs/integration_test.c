@@ -939,6 +939,36 @@ static void test_raise_floor_refuses_far_future(void** state)
     assert_int_equal(extract_seq(uuid), 0u);
 }
 
+/*
+ * test_gen_refuses_past_48_bit_timestamp()
+ * ----------------------------------------
+ * The encoded timestamp is 48 bits wide: a wall clock at 2^48 ms, or a sequence exhausted in the last representable millisecond, is
+ * refused with -3 instead of wrapping to an id that sorts before every earlier one, and the state stays where it was.
+ */
+static void test_gen_refuses_past_48_bit_timestamp(void** state)
+{
+    (void)state;
+    reset_state();
+    assert_int_equal(uuid7_set_rng_func(zero_rng), 0);
+    uuid7_test_set_time_fn(fake_time_now);
+
+    const uint64_t last_ms = UINT64_C(0xFFFFFFFFFFFF);
+    set_fake_time(last_ms + 1u);
+    uint8_t uuid[UUID7_SIZE_BYTES] = {0};
+    assert_int_equal(uuid7_gen(uuid), -3);
+
+    set_fake_time(last_ms);
+    uint8_t floor_uuid[UUID7_SIZE_BYTES];
+    build_valid_uuid7(floor_uuid, last_ms, 0x0FFEu);
+    assert_int_equal(uuid7_raise_floor(floor_uuid), 0);
+    assert_int_equal(uuid7_gen(uuid), 0);
+    assert_int_equal(extract_ms(uuid), last_ms);
+    assert_int_equal(extract_seq(uuid), 0x0FFFu);
+
+    assert_int_equal(uuid7_gen(uuid), -3);
+    assert_int_equal(uuid7_gen(uuid), -3);
+}
+
 static void test_clock_failure_count_healthy_is_zero(void** state)
 {
     (void)state;
@@ -954,6 +984,7 @@ int main(void)
         cmocka_unit_test(test_raise_floor_orders_after_import),
         cmocka_unit_test(test_gen_refuses_beyond_ahead_bound),
         cmocka_unit_test(test_raise_floor_refuses_far_future),
+        cmocka_unit_test(test_gen_refuses_past_48_bit_timestamp),
         cmocka_unit_test(test_clock_failure_count_healthy_is_zero),
         cmocka_unit_test(test_default_rng_used_when_uninitialized),
         cmocka_unit_test(test_version_variant_and_tail_bytes),
