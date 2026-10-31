@@ -93,13 +93,13 @@ Each GitHub Release publishes:
 Testing (heavy + coverage)
 
 ```sh
-./utils/build_ITs.sh                   # the integration suite against every profile's archive and shared object, test hooks
+./utils/build_ITs.sh                   # the integration suites against every profile's archive and shared object, test hooks
                                        # (-DUUID7_TESTING) in its libraries only, then coverage: tests/results/ITs/coverage
 ./utils/build_stress.sh && ./utils/run_stress.sh   # every profile x static/shared: tests/results/stress/stress_summary.tsv
 ./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The coverage badge is the integration coverage number, written by kyr-build's `coverage_badge.py`.
+The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The integration suites are `tests/ITs/integration_test.c` (layout, order, import, bounds, threads) and `tests/ITs/faults_test.c` (getrandom interrupted, short, empty or failing, the `/dev/urandom` fallback failing, clock_gettime failing: the test defines those calls itself, forwarding to libc unless a test scripts a failure). The coverage badge is the integration coverage number, written by kyr-build's `coverage_badge.py`.
 
 Usage
 
