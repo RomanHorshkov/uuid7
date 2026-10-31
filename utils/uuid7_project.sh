@@ -27,6 +27,8 @@ KYR_IT_COVERAGE=1
 # race reaches (uuid7_gen's CAS retry, taken when the threaded test's producers collide), rounded down.
 KYR_IT_FAIL_UNDER_LINE=98
 KYR_IT_FAIL_UNDER_BRANCH=93
+# The coverage badge (.github/badges/coverage.svg, the README's Coverage line, and its endpoint JSON) from the gated run's summary.
+KYR_PIPELINE_EXTRA=("post|coverage-badge|[[ ! -f tests/results/ITs/coverage/coverage-summary.json ]] || python3 build/sysroot/share/kyr-build/coverage_badge.py tests/results/ITs/coverage/coverage-summary.json .github/badges/coverage.json .github/badges/coverage.svg")
 # Stress: the single-threaded and the multithreaded benchmark, every profile, static and shared.
 KYR_STRESS_SUITES=(stress)
 KYR_SUITE_STRESS_SOURCES=(tests/stress/stress.c tests/stress/stress_mt.c)

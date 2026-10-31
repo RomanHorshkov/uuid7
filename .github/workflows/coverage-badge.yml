@@ -45,23 +45,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SIBLING_REPOS_PAT || secrets.GITHUB_TOKEN }}
         run: ./utils/deps.sh apt-list > /dev/null
-      - name: Compute badge color + write endpoint JSON
+      - name: Compute badge color + write SVG and endpoint JSON
         run: |
           SUMMARY="$(find integration-results -name 'coverage-summary.json' -path '*ITs/coverage*' | head -1)"
           if [[ -z "${SUMMARY}" ]]; then
             echo "no coverage-summary.json in the it-coverage artifact" >&2
             exit 1
           fi
-          python3 build/sysroot/share/kyr-build/coverage_badge.py "${SUMMARY}" .github/badges/coverage.json
+          python3 build/sysroot/share/kyr-build/coverage_badge.py "${SUMMARY}" .github/badges/coverage.json .github/badges/coverage.svg
       - name: Commit badge if it changed
         run: |
-          if git diff --quiet -- .github/badges/coverage.json; then
+          if git diff --quiet -- .github/badges/; then
             echo "coverage unchanged, nothing to commit"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/badges/coverage.json
+          git add .github/badges/coverage.json .github/badges/coverage.svg
           # [skip ci]: this commit must not itself trigger another Quality run.
           git commit -m "ci: update coverage badge [skip ci]"
           git push origin "HEAD:${{ github.event.workflow_run.head_branch }}"

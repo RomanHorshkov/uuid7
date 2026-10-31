@@ -3,9 +3,10 @@ UUID7 — Compact C implementation of UUIDv7 ===================================
 [![Quality](https://github.com/RomanHorshkov/UUID7/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/quality.yml)
 [![Security](https://github.com/RomanHorshkov/UUID7/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/security.yml)
 [![Release](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/RomanHorshkov/UUID7/master/.github/badges/coverage.json)](https://github.com/RomanHorshkov/UUID7/actions/workflows/quality.yml)
+![Coverage](.github/badges/coverage.svg)
 [![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/UUID7?sort=semver)](https://github.com/RomanHorshkov/UUID7/tags)
 [![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](#stress-benchmarks)
+[![License](https://img.shields.io/github/license/RomanHorshkov/UUID7)](LICENSE)
 
 Overview
 
@@ -99,7 +100,7 @@ Testing (heavy + coverage)
 ./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The integration suites are `tests/ITs/integration_test.c` (layout, order, import, bounds, threads) and `tests/ITs/faults_test.c` (getrandom interrupted, short, empty or failing, the `/dev/urandom` fallback failing, clock_gettime failing: the test defines those calls itself, forwarding to libc unless a test scripts a failure). The coverage badge is the integration coverage number, written by kyr-build's `coverage_badge.py`.
+The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The integration suites are `tests/ITs/integration_test.c` (layout, order, import, bounds, threads) and `tests/ITs/faults_test.c` (getrandom interrupted, short, empty or failing, the `/dev/urandom` fallback failing, clock_gettime failing: the test defines those calls itself, forwarding to libc unless a test scripts a failure). The coverage badge is the integration coverage number, written by the pipeline's `coverage-badge` stage with kyr-build's `coverage_badge.py`.
 
 Usage
 
