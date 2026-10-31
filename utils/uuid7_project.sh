@@ -23,9 +23,10 @@ KYR_SUITE_FAULTS_LDLIBS=(-lcmocka)
 KYR_IT_PROFILES=("${GCC_BUILD_PROFILES[@]}")
 KYR_IT_LINKAGES=(static shared)
 KYR_IT_COVERAGE=1
-# The coverage run's floor (the plan's B7): 82.2 % lines, 69.7 % branches measured on 2026-10-30, rounded down.
-KYR_IT_FAIL_UNDER_LINE=82
-KYR_IT_FAIL_UNDER_BRANCH=69
+# The coverage run's floor (the plan's B7): 99.3 % lines, 94.7 % branches measured on 2026-10-31, less the one line and branch only a
+# race reaches (uuid7_gen's CAS retry, taken when the threaded test's producers collide), rounded down.
+KYR_IT_FAIL_UNDER_LINE=98
+KYR_IT_FAIL_UNDER_BRANCH=93
 # Stress: the single-threaded and the multithreaded benchmark, every profile, static and shared.
 KYR_STRESS_SUITES=(stress)
 KYR_SUITE_STRESS_SOURCES=(tests/stress/stress.c tests/stress/stress_mt.c)
