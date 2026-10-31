@@ -12,17 +12,23 @@ KYR_LIB_LDLIBS=()
 KYR_TEST_HOOKS_CPPFLAGS=(-DUUID7_TESTING)
 KYR_TEST_HOOKS_RUNS=(it)
 
-# The integration suite against every profile's archive and shared object, then the coverage run.
-KYR_IT_SUITES=(it)
+# The integration suites against every profile's archive and shared object, then the coverage run. faults defines getrandom, open,
+# read and clock_gettime itself (forwarding to libc unless a test scripts a failure): the library's calls resolve to them in every cell.
+KYR_IT_SUITES=(it faults)
 KYR_SUITE_IT_SOURCES=(tests/ITs/integration_test.c)
 KYR_SUITE_IT_CPPFLAGS=(-pthread)
 KYR_SUITE_IT_LDLIBS=(-lcmocka -pthread)
+KYR_SUITE_FAULTS_SOURCES=(tests/ITs/faults_test.c)
+KYR_SUITE_FAULTS_LDLIBS=(-lcmocka)
 KYR_IT_PROFILES=("${GCC_BUILD_PROFILES[@]}")
 KYR_IT_LINKAGES=(static shared)
 KYR_IT_COVERAGE=1
-# The coverage run's floor (the plan's B7): 82.2 % lines, 69.7 % branches measured on 2026-10-30, rounded down.
-KYR_IT_FAIL_UNDER_LINE=82
-KYR_IT_FAIL_UNDER_BRANCH=69
+# The coverage run's floor (the plan's B7): 99.3 % lines, 94.7 % branches measured on 2026-10-31, less the one line and branch only a
+# race reaches (uuid7_gen's CAS retry, taken when the threaded test's producers collide), rounded down.
+KYR_IT_FAIL_UNDER_LINE=98
+KYR_IT_FAIL_UNDER_BRANCH=93
+# The coverage badge (.github/badges/coverage.svg, the README's Coverage line, and its endpoint JSON) from the gated run's summary.
+KYR_PIPELINE_EXTRA=("post|coverage-badge|[[ ! -f tests/results/ITs/coverage/coverage-summary.json ]] || python3 build/sysroot/share/kyr-build/coverage_badge.py tests/results/ITs/coverage/coverage-summary.json .github/badges/coverage.json .github/badges/coverage.svg")
 # Stress: the single-threaded and the multithreaded benchmark, every profile, static and shared.
 KYR_STRESS_SUITES=(stress)
 KYR_SUITE_STRESS_SOURCES=(tests/stress/stress.c tests/stress/stress_mt.c)
