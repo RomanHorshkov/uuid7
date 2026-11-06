@@ -5,7 +5,7 @@ UUID7 — Compact C implementation of UUIDv7 ===================================
 [![Release](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/UUID7/actions/workflows/release.yml)
 ![Coverage](.github/badges/coverage.svg)
 [![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/UUID7?sort=semver)](https://github.com/RomanHorshkov/UUID7/tags)
-[![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](#stress-benchmarks)
+[![Stress Suite](https://img.shields.io/badge/stress-single--thread%20%2B%20multi--thread-0a7a3e)](tests/stress/)
 [![License](https://img.shields.io/github/license/RomanHorshkov/UUID7)](LICENSE)
 
 Overview
@@ -43,7 +43,7 @@ ECSS package (category D; documented and self-verified, not independently review
 
 ## Release process
 
-Releases are tag-driven.
+Releases are tag-driven. Today the release line is `together` (master waits for the owner): a release is built twice to one hash in kyr-build's noble build root, tagged `v<VERSION>`, and pinned by sha256 in its consumers' `deps.txt`; no GitHub release is published for the current version (1.1.4). The flow below is the CI path that publishes one.
 
 ### Release flow
 
@@ -104,7 +104,7 @@ Testing (heavy + coverage)
 ./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The integration suites are `tests/ITs/integration_test.c` (layout, order, import, bounds, threads) and `tests/ITs/faults_test.c` (getrandom interrupted, short, empty or failing, the `/dev/urandom` fallback failing, clock_gettime failing: the test defines those calls itself, forwarding to libc unless a test scripts a failure). The coverage badge is the integration coverage number, written by the pipeline's `coverage-badge` stage with kyr-build's `coverage_badge.py`.
+The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The integration suites are `tests/ITs/integration_test.c` (layout, order, import, bounds, threads), `tests/ITs/faults_test.c` (getrandom interrupted, short, empty or failing, the `/dev/urandom` fallback unopenable, failing, interrupted or ending early, clock_gettime failing: the test defines those calls itself, forwarding to libc unless a test scripts a failure) and `tests/plantuml/scenarios.c` (scenario tests that assert and write one sequence diagram each). The coverage badge is the integration coverage number (held to 98 % of lines and 93 % of branches), written by the pipeline's `coverage-badge` stage with kyr-build's `coverage_badge.py`.
 
 Usage
 
@@ -144,7 +144,7 @@ gcc myprog.o -Lbuild/release -Wl,-rpath,'$ORIGIN' -luuid7 -o myprog
 License
 
 MIT — see [LICENSE](LICENSE). Every built .deb ships the same terms at
-/usr/share/doc/uuid7/copyright (generated from debian/copyright).
+/usr/share/doc/<package>/copyright (libuuid7, libuuid7-dev; from debian/copyright).
 
 ## Build profiles & hardening
 
@@ -152,12 +152,12 @@ Builds go through `utils/build_libs.sh [profile ...]`, driven by the profile cat
 
 | Profile | Optimization | Warnings | Instrumentation | Hardened | Use it for |
 |---|---|---|---|---|---|
-| debug | `-Og -g3` | core | — | no | day-to-day development |
-| audit | `-O1 -g3` | everything + `-fanalyzer` | — | yes | compiler-driven validation |
-| sanitize | `-O1 -g3` | strict | ASan+UBSan+LSan | yes minus FORTIFY — conflicts with ASan | runtime bug hunting |
-| release | `-O2 -DNDEBUG` | strict | — | yes — full set below | production / the deb payload |
-| native | `-O3 -flto -march=native` | strict | — | yes | benchmarks on the deploy box |
-| extreme | `-O3 -flto -march=native` | core | — | deliberately none | max-perf experiments only |
+| debug | `-Og -g3` | the whole set, `-Werror` | — | no | day-to-day development |
+| audit | `-O1 -g3` | the whole set, `-Werror`, + `-fanalyzer` | — | yes | compiler-driven validation |
+| sanitize | `-O1 -g3` | the whole set, `-Werror` | ASan+UBSan+LSan | yes minus FORTIFY — conflicts with ASan | runtime bug hunting |
+| release | `-O2 -DNDEBUG` | the whole set, `-Werror` | — | yes — full set below | production / the deb payload |
+| native | `-O3 -flto=auto -march=native` | the whole set, `-Werror` | — | yes | benchmarks on the deploy box |
+| extreme | `-O3 -flto=auto -march=native` | the whole set, `-Werror` | — | deliberately none | max-perf experiments only |
 
 Release hardening by stage:
 
@@ -176,4 +176,4 @@ Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh en
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/uuid7.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libuuid7.so` exports exactly the declared functions as `<name>@@UUID7_<major>` (`utils/uuid7.map`); `utils/uuid7_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
 
-Legacy names: `utils/check_legacy_names.sh` (kyr-build 3.0.0's check and patterns, copied until it is pinned) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
+Legacy names: the pipeline's legacy-names stage (the pinned kyr-build 3.1.1's `check_legacy_names.sh` and patterns) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
