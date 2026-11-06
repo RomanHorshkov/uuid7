@@ -14,12 +14,16 @@ KYR_TEST_HOOKS_RUNS=(it)
 
 # The integration suites against every profile's archive and shared object, then the coverage run. faults defines getrandom, open,
 # read and clock_gettime itself (forwarding to libc unless a test scripts a failure): the library's calls resolve to them in every cell.
-KYR_IT_SUITES=(it faults)
+# plantuml is the scenario suite (tests/plantuml: asserts, and writes one sequence diagram per scenario to build/ecss/puml).
+KYR_IT_SUITES=(it faults plantuml)
 KYR_SUITE_IT_SOURCES=(tests/ITs/integration_test.c)
 KYR_SUITE_IT_CPPFLAGS=(-pthread)
 KYR_SUITE_IT_LDLIBS=(-lcmocka -pthread)
 KYR_SUITE_FAULTS_SOURCES=(tests/ITs/faults_test.c)
 KYR_SUITE_FAULTS_LDLIBS=(-lcmocka)
+KYR_SUITE_PLANTUML_SOURCES=(tests/plantuml/scenarios.c)
+KYR_SUITE_PLANTUML_CPPFLAGS=(-pthread -I"${ROOT_DIR}/tests/plantuml")
+KYR_SUITE_PLANTUML_LDLIBS=(-lcmocka -pthread)
 KYR_IT_PROFILES=("${GCC_BUILD_PROFILES[@]}")
 KYR_IT_LINKAGES=(static shared)
 KYR_IT_COVERAGE=1
@@ -55,3 +59,4 @@ KYR_ABI_TYPE_PREFIX="uuid7_"
 KYR_ABI_FUNC_PREFIX="uuid7_"
 KYR_ABI_CONST_PREFIX="UUID7_"
 KYR_ABI_NODE="UUID7"
+

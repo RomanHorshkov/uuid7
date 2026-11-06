@@ -5,6 +5,12 @@
  * Shared declarations for the deterministic-clock and RNG-fault-injection hooks
  * so the implementation and the test binaries agree on the prototypes — without
  * these, the definitions in uuid7.c draw -Wmissing-prototypes.
+ *
+ * @author  Roman Horshkov <https://github.com/RomanHorshkov>
+ * @date    july 2026
+ *
+ * @ingroup uuid7_cmp_hooks
+ * @satisfies UUID7-SRS-064
  */
 #ifndef UUID7_TEST_H
 #define UUID7_TEST_H
@@ -18,16 +24,21 @@ extern "C"
 {
 #    endif
 
-/** @brief Deterministic clock hook: the ms timestamp uuid7_gen() should use. */
+/** @brief Deterministic clock hook: the ms timestamp uuid7_gen() should use. @ingroup uuid7_cmp_hooks */
 typedef uint64_t (*uuid7_time_fn_t)(void);
 
-/** @brief Install (or clear, with NULL) the test clock. @return 0. */
+/** @brief Install (or clear, with NULL) the test clock. @param fn the clock, or NULL. @return 0. @ingroup uuid7_cmp_hooks */
 int uuid7_test_set_time_fn(uuid7_time_fn_t fn);
 
-/** @brief Force the built-in default RNG to fail (enable != 0) or succeed. @return 0. */
+/**
+ * @brief Force the built-in default RNG to fail (enable != 0) or succeed.
+ * @param enable non-zero to fail.
+ * @return 0.
+ * @ingroup uuid7_cmp_hooks
+ */
 int uuid7_test_set_default_rng_fail(int enable);
 
-/** @brief Reset generator state + all test hooks to first-run defaults. */
+/** @brief Reset generator state + all test hooks to first-run defaults (a simulated process restart). @ingroup uuid7_cmp_hooks */
 void uuid7_test_reset_state(void);
 
 #    ifdef __cplusplus

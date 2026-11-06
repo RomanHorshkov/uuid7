@@ -1,0 +1,6 @@
+human_id,kind,title,body,rationale,criteria,method,status,owner,source_ref,applicability,notes
+UUID7-REV-SRR,review,System requirements review,"Agreement on the requirements the library answers (here: its source references, RB tailored out) and on the plans.",,Review success criteria of the SRevP <7>.,review,proposed,Roman Horshkov,ecss/MGT/SRevP.md,D,review=SRR
+UUID7-REV-PDR,review,Preliminary design review,"Release of the technical specification, the architecture and the plans.",,Review success criteria of the SRevP <7>.,review,proposed,Roman Horshkov,ecss/MGT/SRevP.md,D,review=PDR
+UUID7-REV-CDR,review,Critical design review,"Baseline of the detailed design, the code, the unit tests and the validation specification.",,Review success criteria of the SRevP <7>.,review,proposed,Roman Horshkov,ecss/MGT/SRevP.md,D,review=CDR
+UUID7-REV-QR,review,Qualification review,"The library meets its technical specification: validation and verification complete, release document issued.",,Review success criteria of the SRevP <7>.,review,proposed,Roman Horshkov,ecss/MGT/SRevP.md,D,review=QR
+UUID7-REV-AR,review,Acceptance review,Acceptance of the delivered packages by the consuming repositories.,,Review success criteria of the SRevP <7>.,review,proposed,Roman Horshkov,ecss/MGT/SRevP.md,D,review=AR

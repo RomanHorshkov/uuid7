@@ -1,0 +1,2811 @@
+#!/usr/bin/env python3
+"""ecss.py — builds the ECSS qualification package of uuid7 under build/ecss from the rms export (ecss/rms_export/) or, without
+one, from the repository's CSVs, plus the repository's own facts: the tags in the sources, the test logs, the coverage, the
+pipeline summary, the ELF files and deps.txt.
+
+  ecss.py generate     the model, the diagrams' PlantUML, the Markdown documents (build/ecss/md), the rms loader (build/ecss/rms)
+  ecss.py api-doxyfile the doxygen configuration of the header pre-pass (stdout)
+  ecss.py snapshot     ecss/TS/requirements.csv and ecss/DDF/decisions.csv rewritten from the rms export (snapshots, not sources)
+
+Only the standard library; run from anywhere, paths resolve from the repository root.
+"""
+import collections
+import csv
+import datetime
+import glob
+import hashlib
+import html
+import io
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True   # no __pycache__ in the repository
+import refs  # noqa: E402  (ecss/tools/refs.py: sections, figures, tables, links)
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+ECSS = os.path.join(ROOT, "ecss")
+OUT = os.path.join(ROOT, "build", "ecss")
+MD = os.path.join(OUT, "md")
+PUML = os.path.join(OUT, "puml")
+SVG = os.path.join(OUT, "svg")
+EVID = os.path.join(OUT, "evidence")
+RMS_EXPORT = os.environ.get("ECSS_RMS_EXPORT") or os.path.join(ECSS, "rms_export")   # another export directory: ECSS_RMS_EXPORT
+PROJECT_KEY = "UUID7"
+
+# The rms vocabulary, in the order of kyr_rms's enums (app/include/kyr/rms/domain/model/types.h): the package export carries
+# the numbers.
+KINDS = ["requirement", "document", "component", "verification-case", "verification-run", "change-request", "decision", "interface",
+         "evidence", "hazard", "failure-mode", "mitigation", "fault-tree-event", "fdir-rule", "review", "review-comment", "document-node",
+         "assumption", "rationale", "source-reference", "test-procedure", "test-step", "configuration-item", "user", "role"]
+STATUSES = ["draft", "candidate", "proposed", "in-review", "needs-rework", "approved", "baselined", "implemented", "verified",
+            "validated", "rejected", "obsolete", "superseded", "withdrawn", "closed"]
+METHODS = ["none", "test", "analysis", "inspection", "review", "demonstration", "simulation"]
+CRITICALITIES = ["none", "low", "medium", "high", "safety"]
+LINKS = ["derives-from", "refines", "allocates-to", "satisfies", "verifies", "validated-by", "references", "impacts", "duplicates",
+         "conflicts-with", "implemented-by", "verified-by", "mitigates", "caused-by", "affects", "depends-on", "traces-to", "supersedes",
+         "assumption-for", "justified-by", "constrained-by", "input-to", "output-of", "evidences", "reviews", "approves", "invalidates",
+         "has-child", "belongs-to", "covers", "uses-configuration"]
+ECSS_METHOD = {"test": "T", "analysis": "A", "inspection": "I", "review": "R", "demonstration": "D", "simulation": "S", "none": "-"}
+CSV_COLUMNS = ["human_id", "kind", "title", "body", "rationale", "criteria", "method", "status", "owner", "source_ref", "applicability",
+               "notes"]
+# QR2: the delta qualification review of a change after the QR (UUID7-CR-004); its baseline is QR-2.
+REVIEWS = ["SRR", "PDR", "CDR", "QR", "QR2", "AR", "ORR"]
+# The technical specification's items: the SRS requirements and the ICD's interface items. An item superseded, made obsolete,
+# withdrawn or rejected has left the specification: it is listed with what replaced it, never verified again.
+TS_KINDS = ("requirement", "interface")
+RETIRED = ("superseded", "obsolete", "withdrawn", "rejected")
+# The technical budgets of the SRS, checked from the evidence of each refresh.
+STACK_BUDGET = 256   # UUID7-SRS-053, bytes per call
+CODE_BUDGET = 4096   # UUID7-SRS-054, bytes of .text
+SNAPSHOT_NOTE = ("# A snapshot of the rms export (ecss/rms_export/package.json) written by ecss/tools/ecss.py snapshot: the items live "
+                 "in the rms and are changed there\n")
+FILES = [("MGT", "Management file"), ("TS", "Technical specification"), ("DDF", "Design definition file"),
+         ("DJF", "Design justification file"), ("PAF", "Product assurance file"), ("MF", "Maintenance file"), ("SF", "Security file"),
+         ("RB", "Requirements baseline"), ("OP", "Operational documentation")]
+SUITES = {"tests/ITs": ("IT", "it"), "tests/plantuml": ("SD", "plantuml")}
+PLANTUML_JAR = os.environ.get("PLANTUML_JAR", "/home/rh/plantuml/plantuml-mit-1.2025.10.jar")
+
+
+def rel(path):
+    return os.path.relpath(path, ROOT)
+
+
+def anchor(ident):
+    return re.sub(r"[^A-Za-z0-9_]", "_", ident)
+
+
+def run(cmd, **kw):
+    try:
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, **kw)
+        return p.returncode, p.stdout + p.stderr
+    except OSError as e:
+        return 127, str(e)
+
+
+def read(path, default=""):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return default
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def md_escape(text):
+    """Text from data into Markdown that doxygen reads: no HTML-looking tags, no doxygen commands, no #links, no bold from __x__,
+    no table breaks."""
+    text = text or ""
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text = text.replace("\\", "\\\\").replace("@", "\\@")
+    text = re.sub(r"#(?=\w)", r"\\#", text)
+    text = re.sub(r"\b(\w*__\w*)\b", r"`\1`", text)
+    text = text.replace("|", "\\|")
+    return text
+
+
+def notes_of(s):
+    out = {}
+    for part in (s or "").split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+class Art:
+    """One rms artifact: what a CSV row or a package-export revision carries."""
+
+    def __init__(self, row, origin):
+        self.id = row.get("human_id", "")
+        self.kind = row.get("kind", "")
+        self.title = row.get("title", "")
+        self.body = row.get("body", "")
+        self.rationale = row.get("rationale", "")
+        self.criteria = row.get("criteria", "")
+        self.method = row.get("method", "") or "none"
+        self.status = row.get("status", "") or "draft"
+        self.owner = row.get("owner", "")
+        self.source_ref = row.get("source_ref", "")
+        self.applicability = row.get("applicability", "")
+        self.notes = notes_of(row.get("notes", ""))
+        self.raw_notes = row.get("notes", "")
+        self.origin = origin
+        self.revision = row.get("revision")
+        self.uuid = row.get("uuid")
+        self.revs = []
+        self.criticality = row.get("criticality", "")
+
+    def row(self):
+        return [self.id, self.kind, self.title, self.body, self.rationale, self.criteria, self.method, self.status, self.owner,
+                self.source_ref, self.applicability, self.raw_notes]
+
+
+def load_csv(path, origin):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return [Art(r, origin) for r in csv.DictReader(l for l in f if not l.startswith("#"))]
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# The rms export
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def load_rms():
+    """ecss/rms_export/package.json (kyr-rms-cli package export) and, optional, verification.csv (matrix verification)."""
+    pkg_path = os.path.join(RMS_EXPORT, "package.json")
+    if not os.path.exists(pkg_path):
+        return None
+    pkg = json.loads(read(pkg_path))
+    by_uuid = {}
+    arts = []
+    rev_status = {}
+    for a in pkg.get("artifacts", []):
+        if a.get("deleted"):
+            continue
+        revs = sorted(a.get("revisions", []), key=lambda r: r.get("number", 0))
+        if not revs:
+            continue
+        for x in revs:
+            rev_status[x.get("uuid")] = STATUSES[x.get("status", 0)] if x.get("status", 0) < len(STATUSES) else "draft"
+        r = revs[-1]
+        kind = KINDS[a["kind"]] if a.get("kind", -1) < len(KINDS) else str(a.get("kind"))
+        row = {"human_id": a.get("human_id", ""), "kind": kind, "title": r.get("title", ""), "body": r.get("body", ""),
+               "rationale": r.get("rationale", ""), "criteria": r.get("criteria", ""),
+               "method": METHODS[r.get("method", 0)] if r.get("method", 0) < len(METHODS) else "none",
+               "status": STATUSES[r.get("status", 0)] if r.get("status", 0) < len(STATUSES) else "draft", "owner": r.get("owner", ""),
+               "source_ref": r.get("source_ref", ""), "applicability": r.get("applicability", ""), "notes": r.get("notes", ""),
+               "revision": r.get("number"), "uuid": a.get("uuid"),
+               "criticality": CRITICALITIES[r.get("criticality", 0)] if r.get("criticality", 0) < len(CRITICALITIES) else "none"}
+        art = Art(row, "rms")
+        art.revs = [{"n": x.get("number"), "at_ms": x.get("changed_at_ms", 0), "reason": x.get("reason", ""),
+                     "status": STATUSES[x.get("status", 0)] if x.get("status", 0) < len(STATUSES) else "draft",
+                     "by": x.get("changed_by_name") or x.get("changed_by") or ""} for x in revs]
+        by_uuid[a.get("uuid")] = art
+        arts.append(art)
+    links = []
+    for e in pkg.get("edges", []):
+        s, d = by_uuid.get(e.get("src")), by_uuid.get(e.get("dst"))
+        if s and d:
+            t = LINKS[e["type"]] if e.get("type", -1) < len(LINKS) else str(e.get("type"))
+            links.append((s.id, t, d.id, "rms"))
+    baselines = []
+    for b in sorted(pkg.get("baselines", []), key=lambda b: b.get("created_at_ms", 0)):
+        baselines.append({"name": b.get("name", ""), "created_at_ms": b.get("created_at_ms", 0), "description": b.get("description", ""),
+                          "by": b.get("created_by_name") or b.get("created_by") or "",
+                          "approved_by": b.get("approved_by_name") or b.get("approved_by") or "",
+                          "approved_at_ms": b.get("approved_at_ms", 0), "approval_exported": "approved_by" in b,
+                          "commit": b.get("commit", "") or ((HEX_RE.search(b.get("description", "")) or [""])[0]),
+                          "member_status": collections.Counter(rev_status.get(m.get("revision"), "unknown") for m in b.get("members", [])),
+                          "members": len(b.get("members", []))})
+    verdicts = {}
+    vpath = os.path.join(RMS_EXPORT, "verification.csv")
+    if os.path.exists(vpath):
+        with open(vpath, newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                if r.get("case_id"):
+                    verdicts[r["case_id"]] = {"result": r.get("latest_result", ""), "at_ms": r.get("latest_result_at_ms", ""),
+                                              "by": r.get("latest_result_by", ""), "suspect": r.get("claim_suspect", "")}
+    return {"project": pkg.get("project", {}), "arts": arts, "links": links, "baselines": baselines, "verdicts": verdicts,
+            "exported_by": pkg.get("exported_by_name") or pkg.get("exported_by") or "",
+            "format": pkg.get("kyr_rms_package", "?"), "producer": pkg.get("kyr_rms_version", ""),
+            "path": rel(pkg_path), "sha256": hashlib.sha256(read(pkg_path).encode()).hexdigest()}
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# The repository's sources: doc comments, tags, tests
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+HEX_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+DOC_RE = re.compile(r"/\*\*(?!<)(.*?)\*/", re.S)
+ID_RE = re.compile(r"UUID7-[A-Z]+-[A-Za-z0-9_-]+")
+
+
+def tag_ids(block, tag):
+    ids = []
+    for m in re.finditer(r"@%s\b([^@]*)" % tag, block):
+        ids += ID_RE.findall(m.group(1))
+    return ids
+
+
+def brief_of(block):
+    text = re.sub(r"^[ \t]*\*[ \t]?", "", block, flags=re.M)
+    m = re.search(r"@brief\s+(.*?)(?:\n\s*\n|@\w|$)", text, re.S)
+    if not m:
+        return ""
+    return re.sub(r"\s+", " ", m.group(1)).strip()
+
+
+def detail_of(block):
+    text = re.sub(r"^[ \t]*\*[ \t]?", "", block, flags=re.M)
+    text = re.sub(r"@brief\s+.*?(?:\n\s*\n|$)", "", text, count=1, flags=re.S)
+    text = re.split(r"\n\s*@(?:verifies|satisfies|ingroup|param|return|author|date|file)\b", text)[0]
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def decl_name(decl):
+    d = re.sub(r"_Atomic\s*\([^)]*\)", "_Atomic", decl)
+    m = re.match(r"\s*#\s*(?:define|ifndef|ifdef)\s+(\w+)", d)
+    if m:
+        return m.group(1), "macro"
+    if d.lstrip().startswith("typedef"):
+        m = re.search(r"\(\s*\*\s*(\w+)\s*\)", d) or re.search(r"(\w+)\s*;", d)
+        return (m.group(1) if m else "?"), "typedef"
+    m = re.search(r"(\w+)\s*\(", d)
+    if m and "=" not in d.split("(")[0]:
+        return m.group(1), "function"
+    m = re.search(r"(\w+)\s*(?:=|;|\[)", d)
+    return (m.group(1) if m else "?"), "variable"
+
+
+def scan_sources():
+    """Symbols of app/ with their component (@ingroup) and @satisfies; test cases of tests/ with @verifies."""
+    symbols, tests = {}, []
+    for path in sorted(glob.glob(os.path.join(ROOT, "app", "*.[ch]"))):
+        text = read(path)
+        for m in DOC_RE.finditer(text):
+            block = m.group(1)
+            line = text.count("\n", 0, m.start()) + 1
+            if "@file" in block:
+                name, kind = os.path.basename(path), "file"
+            else:
+                rest = text[m.end():].lstrip("\n")
+                decl = rest.split("\n", 1)[0]
+                if decl.strip().startswith("/*") or not decl.strip():
+                    continue
+                name, kind = decl_name(decl)
+            groups = re.findall(r"@ingroup\s+(\w+)", block)
+            sym = symbols.setdefault(name, {"name": name, "kind": kind, "file": rel(path), "line": line, "group": None,
+                                            "satisfies": [], "brief": ""})
+            if groups and not sym["group"]:
+                sym["group"] = groups[0]
+            sym["satisfies"] += [i for i in tag_ids(block, "satisfies") if i not in sym["satisfies"]]
+            if not sym["brief"]:
+                sym["brief"] = brief_of(block)
+    for d, (prefix, exe) in SUITES.items():
+        for path in sorted(glob.glob(os.path.join(ROOT, d, "*.c"))):
+            text = read(path)
+            for m in DOC_RE.finditer(text):
+                rest = text[m.end():].lstrip("\n")
+                fm = re.match(r"static void (\w+)\(void\*\* state\)", rest)
+                if not fm:
+                    continue
+                name = fm.group(1)
+                short = re.sub(r"^(test_|sd_)", "", name)
+                tests.append({"id": "UUID7-TC-%s-%s" % (prefix, short), "name": name, "suite": prefix, "exe": exe, "file": rel(path),
+                              "line": text.count("\n", 0, m.start()) + 1, "brief": brief_of(m.group(1)),
+                              "detail": detail_of(m.group(1)), "verifies": tag_ids(m.group(1), "verifies")})
+    for path, cid, title in (("tests/stress/stress.c", "UUID7-TC-ST-stress", "Generation cost benchmark"),
+                             ("tests/package/smoke.c", "UUID7-TC-PK-smoke", "Installed-package smoke test")):
+        text = read(os.path.join(ROOT, path))
+        m = DOC_RE.search(text)
+        if m:
+            tests.append({"id": cid, "name": os.path.basename(path), "suite": cid.split("-")[2], "exe": None, "file": path, "line": 1,
+                          "brief": brief_of(m.group(1)) or title, "detail": detail_of(m.group(1)),
+                          "verifies": tag_ids(m.group(1), "verifies")})
+    return symbols, tests
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Results: test logs, pipeline, stress, coverage, evidence checks
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def cmocka_results():
+    """{(exe, test): {cell: verdict}} from tests/results/logs/it/**/<exe>.txt."""
+    res = {}
+    base = os.path.join(ROOT, "tests", "results", "logs", "it")
+    for path in sorted(glob.glob(os.path.join(base, "**", "*.txt"), recursive=True)):
+        exe = os.path.basename(path)[:-4]
+        cell = os.path.relpath(os.path.dirname(path), base)
+        cell = "coverage" if cell == "." else cell
+        for line in read(path).splitlines():
+            m = re.match(r"^\[\s*(OK|FAILED|ERROR|SKIPPED)\s*\] (\w+)$", line)
+            if m:
+                v = {"OK": "passed", "FAILED": "failed", "ERROR": "failed", "SKIPPED": "skipped"}[m.group(1)]
+                cur = res.setdefault((exe, m.group(2)), {})
+                if cur.get(cell) != "failed":
+                    cur[cell] = v
+    return res
+
+
+def pipeline_summary():
+    text = read(os.path.join(EVID, "pipeline.txt"))
+    stages, in_summary = {}, False
+    for line in text.splitlines():
+        if line.startswith("== summary"):
+            in_summary = True
+            continue
+        if in_summary:
+            m = re.match(r"^\s+(ok|FAIL|SKIP)\s+(\S+)(.*)$", line)
+            if m:
+                stages[m.group(2)] = (m.group(1), m.group(3).strip())
+            elif line.strip() and not line.startswith(" "):
+                in_summary = False
+    green = "pipeline GREEN" in text
+    return stages, green, bool(text)
+
+
+def stress_summary():
+    rows = []
+    path = os.path.join(ROOT, "tests", "results", "stress", "stress_summary.tsv")
+    for line in read(path).splitlines():
+        if not line or line.startswith("#"):
+            continue
+        f = line.split("\t")
+        if len(f) >= 6:
+            rows.append({"status": f[0], "profile": f[1], "linkage": f[2], "bench": f[3], "cost": f[4], "rate": f[5]})
+    return rows
+
+
+def coverage_summary():
+    d = os.path.join(ROOT, "tests", "results", "ITs", "coverage")
+    try:
+        js = json.loads(read(os.path.join(d, "coverage-summary.json")))
+    except ValueError:
+        js = {}
+    missing = ""
+    for line in read(os.path.join(d, "ITs_coverage.txt")).splitlines():
+        if line.startswith("app/uuid7.c"):
+            parts = line.split(None, 4)
+            missing = parts[4] if len(parts) > 4 else ""
+    return js, missing
+
+
+def tool(cmd):
+    rc, out = run(cmd)
+    return out if rc == 0 else ""
+
+
+def evidence_checks(stages):
+    """The automated analyses of ecss/DJF/verification_cases.csv (check=...): verdict, detail, evidence file."""
+    os.makedirs(EVID, exist_ok=True)
+    rel_so = "build/release/libuuid7.so"
+    so = os.path.join(ROOT, rel_so)
+    a = os.path.join(ROOT, "build/release/libuuid7.a")
+    obj = os.path.join(ROOT, "build/release/obj/app__uuid7.c.o")
+    checks = {}
+
+    def put(name, verdict, detail, text):
+        write(os.path.join(EVID, name + ".txt"), text)
+        checks[name] = {"verdict": verdict, "detail": detail, "evidence": "evidence/%s.txt" % name}
+
+    if os.path.exists(so):
+        und = tool(["nm", "-D", "--undefined-only", so])
+        bad = [s for s in ("malloc", "calloc", "realloc", "free", "aligned_alloc", "posix_memalign")
+               if re.search(r"\b%s\b" % s, und)]
+        put("no_alloc", "failed" if bad else "passed", ("references " + ", ".join(bad)) if bad else "none referenced",
+            "$ nm -D --undefined-only %s\n%s" % (rel_so, und))
+        dyn = tool(["readelf", "-d", so])
+        needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", dyn)
+        put("needed", "passed" if needed == ["libc.so.6"] else "failed", "NEEDED: " + ", ".join(needed), "$ readelf -d %s\n%s" % (rel_so, dyn))
+        defined = tool(["nm", "-D", "--defined-only", so])
+        hooks = re.findall(r"\buuid7_test_\w+", defined)
+        put("no_test_hooks", "failed" if hooks else "passed", ", ".join(hooks) if hooks else "no uuid7_test_ symbol",
+            "$ nm -D --defined-only %s\n%s" % (rel_so, defined))
+    if os.path.exists(obj):
+        syms = tool(["nm", "-S", "--size-sort", obj])
+        data = re.findall(r"^[0-9a-f]+ ([0-9a-f]+) ([bBdD]) (\w+)$", syms, re.M)
+        names = sorted(n for _, _, n in data)
+        sizes = {n: int(s, 16) for s, _, n in data}
+        ok = names == ["g_clock_failures", "g_uuid_rng_func", "g_v7_state"] and all(v == 8 for v in sizes.values())
+        size = tool(["size", obj])
+        put("footprint", "passed" if ok else "failed", ", ".join("%s %d B" % (n, sizes[n]) for n in names),
+            "$ nm -S --size-sort %s\n%s\n$ size %s\n%s" % (rel(obj), syms, rel(obj), size))
+        m = re.search(r"^\s*(\d+)\s+\d+\s+\d+\s+\d+\s+\w+\s+\S+$", size, re.M)
+        if m:
+            text_b = int(m.group(1))
+            put("code_size", "passed" if text_b <= CODE_BUDGET else "failed", "%d B of code (.text), budget %d B" % (text_b, CODE_BUDGET),
+                "$ size %s\n%s" % (rel(obj), size))
+    su = stack_usage()
+    if su:
+        graph = call_graph()
+        worst = {f: stack_worst(f, su, graph) for f in sorted(su) if f.startswith("uuid7_")}
+        deepest = max(worst.values() or [0])
+        dynamic = sorted(n for n, (_, q) in su.items() if q != "static")
+        put("stack_budget", "passed" if worst and not dynamic and deepest <= STACK_BUDGET else "failed",
+            "worst case %d B per call (%s), budget %d B" % (deepest, ("dynamic frames: " + ", ".join(dynamic)) if dynamic
+                                                          else "all frames static", STACK_BUDGET),
+            "gcc -fstack-usage of the release build (evidence/stack/uuid7.su) and the calls and references between the functions of "
+            "app/uuid7.c:\n" + "\n".join("%s(): own %d B, worst case %d B" % (f, su[f][0], w) for f, w in worst.items()) + "\n")
+    if os.path.exists(a):
+        g = tool(["nm", "-g", "--defined-only", a])
+        names = re.findall(r"^[0-9a-f]+ [A-Z] (\w+)$", g, re.M)
+        bad = [n for n in names if not n.startswith("uuid7_")]
+        put("prefix", "failed" if bad or not names else "passed", ("unprefixed: " + ", ".join(bad)) if bad else
+            "%d global symbols, all uuid7_" % len(names), "$ nm -g --defined-only build/release/libuuid7.a\n" + g)
+    logs = sorted(glob.glob(os.path.join(ROOT, "build", "pipeline", "build_*.log")))
+    if logs:
+        hits = []
+        for p in logs:
+            hits += ["%s: %s" % (os.path.basename(p), l) for l in read(p).splitlines() if "warning:" in l]
+        put("no_warnings", "failed" if hits else "passed", "%d warning(s) in %d build logs" % (len(hits), len(logs)),
+            "\n".join(hits) or "no 'warning:' line in: " + ", ".join(os.path.basename(p) for p in logs))
+    js, missing = coverage_summary()
+    if js:
+        lp, bp = js.get("line_percent", 0), js.get("branch_percent", 0)
+        put("coverage", "passed" if lp >= 80 and bp >= 65 else "failed", "statement %.1f %%, decision %.1f %%" % (lp, bp),
+            json.dumps(js, indent=1) + "\nuncovered lines of app/uuid7.c: " + missing)
+    src = read(os.path.join(ROOT, "app", "uuid7.c"))
+    incs = re.findall(r'^\s*#\s*include\s+([<"][^>"]+[>"])', src, re.M)
+    allowed = {"<errno.h>", "<fcntl.h>", "<limits.h>", "<stdatomic.h>", "<stdint.h>", "<string.h>", "<time.h>", "<unistd.h>",
+               "<sys/random.h>", '"uuid7.h"', '"uuid7_test.h"'}
+    bad = [i for i in incs if i not in allowed]
+    put("includes", "failed" if bad else "passed", ("unexpected: " + " ".join(bad)) if bad else " ".join(incs),
+        "#include lines of app/uuid7.c:\n" + "\n".join(incs))
+    sa = re.findall(r"_Static_assert\((.*?),", src)
+    need = ["CHAR_BIT == 8", "UCHAR_MAX == 255u", "sizeof(uint8_t) == 1u", "sizeof(uint64_t) == 8u"]
+    put("static_asserts", "passed" if all(n in sa for n in need) else "failed", "%d static assertions" % len(sa),
+        "_Static_assert conditions of app/uuid7.c:\n" + "\n".join(sa))
+    warn = read(os.path.join(OUT, "xml_api", "warnings.txt"))
+    if os.path.exists(os.path.join(OUT, "xml_api")):
+        hdr = [l for l in warn.splitlines() if "uuid7.h:" in l and "uuid7_test.h" not in l]
+        put("api_doc", "failed" if hdr else "passed", "%d doxygen warning(s) for app/uuid7.h" % len(hdr), "\n".join(hdr) or "none")
+    rep = read(os.path.join(EVID, "reproducible.txt"))
+    if rep:
+        checks["reproducible"] = {"verdict": "passed" if "identical" in rep.splitlines()[-1] else "failed",
+                                  "detail": rep.splitlines()[-1], "evidence": "evidence/reproducible.txt"}
+    hard = read(os.path.join(EVID, "hardening.txt"))
+    if hard:
+        checks["hardening"] = {"verdict": "passed" if "all hard checks passed" in hard else "failed",
+                               "detail": (re.findall(r"check_hardening: .*", hard) or ["?"])[-1], "evidence": "evidence/hardening.txt"}
+    for st, (v, why) in stages.items():
+        checks["stage:" + st] = {"verdict": {"ok": "passed", "FAIL": "failed", "SKIP": "not-run"}[v],
+                                 "detail": "pipeline stage %s: %s%s" % (st, v, (" " + why) if why else ""),
+                                 "evidence": "evidence/pipeline.txt"}
+    stress = stress_summary()
+    for r in stress:
+        if r["profile"] == "release" and r["linkage"] == "static" and r["bench"] == "stress":
+            try:
+                cost = float(r["cost"])
+            except ValueError:
+                cost = float("inf")
+            checks["stress_budget"] = {"verdict": "passed" if r["status"] == "PASS" and cost <= 100.0 else "failed",
+                                       "detail": "release/static mean %.1f ns per uuid (budget 100 ns)" % cost,
+                                       "evidence": "evidence/stress_summary.tsv"}
+            shutil.copy(os.path.join(ROOT, "tests", "results", "stress", "stress_summary.tsv"), os.path.join(EVID, "stress_summary.tsv"))
+    return checks
+
+
+def check_verdict(spec, checks):
+    """check=<name>[,..] or stage:<a>,<b>: every named check must pass."""
+    names = []
+    if spec.startswith("stage:"):
+        names = ["stage:" + s for s in spec[6:].split(",")]
+    elif spec.startswith("stress_budget"):
+        names = ["stress_budget"]
+    else:
+        names = spec.split(",")
+    got = [checks.get(n) for n in names]
+    if any(g is None for g in got):
+        return "not-run", "; ".join("%s: not run" % n for n, g in zip(names, got) if g is None), None
+    verdict = "failed" if any(g["verdict"] == "failed" for g in got) else (
+        "not-run" if any(g["verdict"] == "not-run" for g in got) else "passed")
+    return verdict, "; ".join(g["detail"] for g in got), got[0]["evidence"]
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# The model
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+class Model:
+    pass
+
+
+def git(*args):
+    rc, out = run(["git"] + list(args))
+    return out.strip() if rc == 0 else ""
+
+
+def read_kv(path):
+    out = {}
+    for line in read(path).splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            out.setdefault(k.strip(), v.strip())
+    return out
+
+
+def buildinfos():
+    out = []
+    for p in sorted(glob.glob(os.path.join(ROOT, "build", "debs", "*.buildinfo"))):
+        kv = read_kv(p)
+        tools = dict(re.findall(r"^ (gcc|libc): (.*)$", read(p), re.M))
+        out.append({"deb": kv.get("Deb", os.path.basename(p)), "sha256": kv.get("Deb-Sha256", ""), "root": kv.get("Build-Root", "?"),
+                    "commit": kv.get("Git-Commit", ""), "gcc": tools.get("gcc", ""), "libc": tools.get("libc", "")})
+    return out
+
+
+# A revision that moves an artifact to one of these statuses records a decision (a review's outcome, an approval, a RID's
+# disposition, a verification): the export must say who took it.
+DECISIONS = ("approved", "needs-rework", "rejected", "baselined", "implemented", "verified", "validated")
+
+
+def actor_refusal(M):
+    """When the rms is the source of truth, a decision or a baseline without an actor refuses it: the package cannot say who
+    reviewed or approved. Returns the refusal message, or ""."""
+    if M.mode != "rms":
+        return ""
+    bl = [b["name"] for b in M.baselines if not b["by"]]
+    revs = []
+    for a in M.rms["arts"]:
+        prev = None
+        for r in a.revs:
+            if r["status"] in DECISIONS and r["status"] != prev and not r["by"]:
+                revs.append("%s revision %s %s" % (a.id, r["n"], r["status"]))
+            prev = r["status"]
+    res = sorted(c for c, v in M.rms["verdicts"].items() if v.get("result") and not v.get("by"))
+    if not (bl or revs or res):
+        return ""
+    parts = ([("%d baseline(s) (%s)" % (len(bl), ", ".join(bl)))] if bl else []) + \
+            ([("%d decision(s) (first: %s)" % (len(revs), revs[0]))] if revs else []) + \
+            ([("%d verification result(s) (first: %s)" % (len(res), res[0]))] if res else [])
+    return ("the rms export %s names no actor for %s: who reviewed, approved and froze cannot be shown, so it is refused as the "
+            "source of truth; refresh it from a kyr_rms that records actors (0.38.0 or later)" % (M.rms["path"], "; ".join(parts)))
+
+
+def configuration(M):
+    """What the evidence is of and where it was produced (evidence/configuration.txt and toolchain.txt, written by make.sh where
+    the gates run), the release tag, the packages' buildinfo, the baselines' commits; every disagreement becomes a flag."""
+    M.ev = read_kv(os.path.join(EVID, "configuration.txt"))
+    M.toolchain = read_kv(os.path.join(EVID, "toolchain.txt"))
+    M.ev_commit = M.ev.get("commit", "")
+    env = M.toolchain.get("environment", "")
+    M.in_root = env.startswith("release root")
+    M.env_text = (("the release root, identity %s" % env.split()[-1]) if M.in_root else env) if env else \
+        "not recorded (no evidence/toolchain.txt: run ecss/make.sh)"
+    # a release (ecss/release.sh): its tag, or none on a rehearsal, and the baseline it was built from (ecss/baseline/<name>/)
+    M.release, M.release_tag = os.environ.get("ECSS_RELEASE", ""), os.environ.get("ECSS_RELEASE_TAG", "")
+    M.manifest = manifest_of(os.path.join(BASELINES, M.release)) if M.release else ({}, {}, [])
+    if M.release:
+        M.tag = M.release_tag
+        tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag else ""
+        M.tag_text = ("`%s` (commit %s)" % (M.tag, tag_commit[:12])) if M.tag else "none: untagged %s, a build of baseline %s before its tag" % (
+            M.commit[:12], M.release)
+    else:
+        M.tag = "v" + M.version
+        tag_commit = git("rev-list", "-n", "1", M.tag) if M.tag in git("tag", "--list", M.tag).split() else ""
+        M.tag_text = ("%s (commit %s)" % (M.tag, tag_commit[:12])) if tag_commit else "%s: to be created at release" % M.tag
+    # the evidence commit stands for this one when the release's baseline froze it and its product (everything outside ecss/) is
+    # this commit's: the release commit adds the frozen baseline and may change the documents' sources, never the product
+    fields, _, product = M.manifest
+    M.same_product = bool(M.release and M.ev_commit and fields.get("commit") == M.ev_commit and product == product_of("HEAD"))
+    M.ev_known = bool(M.ev_commit) and run(["git", "cat-file", "-e", M.ev_commit + "^{commit}"])[0] == 0
+    anc = M.ev_commit if M.ev_known else (M.commit if M.same_product else M.ev_commit)
+    M.debs = buildinfos()
+    flags = []
+    if not M.ev_commit:
+        flags.append("no evidence configuration is recorded (run ecss/make.sh)")
+    else:
+        if M.ev_commit != M.commit and not M.same_product:
+            flags.append("the evidence is of commit %s; these documents are generated at commit %s" % (M.ev_commit[:12], M.short))
+        if M.ev.get("state") != "clean":
+            flags.append("the evidence ran with uncommitted changes on top of commit %s" % M.ev_commit[:12])
+    if env and not M.in_root:
+        flags.append("the evidence is a host build, not the release environment")
+    if tag_commit and tag_commit != M.ev_commit and not (M.same_product and tag_commit == M.commit):
+        flags.append("tag %s is at commit %s, not the evidence commit" % (M.tag, tag_commit[:12]))
+    for d in M.debs:
+        if d["commit"] and M.ev_commit and d["commit"] != M.ev_commit:
+            flags.append("%s was built from commit %s, not the evidence commit" % (d["deb"], d["commit"][:12]))
+    for b in M.baselines:
+        c = b["commit"]
+        full = git("rev-parse", "--verify", "--quiet", c + "^{commit}") if c else ""
+        if c and not full and M.same_product and b["name"] == M.release and c == M.ev_commit:
+            b["check"] = "%s, the evidence commit, outside this commit's history; its product is this commit's (`ecss/baseline/%s/MANIFEST`)" % (
+                c[:12], M.release)
+            b["full_commit"] = c
+            continue
+        if not c:
+            b["check"] = "**none recorded**"
+            flags.append("rms baseline %s carries no uuid7 commit" % b["name"])
+        elif not full:
+            b["check"] = "**mismatch**: %s is not a commit of this repository" % c
+            flags.append("rms baseline %s names %s, which is not a commit of this repository" % (b["name"], c))
+        elif M.ev_commit and run(["git", "merge-base", "--is-ancestor", full, anc])[0] != 0:
+            b["check"] = "**mismatch**: %s is not in the history of the evidence commit" % full[:12]
+            flags.append("rms baseline %s froze commit %s, which is not in the history of the evidence commit" % (b["name"], full[:12]))
+        else:
+            b["check"] = full[:12] + (" (the evidence commit)" if full == M.ev_commit else "")
+        b["full_commit"] = full
+        loose = {k: v for k, v in b["member_status"].items() if k in ("draft", "candidate", "proposed", "in-review", "needs-rework", "unknown")}
+        if loose:
+            flags.append("rms baseline %s froze %d member(s) not approved (%s)" % (b["name"], sum(loose.values()),
+                                                                                 ", ".join("%d %s" % (v, k) for k, v in sorted(loose.items()))))
+    reviewed = [b for b in M.baselines if any(b["name"].upper().startswith(rv) for rv in REVIEWS)]
+    if reviewed and reviewed[-1].get("full_commit") and M.ev_commit and reviewed[-1]["full_commit"] != M.ev_commit:
+        flags.append("the newest review baseline, %s, froze commit %s; the evidence is of commit %s" % (
+            reviewed[-1]["name"], reviewed[-1]["full_commit"][:12], M.ev_commit[:12]))
+    M.config_flags = flags
+
+
+def same_product_text(M):
+    return ("; its product, everything outside ecss/, is this commit's (baseline %s, `ecss/baseline/%s/MANIFEST`)" % (M.release, M.release)
+            if M.same_product else "")
+
+
+def h_configuration(M, a):
+    tc = M.toolchain
+    rows = [["Product", "uuid7 %s (libuuid7, libuuid7-dev)" % M.version],
+            ["Evidence of", ("commit %s (%s), branch %s, produced %s%s" % (M.ev_commit, M.ev.get("state", "?"), M.ev.get("branch", "?"),
+                                                                          M.ev.get("at", "?"), same_product_text(M))) if M.ev_commit else "not recorded"],
+            ["Environment", md_escape(M.env_text)],
+            ["Toolchain (read where the evidence ran)", ", ".join("%s %s" % (k, md_escape(tc[k])) for k in
+                                                                  ("os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3")
+                                                                  if tc.get(k)) or "not recorded"],
+            ["Documents generated at", "commit %s%s" % (M.commit, " (uncommitted changes)" if M.dirty else "")],
+            ["Release tag", M.tag_text]] + ([["Release", "baseline %s, frozen in `ecss/baseline/%s/`" % (M.release, M.release)]]
+                                            if M.release else []) + [
+            ["Configuration flags", "; ".join(md_escape(f) for f in M.config_flags) if M.config_flags else "none"]]
+    return table(["Item", "Value"], rows, "Configuration of the evidence and of these documents")
+
+
+def h_toolchain(M, a):
+    tc = M.toolchain
+    if not tc:
+        return "The toolchain is not recorded: `ecss/make.sh` writes `evidence/toolchain.txt` where the gates run."
+    rows = [[k, md_escape(tc[k])] for k in ("environment", "os", "gcc", "glibc", "binutils", "cmocka", "gcovr", "clang-format", "python3",
+                                            "kernel") if tc.get(k)]
+    host = [["doxygen", tool(["doxygen", "--version"]).strip() or "-"],
+            ["graphviz", (re.findall(r"version (\S+)", tool(["dot", "-V"])) or ["-"])[0]],
+            ["python3", sys.version.split()[0]], ["binutils (nm, readelf, size)", (tool(["nm", "--version"]).splitlines() or ["-"])[0].split()[-1]]]
+    return ("The gates, the tests, the coverage and the packages ran here (`evidence/toolchain.txt`, read at run time where they "
+            "ran):\n\n" + table(["Tool", "Version"], rows, "Toolchain where the gates ran") + "\n\nThe documents, the binary analyses and the site are made on the "
+            "workstation, outside that environment:\n\n" + table(["Tool", "Version"], host, "Tools of the workstation"))
+
+
+def build_model():
+    M = Model()
+    M.version = read(os.path.join(ROOT, "VERSION")).strip()
+    M.commit = git("rev-parse", "HEAD")
+    M.short = M.commit[:7]
+    M.branch = git("rev-parse", "--abbrev-ref", "HEAD")
+    M.dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    M.date = git("log", "-1", "--format=%cs") or datetime.date.today().isoformat()
+    sde = os.environ.get("SOURCE_DATE_EPOCH", "")   # a release: the commit's time, so that two builds give one package
+    M.generated = datetime.datetime.fromtimestamp(int(sde), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC") if sde.isdigit() \
+        else datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    M.symbols, M.tests = scan_sources()
+    M.rms = load_rms()
+    csv_arts = (load_csv(os.path.join(ECSS, "TS", "requirements.csv"), "csv") + load_csv(os.path.join(ECSS, "documents.csv"), "csv") +
+                load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv") + load_csv(os.path.join(ECSS, "MGT", "reviews.csv"), "csv") +
+                load_csv(os.path.join(ECSS, "DJF", "verification_cases.csv"), "csv") +
+                load_csv(os.path.join(ECSS, "DDF", "decisions.csv"), "csv"))
+    M.csv_by_id = {a.id: a for a in csv_arts}
+    # Artifacts: the rms when exported, else the CSVs; the tests the sources declare complete either side.
+    arts = list(M.rms["arts"]) if M.rms else list(csv_arts)
+    M.mode = "rms" if M.rms else "csv"
+    by_id = {a.id: a for a in arts}
+    # a document of the register (ecss/documents.csv) the rms export does not hold yet is still produced, and reported as drift
+    M.doc_drift = []
+    if M.rms:
+        for a in csv_arts:
+            if a.kind == "document" and a.id not in by_id:
+                arts.append(a)
+                by_id[a.id] = a
+                M.doc_drift.append(a.id)
+    for t in M.tests:
+        if t["id"] not in by_id:
+            row = {"human_id": t["id"], "kind": "verification-case", "title": t["brief"] or t["name"], "body": t["detail"],
+                   "criteria": "Every assertion of %s holds." % t["name"], "method": "test", "status": "approved",
+                   "owner": "Roman Horshkov", "source_ref": "%s:%d" % (t["file"], t["line"]), "applicability": "D",
+                   "notes": "suite=%s; function=%s" % (t["suite"], t["name"])}
+            a = Art(row, "code")
+            arts.append(a)
+            by_id[a.id] = a
+        else:
+            a = by_id[t["id"]]
+            if not a.body:
+                a.body = t["detail"]
+    M.arts, M.by_id = arts, by_id
+    M.kind_of = {a.id: a.kind for a in csv_arts}
+    M.kind_of.update({a.id: a.kind for a in arts})
+    ts = [a for a in arts if a.kind in TS_KINDS]
+    M.reqs = sorted([a for a in ts if a.status not in RETIRED], key=lambda a: a.id)
+    M.retired = sorted([a for a in ts if a.status in RETIRED], key=lambda a: a.id)
+    M.ifaces = {a.id for a in M.reqs if a.kind == "interface"}
+    M.docs = [a for a in arts if a.kind == "document"]
+    M.comps = [a for a in arts if a.kind == "component"]
+    M.reviews = [a for a in arts if a.kind == "review"]
+    M.cases = [a for a in arts if a.kind == "verification-case" and a.status not in RETIRED]
+    M.retired_cases = [a for a in arts if a.kind == "verification-case" and a.status in RETIRED]
+    M.crs = [a for a in arts if a.kind == "change-request"]
+    M.decisions = sorted([a for a in arts if a.kind == "decision"], key=lambda a: a.id)
+    M.rationales = sorted([a for a in arts if a.kind in ("rationale", "assumption")], key=lambda a: (a.kind, a.id))
+    # Links: the rms's when exported; the repository's facts always (tags, CSV notes), kept to report drift.
+    repo_links = []
+    for t in M.tests:
+        for r in t["verifies"]:
+            repo_links.append((r, "verified-by", t["id"], "code"))
+    for a in csv_arts:
+        for r in ID_RE.findall(a.notes.get("verifies", "")):
+            repo_links.append((r, "verified-by", a.id, "csv"))
+    group_comp = {a.notes.get("group"): a.id for a in (M.comps if M.comps else []) if a.notes.get("group")}
+    for c in [a for a in csv_arts if a.kind == "component"]:
+        group_comp.setdefault(c.notes.get("group"), c.id)
+    M.group_comp = group_comp
+    # A symbol's @satisfies: its component satisfies each requirement named; an interface item named there is the interface the
+    # symbol declares, and it satisfies the same requirements. An item neither the rms nor the CSVs hold yet is known by its prefix.
+    for s in M.symbols.values():
+        comp = group_comp.get(s["group"])
+        ifs = [r for r in s["satisfies"] if M.kind_of.get(r, "interface" if r.startswith("UUID7-IF-") else "requirement") == "interface"]
+        for r in s["satisfies"]:
+            if r in ifs:
+                continue
+            if comp:
+                repo_links.append((comp, "satisfies", r, "code"))
+            repo_links += [(i, "satisfies", r, "code") for i in ifs]
+    for a in csv_arts:
+        if a.kind == "requirement":
+            doc = {"SRS": "UUID7-DOC-SRS", "ICD": "UUID7-DOC-ICD"}.get(a.notes.get("doc"))
+            if doc:
+                repo_links.append((doc, "has-child", a.id, "csv"))
+        if a.kind == "document" and a.applicability != "N":
+            for rv in (a.notes.get("reviews", "")).split(","):
+                if "UUID7-REV-" + rv.strip() in M.csv_by_id:
+                    repo_links.append(("UUID7-REV-" + rv.strip(), "reviews", a.id, "csv"))
+    M.repo_links = sorted(set(repo_links))
+    M.links = sorted(set(M.rms["links"])) if M.rms else M.repo_links
+    key = lambda l: (l[0], l[1], l[2])
+    rms_keys = {key(l) for l in M.links}
+    M.drift = [l for l in M.repo_links if key(l) not in rms_keys] if M.rms else []
+    M.baselines = M.rms["baselines"] if M.rms else []
+    M.open_items = load_open_items()
+    configuration(M)
+    M.refusal = actor_refusal(M)
+    # Results
+    M.stages, M.green, M.pipeline_ran = pipeline_summary()
+    M.checks = evidence_checks(M.stages)
+    M.cmocka = cmocka_results()
+    M.stress = stress_summary()
+    M.coverage, M.uncovered = coverage_summary()
+    M.result = {}
+    test_by_id = {t["id"]: t for t in M.tests}
+    # the verdicts of every case, those the rms does not hold yet included (the loader records them once it does)
+    M.result_cases = M.cases + [a for a in csv_arts if a.kind == "verification-case" and a.id not in by_id]
+    for c in M.result_cases:
+        t = test_by_id.get(c.id)
+        n = c.notes
+        if t and t["exe"]:
+            cells = M.cmocka.get((t["exe"], t["name"]), {})
+            if not cells:
+                M.result[c.id] = {"verdict": "not-run", "detail": "no log", "cells": cells, "evidence": None}
+            else:
+                failed = [k for k, v in cells.items() if v == "failed"]
+                M.result[c.id] = {"verdict": "failed" if failed else "passed", "cells": cells,
+                                  "detail": ("failed in " + ", ".join(failed)) if failed else "passed in %d cells" % len(cells),
+                                  "evidence": "evidence/logs"}
+        elif n.get("check"):
+            v, d, e = check_verdict(n["check"], M.checks)
+            if v == "passed" and n.get("verdict") and n["verdict"] != "passed":
+                v = "failed"
+            M.result[c.id] = {"verdict": v, "detail": d, "evidence": e,
+                              "recorded": ("%s, %s" % (n.get("date", ""), n.get("by", ""))) if n.get("verdict") else ""}
+        elif n.get("verdict"):
+            M.result[c.id] = {"verdict": n["verdict"], "detail": "recorded %s by %s" % (n.get("date", "?"), n.get("by", "?")),
+                              "evidence": None}
+        else:
+            M.result[c.id] = {"verdict": "not-run", "detail": "no result", "evidence": None}
+        if M.rms and c.id in M.rms["verdicts"]:
+            M.result[c.id]["rms"] = M.rms["verdicts"][c.id]
+    # Requirement status
+    M.cases_of, M.comps_of, M.reqs_of_comp, M.reqs_of_case = {}, {}, {}, {}
+    dkinds = ("decision", "rationale", "assumption")
+    # A link to an item that left the specification (or a retired case) is history: kept in the rms, not traced here.
+    gone = {a.id for a in M.retired} | {c.id for c in M.retired_cases}
+    M.superseded_by = {d: s for s, t, d, _ in M.links if t == "supersedes"}
+    M.via = {}
+    for s, t, d, _ in M.links:
+        if (s in by_id and by_id[s].kind in dkinds) or (d in by_id and by_id[d].kind in dkinds):
+            continue   # a design decision's links are read below, whatever their type
+        if s in gone or d in gone:
+            continue
+        if t == "satisfies" and s in M.ifaces:
+            M.via.setdefault(s, []).append(d)
+            continue
+        if t == "verified-by":
+            M.cases_of.setdefault(s, []).append(d)
+            M.reqs_of_case.setdefault(d, []).append(s)
+        elif t == "verifies":
+            M.cases_of.setdefault(d, []).append(s)
+            M.reqs_of_case.setdefault(s, []).append(d)
+        elif t == "satisfies":
+            M.comps_of.setdefault(d, []).append(s)
+            M.reqs_of_comp.setdefault(s, []).append(d)
+        elif t == "allocates-to":
+            M.comps_of.setdefault(s, []).append(d)
+            M.reqs_of_comp.setdefault(d, []).append(s)
+    # design decisions: whatever an rms link joins a decision, a rationale or an assumption to, in either direction (an item that
+    # left the specification is the decision's history, not what it answers)
+    M.dlinks = {}
+    for s_, t, d, _ in M.links:
+        for x, y in ((s_, d), (d, s_)):
+            xa, ya = by_id.get(x), by_id.get(y)
+            if xa and ya and xa.kind in ("decision", "rationale", "assumption") and y not in gone:
+                M.dlinks.setdefault(x, set()).add(y)
+    M.decisions_of = {}
+    for dec in M.decisions:
+        for y in M.dlinks.get(dec.id, ()):
+            M.decisions_of.setdefault(y, set()).add(dec.id)
+    # An interface item is verified through the requirements it satisfies.
+    for i in M.ifaces:
+        M.via[i] = sorted(set(M.via.get(i, [])))
+        M.cases_of[i] = sorted(set(c for r in M.via[i] for c in M.cases_of.get(r, [])))
+    M.symbols_of = {}
+    for s in M.symbols.values():
+        for r in s["satisfies"]:
+            M.symbols_of.setdefault(r, []).append(s)
+    M.req_status = {}
+    for r in M.reqs:
+        cs = sorted(set(M.cases_of.get(r.id, [])))
+        vs = [M.result.get(c, {"verdict": "not-run"})["verdict"] for c in cs]
+        if not cs:
+            st = "no case"
+        elif "failed" in vs:
+            st = "failed"
+        elif all(v == "passed" for v in vs):
+            st = "verified"
+        else:
+            st = "not run"
+        M.req_status[r.id] = st
+    # Traceability both ways: every item of the specification verified by passing cases, every case verifying one of them, every
+    # link the repository's tags and notes make held by the rms, and the snapshot of the specification equal to the export.
+    M.unverified = [r.id for r in M.reqs if M.req_status[r.id] != "verified"]
+    M.orphan_cases = sorted(c.id for c in M.cases if not M.reqs_of_case.get(c.id))
+    repo_keys = {(s, t, d) for s, t, d, _ in M.repo_links}
+    M.rms_only = sorted((s, t, d) for s, t, d, _ in M.links if t in ("satisfies", "verified-by", "has-child") and s not in gone and
+                        d not in gone and (s, t, d) not in repo_keys) if M.rms else []
+    M.snapshot = snapshot_state(M)
+    M.trace_red = ""
+    if M.mode == "rms":
+        bad = (["%d requirement(s) not verified (first: %s)" % (len(M.unverified), M.unverified[0])] if M.unverified else []) + \
+              (["%d case(s) verifying no requirement (first: %s)" % (len(M.orphan_cases), M.orphan_cases[0])] if M.orphan_cases else []) + \
+              (["%d repository link(s) not in the rms export (first: %s)" % (len(M.drift), " ".join(M.drift[0][:3]))] if M.drift else []) + \
+              (["the snapshot %s" % M.snapshot] if M.snapshot != "in step with the export" else [])
+        M.trace_red = "; ".join(bad)
+    M.diagrams = {}
+    return M
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Diagrams
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def api_doxyfile():
+    return "\n".join([
+        "PROJECT_NAME = uuid7", "OUTPUT_DIRECTORY = build/ecss/xml_api",
+        "INPUT = app/uuid7.h app/uuid7.c app/uuid7_test.h build/ecss/md/components.dox",
+        "FILE_PATTERNS = *.h *.c *.dox", "GENERATE_LATEX = NO", "GENERATE_XML = YES", "XML_PROGRAMLISTING = NO",
+        # HTML too: doxygen 1.9 checks the @param and @return of a member only while writing a format that parses its documentation,
+        # so with XML alone it reports every documented function as undocumented
+        "GENERATE_HTML = YES", "HTML_OUTPUT = html",
+        "EXTRACT_ALL = NO", "EXTRACT_STATIC = YES", "OPTIMIZE_OUTPUT_FOR_C = YES", "WARN_IF_UNDOCUMENTED = YES", "WARN_NO_PARAMDOC = YES",
+        "WARN_LOGFILE = build/ecss/xml_api/warnings.txt", "QUIET = YES", "REFERENCES_RELATION = YES", "REFERENCED_BY_RELATION = YES",
+        "ENABLE_PREPROCESSING = YES", "MACRO_EXPANSION = YES", "EXPAND_ONLY_PREDEF = YES",
+        "PREDEFINED = UUID7_TESTING __linux__ _Atomic(x)=x", "HAVE_DOT = NO",
+        'ALIASES = "satisfies=\\xrefitem satisfies \\"Satisfies\\" \\"Implementation trace\\"" '
+        '"verifies=\\xrefitem verifies \\"Verifies\\" \\"Verification trace\\""', ""])
+
+
+def xml_members():
+    """Members of the header pre-pass: functions, typedefs, defines with their briefs, params and references."""
+    import xml.etree.ElementTree as ET
+    out, seen = [], set()
+    d = os.path.join(OUT, "xml_api", "xml")
+    for f in sorted(glob.glob(os.path.join(d, "*.xml"))):
+        try:
+            tree = ET.parse(f)
+        except ET.ParseError:
+            continue
+        for cd in tree.iter("compounddef"):
+            if cd.get("kind") not in ("file", "group"):
+                continue
+            for md in cd.iter("memberdef"):
+                if md.get("id") in seen:
+                    continue
+                seen.add(md.get("id"))
+                loc = md.find("location")
+                fname = os.path.basename(loc.get("declfile") or loc.get("file") or "") if loc is not None else ""
+                text = lambda tag: "".join(md.find(tag).itertext()).strip() if md.find(tag) is not None else ""
+                out.append({"file": fname, "kind": md.get("kind"), "static": md.get("static") == "yes", "name": text("name"),
+                            "type": text("type"), "args": text("argsstring"), "init": text("initializer"),
+                            "brief": re.sub(r"\s+", " ", text("briefdescription")),
+                            "params": [("".join(p.find("type").itertext()).strip() if p.find("type") is not None else "",
+                                        p.findtext("declname") or "") for p in md.findall("param")],
+                            "refs": [r.text for r in md.findall("references")]})
+    return out
+
+
+def header_members():
+    """Fallback parser of app/uuid7.h when the pre-pass is missing."""
+    text = read(os.path.join(ROOT, "app", "uuid7.h"))
+    out = []
+    for m in re.finditer(r"^#\s*define\s+(UUID7_\w+)\s+(\S+)", text, re.M):
+        out.append({"file": "uuid7.h", "kind": "define", "static": False, "name": m.group(1), "type": "", "args": "", "init": m.group(2),
+                    "brief": "", "params": [], "refs": []})
+    for m in re.finditer(r"^(?:typedef\s+)?(\w[\w\s\*]*?)\s*\(?\*?(\w+)\)?\s*\(([^)]*)\)\s*;", text, re.M):
+        kind = "typedef" if m.group(0).startswith("typedef") else "function"
+        out.append({"file": "uuid7.h", "kind": kind, "static": False, "name": m.group(2), "type": m.group(1).strip(),
+                    "args": "(%s)" % m.group(3), "init": "", "brief": "", "params": [], "refs": []})
+    return out
+
+
+def gen_diagrams(M):
+    os.makedirs(PUML, exist_ok=True)
+    members = xml_members() or header_members()
+    M.members = members
+    hdr = [m for m in members if m["file"] == "uuid7.h"]
+    # Class diagram: the public header as one class, the callback as an interface.
+    L = ["@startuml class_uuid7", "' generated by ecss/tools/ecss.py from app/uuid7.h; do not edit", "title uuid7 public interface (app/uuid7.h)",
+         "skinparam shadowing false", "hide empty members", 'class "uuid7.h" as H <<header>> {']
+    for m in hdr:
+        if m["kind"] == "define":
+            L.append("  {static} %s = %s" % (m["name"], m["init"].replace("u", "") if re.match(r"^\d+u$", m["init"]) else m["init"]))
+    for m in hdr:
+        if m["kind"] == "function":
+            L.append("  {static} %s %s%s" % (m["type"], m["name"], m["args"]))
+    L.append("}")
+    for m in hdr:
+        if m["kind"] == "typedef":
+            ret = m["type"].replace("(*", "").strip()
+            params = m["args"].lstrip(")").strip() or "()"
+            L += ['interface "%s" as CB <<callback>> {' % m["name"], "  %s fn%s" % (ret, params), "}"]
+            L.append('H ..> CB : uuid7_init(), uuid7_set_rng_func()')
+    L += ['class "16-byte UUIDv7" as ID <<value>> {', "  bytes 0..5 : unix_ts_ms (48 bits, big-endian)",
+          "  byte 6 : version 7 | rand_a[11:8]", "  byte 7 : rand_a[7:0] (sequence)", "  byte 8 : variant 0b10 | rand_b[61:56]",
+          "  bytes 9..15 : rand_b[55:0]", "}", "H ..> ID : uuid7_gen() writes\\nuuid7_init(), uuid7_raise_floor() read", "@enduml", ""]
+    write(os.path.join(PUML, "class_uuid7.puml"), "\n".join(L))
+    # Package diagram: deps.txt, the tiers, the runtime dependency.
+    deps = [l.split() for l in read(os.path.join(ROOT, "deps.txt")).splitlines() if l.strip() and not l.startswith("#")]
+    tier = re.search(r"^# tier:\s*(\d+)\s*(\w+)", read(os.path.join(ROOT, "deps.txt")), re.M)
+    tiers = {}
+    for l in read(os.path.join(ROOT, "build", "sysroot", "share", "kyr-build", "tiers.txt")).splitlines():
+        f = l.split()
+        if f and f[0].isdigit():
+            for n in f[1:]:
+                tiers[n] = f[0]
+    needed = M.checks.get("needed", {}).get("detail", "NEEDED: libc.so.6").replace("NEEDED: ", "")
+    L = ["@startuml package_uuid7", "' generated by ecss/tools/ecss.py from deps.txt, tiers.txt and readelf; do not edit",
+         "title uuid7 and its pinned dependencies", "skinparam shadowing false", "left to right direction",
+         'package "tier %s %s: uuid7 %s" as U {' % (tier.group(1) if tier else "?", tier.group(2) if tier else "", M.version),
+         '  artifact "libuuid7.so.%s\\n(libuuid7)" as SO' % M.version, '  artifact "uuid7.h, libuuid7.a\\n(libuuid7-dev)" as DEV', "}",
+         'package "runtime" {', '  artifact "%s" as LIBC' % needed, "}", "SO --> LIBC : DT_NEEDED"]
+    own = [d for d in deps if d[0] == "own"]
+    apt = [d for d in deps if d[0] == "apt"]
+    for d in own:
+        L += ['package "tier %s: %s %s" as P_%s {' % (tiers.get(d[1].replace("-", "_"), tiers.get("kyr_build", "?")), d[1], d[2],
+                                                      anchor(d[1])),
+              '  artifact "%s_%s_all.deb\\nsha256 %s..." as A_%s' % (d[1], d[2], d[4][:12], anchor(d[1])), "}",
+              'U ..> P_%s : build-time pin (own, %s)' % (anchor(d[1]), d[3])]
+    L.append('package "Ubuntu (apt, build and test)" as APT {')
+    for d in apt:
+        L.append('  artifact "%s%s" as T_%s' % (d[1], (" " + d[2]) if len(d) > 2 else "", anchor(d[1])))
+    L += ["}", "U ..> APT : build-time", "@enduml", ""]
+    write(os.path.join(PUML, "package_uuid7.puml"), "\n".join(L))
+    # Component diagram: the SDD components, the calls between them (pre-pass references).
+    owner = {}
+    for name, s in M.symbols.items():
+        if s["group"]:
+            owner[name] = s["group"]
+    deps_c = set()
+    for m in members:
+        g = owner.get(m["name"])
+        for r in m["refs"]:
+            h = owner.get(r)
+            if g and h and g != h:
+                deps_c.add((g, h))
+    comps = sorted(M.comps, key=lambda c: c.id)
+    L = ["@startuml component_uuid7", "' generated by ecss/tools/ecss.py from components and the code's @ingroup tags; do not edit",
+         "title uuid7 components (SDD <5.3>)", "skinparam shadowing false", 'actor "Caller" as C', 'interface "uuid7.h" as API']
+    for c in comps:
+        L.append('component "%s\\n%s" as %s' % (c.title, c.id, anchor(c.notes.get("group", c.id))))
+    L.append("C --> API")
+    for m in members:
+        if m["file"] == "uuid7.h" and m["kind"] == "function":
+            g = owner.get(m["name"])
+            if g:
+                L.append("API ..> %s : %s()" % (g, m["name"]))
+    for g, h in sorted(deps_c):
+        L.append("%s --> %s" % (g, h))
+    L += ["@enduml", ""]
+    write(os.path.join(PUML, "component_uuid7.puml"), "\n".join(L))
+    # Hand-written diagrams of the repository and of ecss/.
+    for p in sorted(glob.glob(os.path.join(ROOT, "docs", "diagrams", "*.puml")) + glob.glob(os.path.join(ECSS, "**", "*.puml"),
+                                                                                             recursive=True)):
+        shutil.copy(p, os.path.join(PUML, os.path.basename(p)))
+    for p in sorted(glob.glob(os.path.join(PUML, "*.puml"))):
+        name = os.path.basename(p)[:-5]
+        t = re.search(r"^title (.*)$", read(p), re.M)
+        M.diagrams[name] = t.group(1) if t else name
+
+
+def render(M):
+    """Every PlantUML source to SVG with java -jar PLANTUML_JAR (-tsvg -nometadata), from a copy without its title line: the
+    figure's caption carries the title. The same source gives the same bytes. Without java or the jar, or for a source PlantUML
+    refuses, the pages embed the source and M.render_note says why."""
+    names = sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(PUML, "*.puml")))
+    M.render_note, M.render_tool, M.rendered = "", "", 0
+    shutil.rmtree(SVG, ignore_errors=True)
+    os.makedirs(SVG, exist_ok=True)
+    java = shutil.which("java")
+    if not java:
+        M.render_note = "cannot render the diagrams: java not found (sudo apt install default-jre-headless); the pages embed the PlantUML sources"
+        return False
+    if not os.path.isfile(PLANTUML_JAR):
+        M.render_note = "cannot render the diagrams: no PlantUML jar at %s (set PLANTUML_JAR); the pages embed the PlantUML sources" % PLANTUML_JAR
+        return False
+    src = os.path.join(OUT, "puml_render")
+    shutil.rmtree(src, ignore_errors=True)
+    os.makedirs(src)
+    for n in names:
+        write(os.path.join(src, n + ".puml"), re.sub(r"^title .*\n", "", read(os.path.join(PUML, n + ".puml")), count=1, flags=re.M))
+    jv = (re.findall(r'version "([^"]+)"', run([java, "-version"])[1]) or ["?"])[0]
+    pv = (re.findall(r"PlantUML version (\S+)", run([java, "-Djava.awt.headless=true", "-jar", PLANTUML_JAR, "-version"])[1]) or ["?"])[0]
+    M.render_tool = "PlantUML %s (%s), java %s" % (pv, os.path.basename(PLANTUML_JAR), jv)
+    rc, out = run([java, "-Djava.awt.headless=true", "-jar", PLANTUML_JAR, "-tsvg", "-nometadata", "-o", SVG] +
+                  [os.path.join(src, n + ".puml") for n in names])
+    write(os.path.join(EVID, "plantuml.txt"), "%s\n%s\n" % (M.render_tool, out))
+    refused = {os.path.basename(x) for x in re.findall(r"^Error line \d+ in file: (.+)\.puml", out, re.M)}
+    bad = [n for n in names if n in refused or not os.path.exists(os.path.join(SVG, n + ".svg"))]
+    for n in bad:
+        if os.path.exists(os.path.join(SVG, n + ".svg")):
+            os.remove(os.path.join(SVG, n + ".svg"))
+    M.rendered = len(names) - len(bad)
+    if bad:
+        M.render_note = "PlantUML refused %s (evidence/plantuml.txt): those pages embed the source" % ", ".join(bad)
+    return not bad
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Markdown
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def rref(i):
+    return '\\ref %s "%s"' % (anchor("req_" + i), i)
+
+
+def comp_ref(M, i):
+    """A component by its title, linked to its description in the SDD."""
+    return '\\ref %s "%s"' % (anchor("cmp_" + i), md_escape(M.by_id[i].title if i in M.by_id else i))
+
+
+def cref(i, M=None):
+    return '\\ref %s "%s"' % (anchor("tc_" + i), i)
+
+
+def dref(i, M):
+    d = M.by_id.get(i)
+    if not d or d.applicability == "N":
+        return md_escape(d.title if d else i)
+    path = d.notes.get("path", "")
+    page, _, sec = path.partition("#")
+    label = os.path.basename(page)[:-3] if page.endswith(".md") else i
+    target = sec or page_label(page)
+    return '\\ref %s "%s"' % (target, md_escape(d.title))
+
+
+def page_label(path):
+    base = os.path.basename(path)[:-3] if path.endswith(".md") else path
+    return "UUID7_DOC_" + anchor(base.upper())
+
+
+def verdict_word(v):
+    return {"passed": "passed", "failed": "**FAILED**", "not-run": "not run", "skipped": "skipped"}.get(v, v)
+
+
+def status_word(s):
+    return {"verified": "verified", "failed": "**FAILED**", "no case": "**no verification case**", "not run": "not run"}.get(s, s)
+
+
+def defn(label, text):
+    """A definition in a table cell: the anchor others link to, the text marked as the definition (not a reference)."""
+    return '\\anchor %s <span class="ecss-def">%s</span>' % (label, text)
+
+
+def table(head, rows, caption=None):
+    """A Markdown table; caption: its title (refs.py numbers it "Table N"), "-" for none (a document's identification block)."""
+    out = (["Table: " + caption, ""] if caption else []) + ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    for r in rows:
+        out.append("| " + " | ".join(str(c).replace("\n", " ") for c in r) + " |")
+    return "\n".join(out)
+
+
+def diagram_md(M, name, caption=None):
+    """A figure: refs.py numbers it and writes the image (or the source) with its caption and provenance."""
+    return "@@FIGURE@@%s@@%s@@" % (name, md_escape(caption) if caption else "")
+
+
+def figure_info(M):
+    """Each diagram's caption and what produced it (the test that recorded it, the generator, or the hand-written source)."""
+    tests = {t["name"]: t for t in M.tests}
+    info = {}
+    for name, title in M.diagrams.items():
+        src = read(os.path.join(PUML, name + ".puml"))
+        claim_line = re.search(r"^' claim: (.*)$", src, re.M)
+        cap = title if title != name else CAPTIONS.get(name) or (claim_line.group(1)[:1].upper() + claim_line.group(1)[1:] if claim_line else name)
+        t = tests.get(name)
+        if t:
+            r = M.result.get(t["id"], {})
+            prov = "Recorded by the scenario test %s() (%s, %s, %s) from a real run." % (t["name"], t["file"], t["id"],
+                                                                                      verdict_word(r.get("verdict", "not-run")) +
+                                                                                      (" in %d cells" % len(r.get("cells", {})) if r.get("cells") else ""))
+        elif name in GENERATED:
+            prov = "Generated by ecss.py from %s." % GENERATED[name]
+        else:
+            hand = [p for p in glob.glob(os.path.join(ROOT, "docs", "diagrams", name + ".puml")) + glob.glob(os.path.join(ECSS, "**", name + ".puml"), recursive=True)]
+            prov = "Drawn by hand: `%s`." % (rel(hand[0]) if hand else name + ".puml")
+        info[name] = (md_escape(cap), prov)
+    return info
+
+
+CAPTIONS = {"tooling_sequence": "Building from the sysroot with the pinned kyr-build", "abi_exports": "The ABI gate: the header "
+            "decides the committed layout and the exports of libuuid7.so"}   # the diagrams of docs/diagrams carry no title
+GENERATED = {"class_uuid7": "the declarations of app/uuid7.h (the doxygen pre-pass)",
+             "package_uuid7": "deps.txt, kyr-build's tiers.txt and the NEEDED entries of libuuid7.so",
+             "component_uuid7": "the components and the code's \\@ingroup tags and calls"}
+
+
+def product_text(M):
+    env = "the release root" if M.in_root else md_escape(M.env_text)
+    ev = ("evidence of commit %s (%s) in %s" % (M.ev_commit[:12], M.ev.get("state", "?"), env)) if M.ev_commit else "no evidence recorded"
+    docs = "" if M.ev_commit == M.commit and not M.dirty else "; documents generated at commit %s%s%s" % (
+        M.short, " (uncommitted changes)" if M.dirty else "", ", the same product" if M.same_product else "")
+    return "uuid7 %s; %s%s; release tag %s%s" % (M.version, ev, docs, M.tag_text,
+                                                 ("; **%d configuration flag(s)**, \\ref UUID7_DOC_SCF \"SCF\"" % len(M.config_flags))
+                                                 if M.config_flags else "")
+
+
+def status_text(M, d, rev="", note=True):
+    """An rms status with who set it, and, when the reviews were a scripted demonstration, that the status belongs to it (note:
+    said here; else the document says it once)."""
+    if not d.revs or d.status not in ("approved", "baselined", "implemented", "verified", "validated", "rejected"):
+        return d.status + rev
+    r = next((x for x in reversed(d.revs) if x["status"] == d.status), d.revs[-1])
+    demo = M.mode == "rms" and any(review_facts(M, rv)["scripted"] for rv in REVIEWS)
+    return "%s%s by %s%s" % (d.status, rev, who(r["by"]), " in the scripted rms demonstration (\\ref UUID7_DOC_JRR \"JRR\")" if demo and note else "")
+
+
+def h_docinfo(M, a):
+    d = M.by_id.get(a.get("id"))
+    if not d:
+        return "> Document %s is not in the register." % a.get("id")
+    src = "rms export (`%s`, project %s)" % (M.rms["path"], PROJECT_KEY) if M.mode == "rms" else "repository CSVs (no rms export present)"
+    rev = (" (rms revision %s)" % d.revision) if d.revision else ""
+    return table(["Item", "Value"], [
+        ["Document", "%s — %s" % (d.id, md_escape(d.title))], ["ECSS file", d.notes.get("file", "")],
+        ["DRD", md_escape(d.notes.get("drd", "-"))], ["Called from", md_escape(d.rationale)],
+        ["Reviews (ECSS-E-ST-40 Table A-1)", d.notes.get("reviews", "").replace(",", ", ")],
+        ["Status", status_text(M, d, rev)], ["Product", product_text(M)],
+        ["Generated", "%s by ecss/make.sh from %s" % (M.generated, src)],
+        ["Criticality", "software category D (ECSS-Q-ST-80 Table D-1), see \\ref UUID7_DOC_TAILORING \"the tailoring\"; the rms "
+                        "criticality field is another scale, \\ref tailoring_scales \"mapped there\""],
+        ["Claim", "%s (basis: \\ref index \"the front page\")" % md_escape(claim(M)[0])]], "-") + "\n\n@@LISTS@@"
+
+
+REFS = [
+    ("AD1", "ECSS-E-ST-40C Rev.1", "Space engineering — Software, 30 April 2025"),
+    ("AD2", "ECSS-Q-ST-80C Rev.2", "Space product assurance — Software product assurance, 30 April 2025"),
+    ("AD3", "ECSS-M-ST-40C", "Space project management — Configuration and information management (SCMP and SCF DRDs; not held here)"),
+    ("RD1", "RFC 9562", "Universally Unique IDentifiers (UUIDs), May 2024"),
+    ("RD2", "NAMING.md", "The platform's naming rule (one namespace, prefixes, versions)"),
+    ("RD3", "DEPENDENCIES.md", "The platform's dependency rule (deps.txt classes apt, vendor, own)"),
+    ("RD4", "kyr-build @KYR_BUILD@", "The pinned build tooling: profile catalog, hardening gate, ABI gate, pipeline, packaging (deps.txt)"),
+    ("RD5", "kyr_rms docs/CLI.md", "kyr-rms-cli, the requirements management system holding requirements, links, results, reviews and baselines"),
+    ("RD6", "ISO/IEC 9899:2011", "Programming languages — C (C11)"),
+]
+
+
+def h_refs(M, a):
+    pin = [l.split() for l in read(os.path.join(ROOT, "deps.txt")).splitlines() if l.startswith("own") and len(l.split()) > 2
+           and l.split()[1] == "kyr-build"]
+    rows = [[i, md_escape(t.replace("@KYR_BUILD@", pin[0][2] if pin else "(not pinned)")), md_escape(d)] for i, t, d in REFS]
+    return ("Applicable documents (AD) and reference documents (RD). The ECSS standards are cited, never copied.\n\n" +
+            table(["Id", "Document", "Title"], rows, "Applicable and reference documents"))
+
+
+TERMS = [
+    ("CAS", "compare-and-swap, the atomic operation that reserves a (ms, seq) pair"),
+    ("floor", "a persisted identifier imported so that later identifiers sort after it"),
+    ("logical clock", "the millisecond of the reservation state; it may run ahead of the wall clock by UUID7_MAX_AHEAD_MS"),
+    ("rand_a / sequence", "the 12-bit field after the version nibble; here a counter within one logical millisecond (RFC 9562 6.2 method 1)"),
+    ("rand_b / tail", "the 62 random bits after the variant"),
+    ("reservation state", "the single atomic 64-bit word holding the last reserved (ms << 12 | seq)"),
+    ("rms", "the requirements management system (kyr-rms-cli): artifacts, links, results, reviews, baselines"),
+    ("cell", "one build profile x linkage combination in which a suite runs"),
+    ("pipeline", "utils/run_pipeline.sh: every gate of the repository"),
+    ("DRD / DRL", "document requirements definition / list (ECSS-E-ST-40 Annex A)"),
+    ("RB, TS, DDF, DJF, MGT, MF, OP, SF, PAF", "the ECSS files (ECSS-E-ST-40 Figure A-1)"),
+]
+
+
+def h_terms(M, a):
+    if M.where != "ecss/MGT/SDP.md":
+        return ("The terms of ECSS-S-ST-00-01, of the applicable documents and of the package's glossary in the SDP <3> apply; "
+                "this document adds none.").replace("SDP <3>", "\\ref UUID7_DOC_SDP \"SDP\" <3>")
+    return ("The terms of ECSS-S-ST-00-01 and of the applicable documents apply; in addition, for every document of the package:\n\n" +
+            table(["Term", "Meaning"], [[md_escape(t), md_escape(d)] for t, d in TERMS], "Terms"))
+
+
+def req_block(M, r, level):
+    syms = M.symbols_of.get(r.id, [])
+    comps = sorted(set(M.comps_of.get(r.id, [])))
+    cs = sorted(set(M.cases_of.get(r.id, [])))
+    sat = ", ".join(("%s()" % s["name"]) if s["kind"] == "function" else ("`%s`" % s["name"]) for s in syms) or "-"
+    comp_txt = ", ".join('\\ref %s "%s"' % (anchor("cmp_" + c), md_escape(M.by_id[c].title if c in M.by_id else c)) for c in comps) or "-"
+    ver = ", ".join("%s (%s)" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in cs) or "**none**"
+    lines = ["%s %s %s {#%s}" % ("#" * level, r.id, md_escape(r.title), anchor("req_" + r.id)), "", md_escape(r.body), "",
+             "- Rationale: " + md_escape(r.rationale),
+             "- Verification: %s (%s) — %s" % (ECSS_METHOD.get(r.method, r.method), r.method, md_escape(r.criteria)),
+             "- Source: %s · category %s · rms criticality %s · %s" % (
+                 md_escape(r.source_ref), md_escape(r.applicability), r.criticality or "not set",
+                 status_text(M, r, (" (rms revision %s)" % r.revision) if r.revision else "", note=False)),
+             "- Implemented by: %s; components: %s" % (sat, comp_txt), "- Verified by: %s → %s" % (ver, status_word(M.req_status[r.id]))] + \
+        (["- Design decisions: %s" % ", ".join(dec_ref(x) for x in sorted(M.decisions_of[r.id]))] if M.decisions_of.get(r.id) else []) + [""]
+    if r.kind == "interface":
+        k = next(i for i, l in enumerate(lines) if l.startswith("- Implemented by: "))
+        lines[k:k + 2] = ["- Declared by: %s" % sat, "- Satisfies: %s" % (", ".join(rref(x) for x in M.via.get(r.id, [])) or "**nothing**"),
+                          "- Verified through the requirements it satisfies: %s → %s" % (ver, status_word(M.req_status[r.id]))]
+    return "\n".join(lines)
+
+
+def ts_ref(i, M):
+    """An item of the specification, current or retired, as a link; anything else as text."""
+    return rref(i) if i in M.kind_of and M.kind_of[i] in TS_KINDS else md_escape(i)
+
+
+def h_retired(M, a):
+    """The items that left the specification: superseded (with the item that replaced each) or made obsolete, with the reason
+    their approver recorded."""
+    rs = [r for r in M.retired if not a.get("doc") or r.notes.get("doc") == a.get("doc")]
+    if not rs:
+        return "None."
+    rows = []
+    for r in rs:
+        last = next((x for x in reversed(r.revs) if x["status"] == r.status), None)
+        by = M.superseded_by.get(r.id)
+        rows.append([defn(anchor("req_" + r.id), r.id), md_escape(r.title),
+                     ("%s by %s" % (r.status, who(last["by"]))) if last else r.status, ts_ref(by, M) if by else "-",
+                     md_escape(last["reason"]) if last else "-"])
+    return table(["Item", "Title", "Status", "Superseded by", "Reason"], rows, "Items superseded or made obsolete")
+
+
+def h_reqs(M, a):
+    doc, sec = a.get("doc"), a.get("section")
+    rs = [r for r in M.reqs if r.notes.get("doc") == doc and (not sec or r.notes.get("section") == sec)]
+    if not rs:
+        return "No requirement in this section."
+    out, group = [], None
+    level = int(a.get("level", "4"))
+    for r in rs:
+        g = r.notes.get("group", "")
+        if g != group and a.get("groups", "yes") == "yes":
+            out.append("**%s**\n" % md_escape(g))
+            group = g
+        out.append(req_block(M, r, level))
+    return "\n".join(out)
+
+
+def h_validation_matrix(M, a):
+    doc = a.get("doc")
+    rows = []
+    for r in M.reqs:
+        if doc and r.notes.get("doc") != doc:
+            continue
+        cs = sorted(set(M.cases_of.get(r.id, [])))
+        rows.append([rref(r.id), md_escape(r.title), ECSS_METHOD.get(r.method, r.method),
+                     ", ".join(cref(c) for c in cs) or "**none**", status_word(M.req_status[r.id])])
+    return table(["Requirement", "Title", "Method", "Validation (cases)", "Status"], rows, "Validation matrix%s" % ((" of the " + doc) if doc else ""))
+
+
+def h_upward_trace(M, a):
+    doc = a.get("doc")
+    rs = [r for r in M.reqs if r.notes.get("doc") == doc]
+    fwd = {}
+    for r in rs:
+        for src in [s.strip() for s in re.split(r";", r.source_ref) if s.strip()]:
+            fwd.setdefault(src, []).append(r.id)
+    f_rows = [[md_escape(s), ", ".join(rref(i) for i in ids)] for s, ids in sorted(fwd.items())]
+    b_rows = [[rref(r.id), md_escape(r.source_ref)] for r in rs]
+    return ("Forward: upper-level source to requirement.\n\n" + table(["Upper-level source", "Requirements"], f_rows, "Upper-level source to requirement") +
+            "\n\nBackward: requirement to upper-level source.\n\n" + table(["Requirement", "Upper-level source"], b_rows, "Requirement to upper-level source"))
+
+
+def h_reqtable(M, a):
+    rows = [[rref(r.id), md_escape(r.title), r.notes.get("doc", ""), r.notes.get("section", ""), ECSS_METHOD.get(r.method, r.method),
+             r.status, status_word(M.req_status[r.id])] for r in M.reqs]
+    return table(["Requirement", "Title", "Doc", "Section", "Method", "Status", "Verification"], rows, "Requirements")
+
+
+def h_components(M, a):
+    out = []
+    members = {m["name"]: m for m in getattr(M, "members", [])}
+    for c in sorted(M.comps, key=lambda c: c.id):
+        g = c.notes.get("group", "")
+        syms = sorted([s for s in M.symbols.values() if s["group"] == g], key=lambda s: (s["kind"], s["name"]))
+        funcs = [s for s in syms if s["kind"] == "function"]
+        data = [s for s in syms if s["kind"] in ("variable", "macro", "typedef")]
+        reqs = sorted(set(M.reqs_of_comp.get(c.id, [])))
+        deps = set()
+        for s in funcs:
+            for r in members.get(s["name"], {}).get("refs", []):
+                o = M.symbols.get(r, {}).get("group")
+                if o and o != g:
+                    deps.add(o)
+        dep_txt = ", ".join('\\ref %s "%s"' % (anchor("cmp_" + M.group_comp.get(d, d)), md_escape(M.by_id.get(M.group_comp.get(d, ""),
+                                                                                                          Art({}, "")).title or d))
+                            for d in sorted(deps)) or "none"
+
+        def sig(s):
+            m = members.get(s["name"])
+            return "`%s %s%s`" % (m["type"], s["name"], m["args"]) if m and m["kind"] == "function" else "%s()" % s["name"]
+        out += ["#### %s %s {#%s}" % (c.id, md_escape(c.title), anchor("cmp_" + c.id)), "",
+                "- Identifier: %s (doxygen group \\ref %s)" % (c.id, g),
+                "- Type: %s; development: %s" % (md_escape(c.notes.get("type", "")), md_escape(c.notes.get("development", ""))),
+                "- Purpose: %s Requirements: %s" % (md_escape(c.body), ", ".join(rref(r) for r in reqs) or "-"),
+                "- Function: %s" % md_escape(c.rationale),
+                "- Subordinates: %s" % (", ".join("%s()" % s["name"] for s in funcs) or "none"),
+                "- Dependencies: %s" % dep_txt,
+                "- Interfaces: %s" % ("; ".join(sig(s) for s in funcs) or "data only"),
+                "- Resources: static storage only (see `Data`); no allocation, no file descriptor except the built-in RNG's transient one",
+                "- References: %s" % md_escape(c.source_ref),
+                "- Data: %s" % (", ".join("`%s`" % s["name"] for s in data) or "none")] + \
+               (["- Shaped by the design decisions: %s" % ", ".join(dec_ref(x) for x in sorted(M.decisions_of[c.id]))] if M.decisions_of.get(c.id) else []) + [""]
+    return "\n".join(out)
+
+
+def h_allocation(M, a):
+    rows = []
+    for r in M.reqs:
+        comps = sorted(set(M.comps_of.get(r.id, [])))
+        syms = M.symbols_of.get(r.id, [])
+        rows.append([rref(r.id), ", ".join(comp_ref(M, c) for c in comps) or "-",
+                     ", ".join("`%s`" % s["name"] for s in syms) or "-"])
+    back = []
+    for c in sorted(M.comps, key=lambda c: c.id):
+        back.append([comp_ref(M, c.id), ", ".join(rref(r) for r in sorted(set(M.reqs_of_comp.get(c.id, [])))) or "-"])
+    return ("Forward: requirement to component and code element (from the `@satisfies` tags of the code).\n\n" +
+            table(["Requirement", "Components", "Code elements"], rows, "Requirement to component and code element") + "\n\nBackward: component to requirements.\n\n" +
+            table(["Component", "Requirements"], back, "Component to requirements"))
+
+
+def h_diagram(M, a):
+    M.placed.add(a["name"])
+    return diagram_md(M, a["name"], a.get("caption"))
+
+
+def h_scenarios(M, a):
+    """The scenario tests as tutorial steps: a scenario whose figure this document already shows is cited, any other is shown."""
+    out = []
+    for t in [t for t in M.tests if t["suite"] == "SD"]:
+        cited = t["name"] in M.placed
+        out += ["#### %s" % md_escape(t["brief"].rstrip(".")), "",
+                "Test %s (%s), verifies %s; result: %s%s." % (cref(t["id"]), "%s()" % t["name"], ", ".join(rref(r) for r in t["verifies"]),
+                                                               verdict_word(M.result.get(t["id"], {}).get("verdict", "not-run")),
+                                                               ("; the recorded run: {{fig:%s}}" % t["name"]) if cited else ""), ""]
+        if not cited:
+            M.placed.add(t["name"])
+            out += [diagram_md(M, t["name"]), ""]
+    return "\n".join(out)
+
+
+def h_scenario_results(M, a):
+    """Each scenario run with its result and its recorded sequence diagram in the SVS."""
+    rows = [[cref(t["id"]), md_escape(t["brief"].split(":")[0]), ", ".join(rref(r) for r in t["verifies"]),
+             verdict_word(M.result.get(t["id"], {}).get("verdict", "not-run")), "{{fig:SVS:%s}}" % t["name"]]
+            for t in M.tests if t["suite"] == "SD"]
+    return table(["Case", "Scenario", "Verifies", "Result", "Recorded run"], rows, "Scenario runs and their sequence diagrams")
+
+
+def h_testcases(M, a):
+    """The test cases of the SVS (Annex L <7.2>): the C cases share one specification (inputs, outputs, pass-fail, environment,
+    constraints, dependencies), stated once; each case gives its purpose, items, requirements and result, a scenario its figure."""
+    suites = a.get("suites", "IT,SD,PL,PK,ST").split(",")
+    test_by_id = {t["id"]: t for t in M.tests}
+    out = ["Table: Common specification of the C test cases {#svs_common}", "", table(["Field", "Every C test case (suites it and plantuml)"], [
+        ["Inputs", "the clock, RNG callback and imported identifiers the test sets up, deterministic through the test seams unless the case "
+                   "is about the real clock or the built-in RNG; the exact values are in the test source the case names"],
+        ["Outputs", "return codes and decoded identifier fields, asserted by the test"],
+        ["Pass-fail", "every assertion holds and the executable exits 0 in every cell"],
+        ["Environment", "the suite executable (`it` or `plantuml`), linked against libuuid7 built with -DUUID7_TESTING, in every cell "
+                        "(6 profiles x static/shared, then the coverage build)"],
+        ["Constraints", "none: deterministic; the real clock or entropy only where the case says so"],
+        ["Dependencies", "none: each case resets the generator first"]]), "",
+        "Each C case below follows {{tab:svs_common}}; the other cases state their own.", ""]
+    for c in sorted(M.cases, key=lambda c: c.id):
+        t = test_by_id.get(c.id)
+        suite = t["suite"] if t else c.id.split("-")[2]
+        if c.method != "test" or suite not in suites:
+            continue
+        reqs = sorted(set(M.reqs_of_case.get(c.id, [])))
+        res = M.result.get(c.id, {})
+        result = "- Result: %s — %s" % (verdict_word(res.get("verdict", "not-run")), md_escape(res.get("detail", "")))
+        if t and t["exe"]:
+            out += ["#### %s {#%s}" % (c.id, anchor("tc_" + c.id)), "",
+                    "- Purpose: %s" % md_escape(t["brief"] + (" " + t["detail"] if t["detail"] else "")),
+                    "- Test items: `%s` (%s:%d); requirements: %s" % (t["name"], t["file"], t["line"], ", ".join(rref(r) for r in reqs) or "-"),
+                    result, ""]
+            if t["suite"] == "SD":
+                M.placed.add(t["name"])
+                out += [diagram_md(M, t["name"]), ""]
+            continue
+        items = ("`%s` (%s:%d)" % (t["name"], t["file"], t["line"])) if t else md_escape(c.source_ref)
+        env = md_escape(c.body) if t else "the pipeline host (SValP <7>)"
+        out += ["#### %s %s {#%s}" % (c.id, md_escape(c.title), anchor("tc_" + c.id)), "",
+                "- Purpose: %s" % md_escape(c.title if not t else (t["brief"] + (" " + t["detail"] if t["detail"] else ""))),
+                "- Test items: %s; requirements: %s" % (items, ", ".join(rref(r) for r in reqs) or "-"),
+                "- Inputs: %s" % md_escape(c.body), "- Outputs: %s" % md_escape(c.criteria),
+                "- Pass-fail: %s" % md_escape(c.criteria), "- Environment: %s" % env,
+                "- Constraints: runs after the stages it reads", "- Dependencies: the pipeline stages named above", result, ""]
+    return "\n".join(out)
+
+
+def h_noncases(M, a):
+    out = []
+    for c in sorted(M.cases, key=lambda c: c.id):
+        if c.method == "test":
+            continue
+        reqs = sorted(set(M.reqs_of_case.get(c.id, [])))
+        res = M.result.get(c.id, {})
+        ev = res.get("evidence")
+        out += ["%s %s %s {#%s}" % ("#" * int(a.get("level", "3")), c.id, md_escape(c.title), anchor("tc_" + c.id)), "",
+                "- Method: %s (%s)%s" % (ECSS_METHOD.get(c.method, c.method), c.method,
+                                         " — automated by ecss/make.sh" if c.notes.get("check") else " — recorded"),
+                "- Requirements: %s" % (", ".join(rref(r) for r in reqs) or "-"),
+                "- Procedure: %s" % md_escape(c.body), "- Item: %s" % md_escape(c.source_ref),
+                "- Criteria: %s" % md_escape(c.criteria),
+                "- Result: %s — %s%s" % (verdict_word(res.get("verdict", "not-run")), md_escape(res.get("detail", "")),
+                                         (' (<a href="%s">evidence</a>)' % ev) if ev else ""), ""]
+    return "\n".join(out)
+
+
+def h_case_matrix(M, a):
+    rows = []
+    for c in sorted(M.cases, key=lambda c: c.id):
+        r = M.result.get(c.id, {})
+        row = [cref(c.id), md_escape(c.title), ECSS_METHOD.get(c.method, c.method),
+               ", ".join(rref(x) for x in sorted(set(M.reqs_of_case.get(c.id, [])))) or "-", verdict_word(r.get("verdict", "not-run"))]
+        if M.rms:
+            v = r.get("rms")
+            row.append(("%s (%s)" % (v["result"] or "none", datetime.datetime.fromtimestamp(int(v["at_ms"]) / 1000).strftime("%Y-%m-%d"))
+                        if v.get("at_ms") else v["result"] or "none") if v else "not recorded")
+        rows.append(row)
+    return table(["Case", "Title", "Method", "Requirements", "Result (this run)"] + (["Latest rms result"] if M.rms else []), rows,
+                 "Verification cases, their requirements and results")
+
+
+def h_results_cells(M, a):
+    cells = sorted({cell for v in M.cmocka.values() for cell in v})
+    out = []
+    for exe, label in (("it", "Integration suite (tests/ITs)"), ("plantuml", "Scenario suite (tests/plantuml)")):
+        tests = sorted({t for (e, t) in M.cmocka if e == exe})
+        if not tests:
+            out.append("%s: no log (the suite did not run)." % label)
+            continue
+        rows = []
+        for cell in cells:
+            vs = [M.cmocka[(exe, t)].get(cell) for t in tests]
+            n_ok = sum(1 for v in vs if v == "passed")
+            n_bad = sum(1 for v in vs if v == "failed")
+            rows.append([cell, len([v for v in vs if v]), n_ok, n_bad,
+                         '<a href="evidence/logs/%s/%s.txt">log</a>' % (cell if cell != "coverage" else ".", exe)])
+        out += ["**%s**: %d test cases.\n" % (label, len(tests)), table(["Cell (profile/linkage)", "Run", "Passed", "Failed", "Log"], rows, label + " per cell"), ""]
+    return "\n".join(out)
+
+
+def h_results_tests(M, a):
+    rows = []
+    for t in M.tests:
+        if not t["exe"]:
+            continue
+        r = M.result.get(t["id"], {})
+        rows.append([cref(t["id"]), "%s()" % t["name"], ", ".join(rref(x) for x in t["verifies"]), verdict_word(r.get("verdict", "not-run")),
+                     md_escape(r.get("detail", ""))])
+    return table(["Case", "Function", "Verifies", "Result", "Detail"], rows, "Results per test case")
+
+
+def h_req_results(M, a):
+    rows = []
+    for r in M.reqs:
+        cs = sorted(set(M.cases_of.get(r.id, [])))
+        rows.append([rref(r.id), ECSS_METHOD.get(r.method, r.method),
+                     ", ".join("%s %s" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in cs) or "-",
+                     status_word(M.req_status[r.id])])
+    return table(["Requirement", "Method", "Cases and results", "Status"], rows, "Results per requirement")
+
+
+def h_trace_matrix(M, a):
+    rows = []
+    for r in M.reqs:
+        comps = sorted(set(M.comps_of.get(r.id, [])))
+        syms = M.symbols_of.get(r.id, [])
+        cs = sorted(set(M.cases_of.get(r.id, [])))
+        verdicts = collections.Counter(verdict_word(M.result.get(c, {}).get("verdict", "not-run")) for c in cs)
+        rows.append([rref(r.id), ", ".join(comp_ref(M, c) for c in comps) or "-",
+                     ", ".join("`%s`" % s["name"] for s in syms) or "-", ", ".join(cref(c) for c in cs) or "**none**",
+                     ", ".join("%d %s" % (n, v) for v, n in sorted(verdicts.items())) or "-",
+                     status_word(M.req_status[r.id])])
+    return table(["Requirement", "Design element", "Code", "Verification", "Results", "Status"], rows,
+                 "Requirement to design, code, verification and result")
+
+
+def h_gaps(M, a):
+    gaps = [r for r in M.reqs if M.req_status[r.id] != "verified"]
+    unref = [c for c in M.cases if not M.reqs_of_case.get(c.id)]
+    out = []
+    if not gaps:
+        out.append("Every requirement is verified: each has at least one case and every case passed.")
+    else:
+        out.append(table(["Requirement", "Status"], [[rref(r.id), status_word(M.req_status[r.id])] for r in gaps], "Requirements not verified"))
+    if unref:
+        out.append("\nCases that verify no requirement: " + ", ".join(cref(c.id) for c in unref) + ".")
+    if M.doc_drift:
+        out.append("\nDocuments of the register (ecss/documents.csv) absent from the rms export, produced anyway: " +
+                   ", ".join(M.doc_drift) + ".")
+    if M.drift:
+        out.append("\nRepository links absent from the rms export (re-run the loader): " +
+                   "; ".join("%s %s %s" % l[:3] for l in M.drift[:40]) + ("…" if len(M.drift) > 40 else ""))
+    return "\n".join(out)
+
+
+def h_summary(M, a):
+    n = len(M.reqs)
+    by = {}
+    for r in M.reqs:
+        by[M.req_status[r.id]] = by.get(M.req_status[r.id], 0) + 1
+    v = {}
+    for c in M.cases:
+        x = M.result.get(c.id, {}).get("verdict", "not-run")
+        v[x] = v.get(x, 0) + 1
+    return table(["Measure", "Value"], [
+        ["Requirements", "%d (%d SRS, %d ICD interface items); %d superseded or obsolete" % (
+            n, len([r for r in M.reqs if r.notes.get("doc") == "SRS"]), len([r for r in M.reqs if r.notes.get("doc") == "ICD"]),
+            len(M.retired))],
+        ["Verified", by.get("verified", 0)], ["Failed", by.get("failed", 0)], ["Not run", by.get("not run", 0)],
+        ["Without a case", by.get("no case", 0)],
+        ["Verification cases", "%d (%s)" % (len(M.cases), ", ".join("%d %s" % (k2, k) for k, k2 in sorted(v.items())))],
+        ["Coverage of app/uuid7.c", "statement %.1f %%, decision %.1f %%" % (M.coverage.get("line_percent", 0),
+                                                                           M.coverage.get("branch_percent", 0)) if M.coverage else "not run"],
+        ["Pipeline", ("GREEN" if M.green else "**not green**") if M.pipeline_ran else "not run in this refresh"]], "Verification status")
+
+
+def h_pipeline(M, a):
+    if not M.stages:
+        return "The pipeline did not run in this refresh (ecss/make.sh --docs-only)."
+    rows = [[s, {"ok": "ok", "FAIL": "**FAIL**", "SKIP": "skipped"}[v], md_escape(why)] for s, (v, why) in M.stages.items()]
+    return table(["Stage", "Result", "Note"], rows, "Pipeline stages of this refresh") + '\n\nLog: <a href="evidence/pipeline.txt">pipeline.txt</a>.'
+
+
+def h_install(M, a):
+    rows = [[st, {"ok": "ok", "FAIL": "**FAIL**", "SKIP": "skipped"}[M.stages[st][0]] if st in M.stages else "not run"]
+            for st in ("package", "package-smoke")]
+    log = read(os.path.join(ROOT, "build", "pipeline", "package-smoke.log")).strip().splitlines()
+    return (table(["Stage", "Result"], rows, "Packaging and installation stages") + "\n\nLast line of the smoke test: `%s`." % (md_escape(log[-1]) if log else "no log"))
+
+
+def h_coverage(M, a):
+    if not M.coverage:
+        return "No coverage run in this refresh."
+    c = M.coverage
+    return (table(["Measure", "Covered", "Total", "Percent", "Target proposed (SPAP <5.5>)"], [
+        ["Statements (lines)", c.get("line_covered"), c.get("line_total"), "%.1f %%" % c.get("line_percent", 0), ">= 80 %"],
+        ["Decisions (branches)", c.get("branch_covered"), c.get("branch_total"), "%.1f %%" % c.get("branch_percent", 0), ">= 65 %"],
+        ["Functions", c.get("function_covered"), c.get("function_total"), "%.1f %%" % c.get("function_percent", 0), "-"]],
+        "Structural coverage of app/uuid7.c") +
+        "\n\nUncovered lines of app/uuid7.c: %s. They are the clock-failure path and the entropy fallback, which the test seams "
+        "cannot reach (they bypass clock_gettime() and the built-in RNG's syscalls), and the lost race of the lazy RNG installation; "
+        "%s, %s and %s cover them by inspection and analysis (ECSS-E-ST-40 5.8.3.5d). Report: "
+        '<a href="evidence/coverage/ITs_coverage.html">gcovr HTML</a>.' % (md_escape(M.uncovered), cref("UUID7-IN-001"),
+                                                                       cref("UUID7-IN-002"), cref("UUID7-AN-012")))
+
+
+RMS_CRITICALITY = [
+    ("none", "no rule beyond the lifecycle"),
+    ("low", "no rule beyond the lifecycle"),
+    ("medium", "no rule beyond the lifecycle"),
+    ("high", "two different approvers before the item is approved (kyr_rms workflow)"),
+    ("safety", "two different approvers; it marks a safety function, which category D excludes (\\ref UUID7_DOC_TAILORING \"tailoring\" <3>)"),
+]
+
+
+def h_criticality(M, a):
+    """The one mapping between the rms criticality field and the ECSS software criticality category, with the items of this
+    project counted by both."""
+    count = collections.Counter((x.criticality or "not set", x.applicability or "-") for x in M.reqs if x.kind == "requirement")
+    rows = []
+    for level, rule in RMS_CRITICALITY:
+        n = {cat: v for (lv, cat), v in count.items() if lv == level}
+        rows.append([level, rule, "none: an rms level never sets or changes the ECSS category", ", ".join(
+            "%d of category %s" % (v, c) for c, v in sorted(n.items())) or "0"])
+    if any(lv == "not set" for lv, _ in count):
+        rows.append(["not set", "the CSV import carries no criticality column", "-", ", ".join(
+            "%d of category %s" % (v, c) for (lv, c), v in sorted(count.items()) if lv == "not set")])
+    bad = [x.id for x in M.reqs if x.criticality == "safety"]
+    return ("Two scales, one mapping. The ECSS software criticality category (A to D, ECSS-Q-ST-80 Table D-1) belongs to the software "
+            "product and follows from the consequences of its failure (<3>): every item here is category D, in the `applicability` "
+            "field. The rms `criticality` field is a workflow priority of kyr_rms that decides how many approvers an item needs; it "
+            "is not an ECSS category and maps to none:\n\n" +
+            table(["rms criticality", "What it does in the rms", "ECSS category it maps to", "Requirements here"], rows,
+                  "rms criticality and ECSS category") +
+            "\n\nAn item whose failure could reach the consequences of a category above D would reclassify the software (<3>), not "
+            "raise an rms level. %s" % (("**Inconsistent: %s carry rms criticality safety in a category D product.**" % ", ".join(bad))
+                                        if bad else "No item carries rms criticality safety."))
+
+
+def tool_version(M, spec):
+    kind, _, name = spec.partition(":")
+    if kind == "toolchain":
+        v = M.toolchain.get(name, "")
+        if name == "environment":
+            return ("release root %s" % v.split()[-1][:16]) if v.startswith("release root") else (v or "not recorded")
+        return (v + (" (release root)" if M.in_root else " (host)")) if v else "not recorded"
+    if kind == "pin":
+        pin = [l.split() for l in read(os.path.join(ROOT, "deps.txt")).splitlines() if l.startswith("own") and len(l.split()) > 4
+               and l.split()[1] == name]
+        return ("%s (sha256 %s…)" % (pin[0][2], pin[0][4][:12])) if pin else "not pinned"
+    if kind == "rms":
+        if M.mode != "rms":
+            return "no export in this refresh"
+        return ("%s; " % M.rms["producer"] if M.rms["producer"] else "version not carried by the export; ") + \
+            "package format %s, export sha256 %s…" % (M.rms["format"], M.rms["sha256"][:12])
+    if name == "python3":
+        return sys.version.split()[0] + " (workstation)"
+    if name == "doxygen":
+        return (tool(["doxygen", "--version"]).strip() or "-") + " (workstation)"
+    if name == "graphviz":
+        return (re.findall(r"version (\S+)", tool(["dot", "-V"])) or ["-"])[0] + " (workstation)"
+    if name == "plantuml":
+        return (re.sub(r"^PlantUML ", "", M.render_tool) + " (workstation)") if M.render_tool else M.render_note
+    if name == "git":
+        return (tool(["git", "--version"]).split() or ["-"])[-1] + " (workstation)"
+    return "-"
+
+
+def h_tools(M, a):
+    """The tools and reused software of the life cycle with their version in this refresh, use, prior use and how their output
+    is checked (ECSS-Q-ST-80 5.6.1, 5.6.2; ECSS-E-ST-40 SDP <5.4>)."""
+    path = os.path.join(ECSS, "PAF", "tools.csv")
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    cols = a.get("columns", "tool,version,class,use,prior_use,output_checked_by,availability").split(",")
+    head = {"tool": "Tool", "version": "Version in this refresh", "class": "Class", "use": "Use", "prior_use": "Prior use (5.6.1.1)",
+            "output_checked_by": "How its output is checked (5.6.1.3)", "availability": "Availability (5.6.1.2)"}
+    body = [[md_escape(tool_version(M, r["version"])) if c == "version" else
+             (defn(tool_anchor(r["tool"]), md_escape(r[c])) if c == "tool" and a.get("anchors") == "yes" else md_escape(r[c])) for c in cols]
+            for r in rows]
+    return "Source: `ecss/PAF/tools.csv`.\n\n" + table([head[c] for c in cols], body, "Tools and reused software")
+
+
+def stack_usage():
+    """{function: (bytes, qualifier)} from the gcc -fstack-usage file of the release build (evidence/stack)."""
+    out = {}
+    for line in read(os.path.join(EVID, "stack", "uuid7.su")).splitlines():
+        f = line.split("\t")
+        if len(f) == 3:
+            out[f[0].rsplit(":", 1)[-1]] = (int(f[1]), f[2])
+    return out
+
+
+def call_graph():
+    """{function: [the functions of app/uuid7.c it calls or references]}, from the source: a function whose address is passed (the
+    built-in entropy source) counts as called."""
+    src = read(os.path.join(ROOT, "app", "uuid7.c"))
+    defs = list(re.finditer(r"^[A-Za-z_][^\n;=]*?\b(\w+)\([^;{]*?\)\s*\n\{\n(.*?)\n\}$", src, re.M | re.S))
+    names = {m.group(1) for m in defs}
+    code = {m.group(1): re.sub(r"/\*.*?\*/|//[^\n]*", " ", m.group(2), flags=re.S) for m in defs}
+    return {f: sorted(n for n in set(re.findall(r"\b\w+\b", body)) & names if n != f) for f, body in code.items()}
+
+
+def stack_worst(fn, su, graph, seen=()):
+    """The deepest stack under and including fn: its own frame plus the deepest of what it calls (inline helpers have no frame)."""
+    if fn in seen:
+        return 0
+    return su.get(fn, (0, ""))[0] + max([stack_worst(c, su, graph, seen + (fn,)) for c in graph.get(fn, [])] or [0])
+
+
+def h_budgets(M, a):
+    fp = M.checks.get("footprint", {})
+    size = read(os.path.join(EVID, "footprint.txt"))
+    m = re.search(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+\w+\s+\S+$", size, re.M)
+    text_b, data_b, bss_b = (m.group(1), m.group(2), m.group(3)) if m else ("?", "?", "?")
+    stress = [r for r in M.stress if r["linkage"] == "static"]
+    rows = [[r["profile"], r["bench"], r["status"], r["cost"], r["rate"]] for r in stress]
+    margin = "not measured in this refresh"
+    margin_short = "-"
+    m2 = re.search(r"mean ([0-9.]+) ns", M.checks.get("stress_budget", {}).get("detail", ""))
+    if m2:
+        cost = float(m2.group(1))
+        margin_short = "%.1f ns (%.0f %%)" % (100.0 - cost, 100.0 - cost)
+        margin = "%.1f ns measured against the 100 ns budget of UUID7-SRS-040: a margin of %.1f ns (%.0f %%)" % (cost, 100.0 - cost,
+                                                                                                             100.0 - cost)
+    su = stack_usage()
+    graph = call_graph()
+    pub = sorted(n for n in su if n.startswith("uuid7_"))
+    stack_rows = [["%s()" % n, su[n][0], stack_worst(n, su, graph), su[n][1]] for n in pub]
+    deepest = max([r[2] for r in stack_rows] or [0])
+    dynamic = [n for n, (_, q) in su.items() if q != "static"]
+    st = "%s" % (("worst case %d B per call (%s)" % (deepest, "all frames static" if not dynamic else "**dynamic frames: %s**" %
+                                                     ", ".join(dynamic))) if su else "not measured in this refresh")
+    fp_sum = sum(int(x) for x in re.findall(r"(\d+) B", fp.get("detail", ""))) if fp.get("verdict") else None
+    def margin_of(used, budget):
+        return "%d B (%.0f %%)" % (budget - used, 100.0 * (budget - used) / budget)
+    budget_rows = [
+        ["Static data", rref("UUID7-SRS-050"), "24 B", ("%d B" % fp_sum) if fp_sum is not None else "not measured",
+         ("%d B" % (24 - fp_sum)) if fp_sum is not None else "-"],
+        ["Heap", rref("UUID7-SRS-051"), "0 B", M.checks.get("no_alloc", {}).get("detail", "not measured"), "-"],
+        ["Generation cost (release, one thread, entropy source excluded)", rref("UUID7-SRS-040"), "100 ns",
+         (m2.group(1) + " ns") if m2 else "not measured", margin_short],
+        ["Stack per call", rref("UUID7-SRS-053"), "%d B" % STACK_BUDGET, st, margin_of(deepest, STACK_BUDGET) if su else "-"],
+        ["Code (.text of the release object)", rref("UUID7-SRS-054"), "%d B" % CODE_BUDGET, "%s B" % text_b,
+         margin_of(int(text_b), CODE_BUDGET) if text_b.isdigit() else "-"]]
+    return ("Budgets and margins of this refresh, measured in the evidence's environment (%s):\n\n" % md_escape(M.env_text) +
+            table(["Budget", "Requirement", "Budget value", "Measured", "Margin"], budget_rows, "Technical budgets and margins") +
+            "\n\nEach budget is a requirement verified at every refresh by its case (%s, %s, %s, %s, %s), whose result the rms "
+            "records at the reviews.\n\n"
+            "Memory (release object app__uuid7.c.o): code %s B, initialised data %s B, static data %s B (%s). No heap, no "
+            "thread-local storage.\n\nStack (`gcc -fstack-usage` on the release build; the worst case follows the references between "
+            "the functions, the callback counted as the built-in RNG; the C library's own frames are not counted):\n\n%s\n\n"
+            "Processing (tests/stress, static linkage). `stress`: one thread, cost in ns per identifier, rate in identifiers per "
+            "second. `stress_mt`: 10 threads on one reservation word, cost per identifier per thread under contention, aggregate "
+            "rate.\n\n%s\n\nRelease single-thread: %s." %
+            (cref("UUID7-AN-003"), cref("UUID7-AN-001"), cref("UUID7-TC-ST-stress"), cref("UUID7-AN-013"), cref("UUID7-AN-014"),
+             text_b, data_b, bss_b, md_escape(fp.get("detail", "not measured")),
+             table(["Function", "Own frame (B)", "Worst case (B)", "Kind"], stack_rows, "Stack per public function") if stack_rows else "not measured in this refresh",
+             table(["Profile", "Benchmark", "Status", "Cost", "Rate"], rows, "Generation cost and rate") if rows else "no stress run in this refresh", margin))
+
+
+def h_checks(M, a):
+    rows = [[k, verdict_word(v["verdict"]), md_escape(v["detail"]), '<a href="%s">evidence</a>' % v["evidence"] if v.get("evidence") else "-"]
+            for k, v in sorted(M.checks.items())]
+    return table(["Check", "Result", "Detail", "Evidence"], rows, "Automated analyses and checks")
+
+
+def h_doc_plan(M, a):
+    rows = []
+    for d in M.docs:
+        if d.applicability == "N":
+            continue
+        rows.append([d.notes.get("file", ""), dref(d.id, M), md_escape(d.notes.get("drd", "-")),
+                     d.notes.get("reviews", "").replace(",", ", "), "reviewed at those milestones (SRevP)",
+                     "approved by the maintainer at the review; status in the rms"])
+    return table(["File", "Document", "DRD", "Delivered at", "Review", "Approval"], rows, "Documentation plan")
+
+
+def h_drl(M, a):
+    rows = []
+    for f, _ in FILES:
+        for d in [d for d in M.docs if d.notes.get("file") == f]:
+            rows.append([f, defn(anchor("drl_" + d.id), md_escape(d.title)), md_escape(d.notes.get("drd", "-")), d.notes.get("reviews", "").replace(",", ", "),
+                         ("produced: " + dref(d.id, M)) if d.applicability != "N" else "tailored out",
+                         md_escape(d.rationale)])
+    return table(["File", "DRL item", "DRD", "Reviews", "Disposition", "Clause / justification"], rows,
+                 "Disposition of the document requirements list")
+
+
+def h_review_docs(M, a):
+    rv = a.get("review")
+    docs = [d for d in M.docs if rv in d.notes.get("reviews", "").split(",")]
+    rows = [[d.notes.get("file", ""), dref(d.id, M), "produced" if d.applicability != "N" else "tailored out", d.status] for d in docs]
+    return table(["File", "Document", "Disposition", "Status"], rows, "Data package of the %s" % rv)
+
+
+def ms_time(ms, fmt="%Y-%m-%d %H:%M:%S"):
+    return datetime.datetime.fromtimestamp(ms / 1000).strftime(fmt) if ms else "-"
+
+
+def who(actor):
+    return md_escape(actor) if actor else "**unrecorded**"
+
+
+# A review recorded as opened and closed within this many seconds was not held by people: no meeting reads a data package,
+# raises and dispositions RIDs that fast. The JRR states the measured time with the verdict.
+SCRIPTED_REVIEW_S = 600
+
+
+def cast_declared(M):
+    """The rms project's own statement that its cast is scripted (its name or description), or ""."""
+    p = M.rms["project"] if M.rms else {}
+    text = "%s %s" % (p.get("name", ""), p.get("description", ""))
+    return text.strip() if "scripted" in text.lower() else ""
+
+
+def review_facts(M, rv):
+    """What the rms export says about one review: its revisions, opening and closing, the baseline, the RIDs, the actors, and
+    whether the record shows a scripted cast (the project says so, or the review was opened and closed in under
+    SCRIPTED_REVIEW_S)."""
+    a = M.by_id.get("UUID7-REV-" + rv)
+    revs = a.revs if a else []
+    opened = next((r for r in revs if r["status"] == "in-review"), None)
+    closed = next((r for r in revs if opened and r["at_ms"] >= opened["at_ms"] and r["status"] in ("approved", "needs-rework", "rejected")), None)
+    bl = [x for x in M.baselines if x["name"].upper().replace("-", "") == rv]
+    b = bl[-1] if bl else None
+    rids = sorted([x for x in M.arts if x.kind == "review-comment" and x.id.startswith("UUID7-RID-%s-" % rv)], key=lambda x: x.id)
+    actors = [r["by"] for r in revs if opened and r["at_ms"] >= opened["at_ms"]] + [r["by"] for x in rids for r in x.revs]
+    if b:
+        actors += [b["by"]] + ([b["approved_by"]] if b["approval_exported"] else [])
+    seconds = (closed["at_ms"] - opened["at_ms"]) / 1000.0 if opened and closed else None
+    declared = cast_declared(M)
+    scripted = bool(declared) or (seconds is not None and seconds < SCRIPTED_REVIEW_S)
+    return {"art": a, "revs": revs, "opened": opened, "closed": closed, "baseline": b, "rids": rids, "seconds": seconds,
+            "held": bool(closed and closed["status"] == "approved"), "scripted": scripted, "declared": declared,
+            "named": sorted({x for x in actors if x}), "unnamed": len([x for x in actors if not x])}
+
+
+def review_status(M, rv):
+    f = review_facts(M, rv)
+    a, b = f["art"], f["baseline"]
+    if f["held"] or b:
+        cast = " (scripted cast, \\ref UUID7_DOC_JRR \"JRR\")" if f["scripted"] else ""
+        txt = "recorded in the rms%s: closed %s by %s" % (cast, ms_time(f["closed"]["at_ms"], "%Y-%m-%d") if f["closed"] else "-",
+                                                          who(f["closed"]["by"]) if f["closed"] else "-")
+        if b:
+            txt += "; baseline %s frozen by %s, %d members" % (md_escape(b["name"]), who(b["by"]), b["members"])
+        return txt
+    if a:
+        return "not held (%s%s); no rms baseline" % (a.status, (", rms revision %s" % a.revision) if a.revision else "")
+    return "not planned"
+
+
+def load_open_items():
+    path = os.path.join(ECSS, "MGT", "open_items.csv")
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def open_claims(M, place):
+    out = []
+    for o in M.open_items:
+        if o.get("status") == "open" and o.get("claim", "").startswith(place + ":"):
+            out.append((o["claim"].split(":", 1)[1].strip(), o["id"]))
+    return out
+
+
+def claim(M):
+    """The package's claim, from its own facts: the verification of this refresh, the open items of the SDP <4.6>, the rms
+    record of the reviews, the AR. Returns (sentence, [(phrase, basis)])."""
+    basis = []
+    n_ver = len([r for r in M.reqs if M.req_status[r.id] == "verified"])
+    green = M.green if M.pipeline_ran else False
+    if n_ver == len(M.reqs) and M.reqs and green:
+        basis.append(("documented and self-verified after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D",
+                      "%d of %d requirements verified; pipeline GREEN; evidence of commit %s (%s) in %s; every verification performed "
+                      "by the developer" % (n_ver, len(M.reqs), M.ev_commit[:12] or "?", M.ev.get("state", "?"), md_escape(M.env_text))))
+    else:
+        basis.append(("documented after ECSS-E-ST-40C Rev.1 / ECSS-Q-ST-80C Rev.2 at software criticality category D, self-verification "
+                      "incomplete", "%d of %d requirements verified; pipeline %s" % (n_ver, len(M.reqs), (
+                          "GREEN" if green else "not green") if M.pipeline_ran else "not run in this refresh")))
+    for phrase, oi in open_claims(M, "scope"):
+        basis.append((phrase, "open item %s" % oi))
+    facts = [review_facts(M, rv) for rv in REVIEWS]
+    held = [(rv, f) for rv, f in zip(REVIEWS, facts) if f["held"] or f["baseline"]]
+    if M.mode != "rms":
+        basis.append(("no review recorded", "no rms export: the reviews live in the rms"))
+    elif not held:
+        basis.append(("no review held", "the rms export records no closed review"))
+    elif any(f["scripted"] for _, f in held):
+        sec = ", ".join("%s %.1f s" % (rv, f["seconds"]) for rv, f in held if f["seconds"] is not None)
+        basis.append(("the review workflow demonstrated in kyr rms with a scripted cast",
+                      "%s recorded in the rms export; %s" % (", ".join(rv for rv, _ in held),
+                                                            ("the project declares it: '%s'" % facts[0]["declared"]) if facts[0]["declared"]
+                                                            else "opened to closed: " + sec)))
+    else:
+        basis.append(("reviews %s recorded in kyr rms" % ", ".join(rv for rv, _ in held), "the rms export, \\ref UUID7_DOC_JRR \"JRR\""))
+    for phrase, oi in open_claims(M, "review"):
+        basis.append((phrase, "open item %s" % oi))
+    ar = facts[REVIEWS.index("AR")]
+    if ar["held"] and ar["baseline"] and not ar["scripted"]:
+        basis.append(("accepted at the AR", "AR closed and baseline %s frozen in the rms" % ar["baseline"]["name"]))
+    else:
+        basis.append(("not accepted (AR not held)" if not (ar["held"] or ar["baseline"]) else "not accepted (AR scripted)",
+                      "the rms export: UUID7-REV-AR %s" % (ar["art"].status if ar["art"] else "absent")))
+    for phrase, oi in open_claims(M, "end"):
+        basis.append((phrase, "open item %s" % oi))
+    return "uuid7 %s: %s." % (M.version, "; ".join(p for p, _ in basis)), basis
+
+
+def h_claim(M, a):
+    text, basis = claim(M)
+    return ("**%s**\n\n" % md_escape(text) + table(["Claim", "Basis"], [[md_escape(p), b] for p, b in basis], "The claim and its basis") +
+            "\n\nThe claim is computed at every refresh from the results, the rms export and the open items of the "
+            "\\ref UUID7_DOC_SDP \"SDP\" <4.6>; what it does not claim is listed there with what closes it.")
+
+
+def h_open_items(M, a):
+    if not M.open_items:
+        return "No open item."
+    rows = [[defn(anchor("oi_" + o["id"]), o["id"]), md_escape(o["title"]), o["status"], md_escape(o["now"]), md_escape(o["closes_with"]),
+             md_escape(o["who"]), md_escape(o["rms_feature"]), md_escape(o["clauses"])] for o in M.open_items]
+    n = len([o for o in M.open_items if o["status"] == "open"])
+    return ("%d open item(s) of %d. Source: `ecss/MGT/open_items.csv`, which also keeps the finding of the review of 2026-10-10 that "
+            "raised each.\n\n" % (n, len(M.open_items)) +
+            table(["Item", "Title", "Status", "True now", "Closed by", "Who", "rms feature needed", "Clauses"], rows,
+                  "Open items"))
+
+
+def h_reviews(M, a):
+    rows = [[rv, review_status(M, rv), len([d for d in M.docs if rv in d.notes.get("reviews", "").split(",") and d.applicability != "N"])]
+            for rv in REVIEWS]
+    return table(["Review", "Status", "Documents in the data package"], rows, "Reviews")
+
+
+def h_baselines(M, a):
+    if not M.baselines:
+        return "No baseline: %s." % ("the rms export holds none" if M.mode == "rms" else "baselines live in the rms; no export is present")
+    return ("Each rms baseline must name the uuid7 commit it froze (a `commit` field, or the commit in its description); the "
+            "members are counted by the status they were frozen at.\n\n" +
+            table(["Baseline", "Frozen", "By", "Approved by", "uuid7 commit", "Members by status"], caption="rms baselines", rows=
+
+                  [[defn(anchor("bl_" + b["name"]), md_escape(b["name"])) if a.get("anchors") == "yes" else md_escape(b["name"]),
+                    ms_time(b["created_at_ms"], "%Y-%m-%d %H:%M"), who(b["by"]),
+                    (who(b["approved_by"]) if b["approved_by"] else "**no**") if b["approval_exported"] else "not in this export", b["check"],
+                    ", ".join("%d %s" % (v, k) for k, v in sorted(b["member_status"].items()))] for b in M.baselines]))
+
+
+def h_tags(M, a):
+    rows = []
+    refs = ["refs/tags/v*"] + (["refs/tags/" + M.tag] if M.tag and not M.tag.startswith("v") else [])
+    for line in git("for-each-ref", "--sort=v:refname", *refs, "--format=%(refname:short) %(objecttype)").splitlines():
+        name, kind = line.split()
+        signed = kind == "tag" and bool(re.search(r"-----BEGIN (PGP|SSH) SIGNATURE-----", git("cat-file", "tag", name)))
+        rows.append(["`%s`" % name, "annotated" if kind == "tag" else "**lightweight**", "yes" if signed else "**no**",
+                     git("rev-list", "-n", "1", name)[:12]])
+    note = "" if any(r[0] == "`%s`" % M.tag for r in rows) else ("\n\nNo tag `%s` exists: it is created at release." % M.tag) if M.tag else \
+        "\n\nThis build of release %s is untagged: the tag is set on the release commit." % M.release
+    return (table(["Tag", "Kind", "Signed", "Commit"], rows, "Release tags") if rows else "No release tag.") + note
+
+
+def h_matrix_csv(M, a):
+    path = os.path.join(ECSS, a["file"])
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    head, body = rows[0], rows[1:]
+    counts = {}
+    for r in body:
+        counts[r[3]] = counts.get(r[3], 0) + 1
+    def refl(s):
+        out = []
+        for part in [p.strip() for p in s.split(";")]:
+            m = re.match(r"^(\w+)/(\w+)\.md(.*)$", part)
+            name = {"TAILORING": "tailoring", "CODING_STANDARD": "coding standard"}.get(m.group(2), m.group(2)) if m else ""
+            out.append("%s%s" % ('\\ref %s "%s"' % (page_label(m.group(2) + ".md"), name) if m else md_escape(part),
+                                 md_escape(m.group(3)) if m else ""))
+        return "; ".join(out)
+    std = "ECSS-E-ST-40C Rev.1" if "e40" in a["file"] else "ECSS-Q-ST-80C Rev.2"
+    key = "e40" if "e40" in a["file"] else "q80"
+    out, first = [], None
+    for r in body:
+        # a remark repeated by the next rows is written once; the others point to the row that carries it
+        if r[5] and first and r[5] == first[1]:
+            remark = 'As \\ref %s "%s".' % (anchor(key + "_" + first[0]), first[0])
+        else:
+            remark, first = md_escape(r[5]), (r[0], r[5])
+        out.append([defn(anchor(key + "_" + r[0]), md_escape(r[0])), md_escape(r[1]), md_escape(r[2]), r[3], refl(r[4]), remark])
+    return ("%d clauses: %s. Source: `ecss/%s`.\n\nTable: Clauses of %s, their applicability at category D and the package's compliance\n\n" % (
+        len(body), ", ".join("%s %d" % (k, v) for k, v in sorted(counts.items())), a["file"], std) +
+            table([h.replace("_", " ") for h in head], out))
+
+
+def h_deps(M, a):
+    rows = []
+    for l in read(os.path.join(ROOT, "deps.txt")).splitlines():
+        if l.strip() and not l.startswith("#"):
+            f = l.split()
+            rows.append([f[0], f[1], f[2] if len(f) > 2 else "", f[3] if len(f) > 3 else "", ("`%s`" % f[4][:16] + "…") if len(f) > 4 else ""])
+    return table(["Class", "Package", "Version", "Source", "sha256"], rows, "Pinned dependencies (deps.txt)")
+
+
+def h_scf_items(M, a):
+    files = git("ls-files").splitlines()
+    rows = []
+    for f in files:
+        p = os.path.join(ROOT, f)
+        if os.path.isfile(p):
+            with open(p, "rb") as fh:
+                rows.append(["`%s`" % f, os.path.getsize(p), "`%s`" % hashlib.sha256(fh.read()).hexdigest()[:16]])
+    return ("%d controlled files at commit %s (git ls-files; SHA-256 truncated to 16 hex digits, full values in "
+            '<a href="evidence/scf_files.txt">scf_files.txt</a>).\n\n' % (len(rows), M.short) + table(["File", "Bytes", "SHA-256"], rows, "Controlled files"))
+
+
+def h_release(M, a):
+    sums = read(os.path.join(ROOT, "build", "debs", "SHA256SUMS")).strip().splitlines()
+    tags = git("tag", "--list", "v*", "--sort=-v:refname").splitlines()
+    prev = tags[0] if tags else ""
+    log = git("log", "--oneline", "%s..HEAD" % prev) if prev else git("log", "--oneline", "-20")
+    rows = [["`%s`" % l.split()[1], "`%s`" % l.split()[0]] for l in sums if len(l.split()) == 2]
+    bi = {d["deb"]: d for d in M.debs}
+    rows = [r + ["`%s`" % bi.get(r[0].strip("`"), {}).get("root", "?"), bi.get(r[0].strip("`"), {}).get("commit", "?")[:12],
+                 md_escape(bi.get(r[0].strip("`"), {}).get("gcc", "?")), md_escape(bi.get(r[0].strip("`"), {}).get("libc", "?"))] for r in rows]
+    return ("Version %s; evidence of commit %s (%s); release tag %s. Previous release tag: %s.\n\n**Packages** (build/debs/SHA256SUMS, "
+            "and each package's .buildinfo: a Build-Root of `none` is a development build, not a release):\n\n%s\n\n"
+            "**%s**:\n\n\\verbatim\n%s\n\\endverbatim" % (M.version, M.ev_commit or "not recorded", M.ev.get("state", "?"), M.tag_text,
+                                                          prev or "none", table(["Package", "SHA-256", "Build-Root", "Commit", "gcc", "libc"], rows, "Packages of this refresh")
+                                                          if rows else "not built", ("Changes since " + prev) if prev else "The last 20 commits", log or "none"))
+
+
+def h_receiving(M, a):
+    txt = read(os.path.join(EVID, "deps.txt"))
+    pin = [l for l in read(os.path.join(ROOT, "deps.txt")).splitlines() if l.startswith("own")]
+    ver = read(os.path.join(ROOT, "build", "sysroot", "share", "kyr-build", "VERSION")).strip()
+    return ("Pinned procured software (deps.txt `own` lines): %s. utils/deps.sh downloads the release deb once into the cache, verifies "
+            "its SHA-256 against the pin and refuses it otherwise; the installed kyr-build reports version %s. Output of this refresh: "
+            '<a href="evidence/deps.txt">deps.txt</a>%s.' % ("; ".join("`%s`" % " ".join(l.split()[:3]) for l in pin), ver or "?",
+                                                            "" if txt else " (not run)"))
+
+
+def h_spr(M, a):
+    if not M.crs:
+        return ("No software problem report or nonconformance is recorded: %s." %
+                ("the rms export holds no change-request" if M.mode == "rms" else "problem reports are rms change-requests and no rms export is present"))
+    return table(["Report", "Title", "Status"], caption="Change requests", rows= [[defn(anchor("cr_" + c.id), c.id) if a.get("anchors") == "yes" else c.id, md_escape(c.title),
+                                                  c.status] for c in M.crs])
+
+
+def h_jrr(M, a):
+    if M.mode != "rms":
+        return "No joint review report: the reviews are recorded in the rms and no rms export is present."
+    red = ("**RED: %s.**\n\n" % md_escape(M.refusal)) if M.refusal else ""
+    declared = cast_declared(M)
+    rows = []
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        b = f["baseline"]
+        rows.append([rv, "closed: approved" if f["held"] else (f["art"].status if f["art"] else "not planned"),
+                     who(f["closed"]["by"]) if f["closed"] else "-", ('\\ref %s "%s" by %s' % (anchor("bl_" + b["name"]), md_escape(b["name"]), who(b["by"]))) if b else "none",
+                     (who(b["approved_by"]) if b["approval_exported"] else "not exported") if b else "-",
+                     ("%.1f s" % f["seconds"]) if f["seconds"] is not None else "-",
+                     ("scripted" if f["scripted"] else "not shown scripted") if (f["held"] or b) else "-"])
+    out = [table(["Review", "Outcome", "Closed by", "Baseline frozen by", "Baseline approved by", "Opened to closed", "Cast"], rows,
+                 "Reviews as the rms export records them"), "",
+           "Cast: %s. A review the export shows opened and closed in under %d s is reported as scripted: no group of people reads "
+           "a data package and raises, discusses and dispositions RIDs in that time." % (
+               ("the rms project declares it: '%s'" % md_escape(declared)) if declared else "the rms project does not declare it",
+               SCRIPTED_REVIEW_S), ""]
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        if not f["art"]:
+            continue
+        out += ["## %s %s {#jrr_%s}" % (rv, md_escape(f["art"].title), rv.lower()), ""]
+        if not (f["held"] or f["baseline"]):
+            out += ["Not held: the review artifact is %s; no baseline." % f["art"].status, ""]
+            continue
+        out += ["- Participants named by the export: %s%s" % (", ".join(md_escape(x) for x in f["named"]) or "none",
+                                                            ("; %d record(s) without an actor" % f["unnamed"]) if f["unnamed"] else ""),
+                "- Recorded: opened %s, closed %s by %s (%s)" % (ms_time(f["opened"]["at_ms"]) if f["opened"] else "-",
+                                                         ms_time(f["closed"]["at_ms"]) if f["closed"] else "-",
+                                                         who(f["closed"]["by"]) if f["closed"] else "-",
+                                                         "scripted cast" if f["scripted"] else "cast not shown scripted"),
+                "- Decision: %s" % (md_escape(f["closed"]["reason"]) if f["closed"] else "none recorded"),
+                "- Baseline: %s" % (("%s, frozen %s by %s, %d members, uuid7 commit %s; approved %s" % (
+                    md_escape(f["baseline"]["name"]), ms_time(f["baseline"]["created_at_ms"]), who(f["baseline"]["by"]),
+                    f["baseline"]["members"], f["baseline"]["check"], ("by %s %s" % (who(f["baseline"]["approved_by"]), ms_time(f["baseline"]["approved_at_ms"])))
+                    if f["baseline"]["approved_by"] else ("(not in this export)" if not f["baseline"]["approval_exported"] else "**no**")))
+                    if f["baseline"] else "none"), ""]
+        if f["revs"]:
+            out += [table(["Revision", "Status", "At", "By", "Reason"], caption="Revisions of the %s review artifact" % rv, rows= [[r["n"], r["status"], ms_time(r["at_ms"]), who(r["by"]),
+                                                                         md_escape(r["reason"])] for r in f["revs"]]), ""]
+        if f["rids"]:
+            rr = []
+            for x in f["rids"]:
+                raised = x.revs[0] if x.revs else {"by": "", "at_ms": 0}
+                last = x.revs[-1] if x.revs else {"by": "", "status": x.status, "reason": ""}
+                rr.append([defn(anchor("rid_" + x.id), x.id), md_escape(x.title), who(raised["by"]), x.status, who(last["by"]) if len(x.revs) > 1 else "-",
+                           md_escape(last.get("reason", ""))])
+            out += ["RIDs:", "", table(["RID", "Discrepancy", "Raised by", "Disposition", "Dispositioned by", "Reason"], rr, "RIDs of the %s" % rv), ""]
+    return red + "\n".join(out)
+
+
+def h_metrics(M, a):
+    src = read(os.path.join(ROOT, "app", "uuid7.c"))
+    sloc = len([l for l in src.splitlines() if l.strip() and not l.strip().startswith(("/*", "*", "//"))])
+    funcs = [s for s in M.symbols.values() if s["kind"] == "function" and s["file"].endswith(".c")]
+    failures = sum(1 for c in M.cases if M.result.get(c.id, {}).get("verdict") == "failed")
+    return table(["Metric (SPAP <7>)", "Value", "Target"], caption="Metrics", rows=[
+        ["Size: non-comment source lines of app/uuid7.c", sloc, "-"], ["Size: documented functions in app/uuid7.c", len(funcs), "-"],
+        ["Test coverage (statement / decision)", "%.1f %% / %.1f %%" % (M.coverage.get("line_percent", 0), M.coverage.get("branch_percent", 0))
+         if M.coverage else "not run", ">= 80 % / >= 65 %"],
+        ["Compiler warnings, six profiles", M.checks.get("no_warnings", {}).get("detail", "not run"), "0"],
+        ["Failed verification cases (problems found in validation)", failures, "0"],
+        ["Requirements without a passing verification", len([r for r in M.reqs if M.req_status[r.id] != "verified"]), "0"]])
+
+
+def h_api(M, a):
+    def decl(m):
+        if m["kind"] == "function":
+            return "`%s %s%s`" % (m["type"], m["name"], m["args"])
+        if m["kind"] == "typedef":
+            return "`typedef %s%s%s`" % (m["type"], m["name"], m["args"])
+        return "`#define %s %s`" % (m["name"], m["init"])
+    rows = [["`%s`" % m["name"], m["kind"], decl(m), md_escape(m["brief"])] for m in getattr(M, "members", []) if m["file"] == "uuid7.h"]
+    return table(["Name", "Kind", "Declaration", "Brief"], rows, "Public interface (app/uuid7.h)")
+
+
+def h_source(M, a):
+    if M.mode == "rms":
+        return ("Source of truth: the rms export `%s` (sha256 `%s`, project %s): %d artifacts, %d links, %d baselines; verification "
+                "results %s. The repository's tags and CSVs are compared with it: %d repository link(s) are not in the export "
+                "(\\ref UUID7_DOC_TRACE \"TRACE\", gaps)." %
+                (M.rms["path"], M.rms["sha256"][:16], PROJECT_KEY, len(M.rms["arts"]), len(M.rms["links"]), len(M.baselines),
+                 "from `verification.csv`" if M.rms["verdicts"] else "not exported", len(M.drift)) +
+                " The specification's snapshot `ecss/TS/requirements.csv` and the decisions' `ecss/DDF/decisions.csv`: %s." % M.snapshot)
+    return ("Source of truth: the repository's CSVs (`ecss/TS/requirements.csv` and the others, in the rms import format), because no "
+            "rms export is present under `ecss/rms_export/`. Links come from the code's `@satisfies` / `@verifies` tags and the CSV notes.")
+
+
+def h_flags(M, a):
+    rc, out = run(["bash", "-c", "./utils/gcc_build_profiles.sh print-cflags %s; ./utils/gcc_build_profiles.sh print-cppflags %s; "
+                   "./utils/gcc_build_profiles.sh print-ldflags %s" % ((a.get("profile", "release"),) * 3)])
+    flags = re.sub(r"-f(?:file|debug)-prefix-map=\S+", "", out)
+    return "\\verbatim\n%s\n\\endverbatim" % "\n".join(l.strip() for l in flags.splitlines() if l.strip())
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Design decisions: the DJF's trade-offs and design rationale (ECSS-E-ST-40 4.2.4, 4.2.5), from the rms decision, rationale and
+# assumption artifacts; the SDD summarises them (Annex F <4.7> b.7)
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def dec_ref(i):
+    return '\\ref %s "%s"' % (anchor("dec_" + i), i)
+
+
+def decision_parts(d):
+    """The decision, its alternatives and its consequences: notes alternatives=/consequences=, or 'Alternatives:' and
+    'Consequences:' paragraphs of the body."""
+    body, alt, con = d.body, d.notes.get("alternatives", ""), d.notes.get("consequences", "")
+    for key in ("Consequences", "Alternatives"):
+        m = re.search(r"(?:^|\n|\s)%s(?: considered)?:\s*(.*?)(?=\n\s*(?:Alternatives|Consequences)(?: considered)?:|$)" % key, body, re.S)
+        if m:
+            if key == "Alternatives" and not alt:
+                alt = m.group(1).strip()
+            if key == "Consequences" and not con:
+                con = m.group(1).strip()
+            body = (body[:m.start()] + body[m.end():]).strip()
+    return body.strip(), alt, con
+
+
+def linked(M, i, kinds):
+    return sorted(y for y in M.dlinks.get(i, ()) if M.by_id[y].kind in kinds)
+
+
+def none_yet(M, what):
+    if M.mode != "rms":
+        return "No %s: they are rms artifacts and no rms export is present." % what
+    return ("No %s yet: the rms export (%s) holds no artifact of kind decision, rationale or assumption, so this record is present "
+            "and empty until the design decisions are recorded in the rms." % (what, "`%s`" % M.rms["path"]))
+
+
+def h_decisions(M, a):
+    if not M.decisions:
+        return none_yet(M, "design decision is recorded")
+    out = ["%d design decision(s) from the rms export, each with what it answers, what it shapes and what justifies it." % len(M.decisions), ""]
+    for d in M.decisions:
+        text, alt, con = decision_parts(d)
+        cases = linked(M, d.id, ("verification-case",))
+        out += ["### %s %s {#%s}" % (d.id, md_escape(d.title), anchor("dec_" + d.id)), "",
+                "- Decision: %s" % (md_escape(text) or "not stated"),
+                "- Alternatives considered: %s" % (md_escape(alt) or "**not recorded**"),
+                "- Consequences: %s" % (md_escape(con) or "**not recorded**"),
+                "- Rationale: %s" % ("; ".join(x for x in [md_escape(d.rationale).rstrip(".")] + [dec_ref(r) for r in linked(M, d.id, ("rationale",))] if x)
+                                     or "**not recorded**"),
+                "- Assumptions: %s" % (", ".join(dec_ref(x) for x in linked(M, d.id, ("assumption",))) or "none"),
+                "- Answers: %s" % (", ".join(rref(x) for x in linked(M, d.id, ("requirement",))) or "**no requirement linked**"),
+                "- Shapes: %s" % (", ".join('\\ref %s "%s"' % (anchor("cmp_" + x), md_escape(M.by_id[x].title)) for x in linked(M, d.id, ("component",)))
+                                  or "no component linked"),
+                "- Justified by: %s" % (", ".join("%s (%s)" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in cases)
+                                        or "**no analysis or test linked**"),
+                "- Status: %s" % status_text(M, d, (" (rms revision %s)" % d.revision) if d.revision else "", note=False), ""]
+    return "\n".join(out)
+
+
+def h_rationale(M, a):
+    if not M.rationales:
+        return none_yet(M, "rationale or assumption is recorded")
+    rows = [[defn(anchor("dec_" + x.id), x.id), x.kind, md_escape(x.title), md_escape(x.body),
+             ", ".join(dec_ref(y) if M.by_id[y].kind == "decision" else (rref(y) if M.by_id[y].kind == "requirement" else y)
+                       for y in sorted(M.dlinks.get(x.id, ()))) or "-", x.status] for x in M.rationales]
+    return table(["Id", "Kind", "Title", "Statement", "For", "Status"], rows, "Rationale and assumptions")
+
+
+def h_decision_trace(M, a):
+    if not M.decisions:
+        return none_yet(M, "decision to trace")
+    rows = [[dec_ref(d.id), ", ".join(rref(x) for x in linked(M, d.id, ("requirement",))) or "-",
+             ", ".join('\\ref %s "%s"' % (anchor("cmp_" + x), md_escape(M.by_id[x].title)) for x in linked(M, d.id, ("component",))) or "-",
+             ", ".join("%s %s" % (cref(c), verdict_word(M.result.get(c, {}).get("verdict", "not-run"))) for c in linked(M, d.id, ("verification-case",))) or "-"]
+            for d in M.decisions]
+    back = [['\\ref %s "%s"' % (anchor("cmp_" + c.id), md_escape(c.title)), ", ".join(dec_ref(x) for x in sorted(M.decisions_of.get(c.id, ()))) or "-"]
+            for c in sorted(M.comps, key=lambda c: c.id)]
+    return (table(["Decision", "Answers", "Shapes", "Justified by"], rows, "Decision to requirement, component and justification") + "\n\n" +
+            table(["Component", "Shaped by"], back, "Component to the decisions that shape it"))
+
+
+def h_tradeoffs_summary(M, a):
+    """The SDD's main design trade-offs: one line per rms decision, linked to its record in the DTJ; without any, the template's
+    own statement of the design as it stands (a["body"]) under a note."""
+    if M.decisions:
+        def gist(d):
+            t = decision_parts(d)[0].split(". ")[0].rstrip(".")
+            return (t[:1].lower() + t[1:]) if t[1:2].islower() else t
+        return "\n".join("   - %s: %s (%s)%s" % (md_escape(d.title), md_escape(gist(d)), dec_ref(d.id), "." if d is M.decisions[-1] else ";")
+                         for d in M.decisions)
+    return ("   none is recorded as an rms decision yet, so the DTJ <4> is empty; as the design stands:\n\n" + a.get("body", "")).replace(
+        "DTJ <4>", "\\ref UUID7_DOC_DTJ \"DTJ\" <4>")
+
+
+
+HANDLERS = {
+    "docinfo": h_docinfo, "refs": h_refs, "terms": h_terms, "reqs": h_reqs, "validation-matrix": h_validation_matrix,
+    "upward-trace": h_upward_trace, "reqtable": h_reqtable, "components": h_components, "allocation": h_allocation,
+    "diagram": h_diagram, "scenarios": h_scenarios, "testcases": h_testcases, "noncases": h_noncases, "case-matrix": h_case_matrix,
+    "results-cells": h_results_cells, "results-tests": h_results_tests, "req-results": h_req_results, "trace-matrix": h_trace_matrix,
+    "gaps": h_gaps, "summary": h_summary, "pipeline": h_pipeline, "coverage": h_coverage, "budgets": h_budgets, "checks": h_checks,
+    "doc-plan": h_doc_plan, "drl": h_drl, "review-docs": h_review_docs, "reviews": h_reviews, "baselines": h_baselines,
+    "matrix-csv": h_matrix_csv, "deps": h_deps, "scf-items": h_scf_items, "release": h_release, "receiving": h_receiving,
+    "spr": h_spr, "jrr": h_jrr, "scenario-results": h_scenario_results, "decisions": h_decisions, "rationale": h_rationale,
+    "decision-trace": h_decision_trace, "tradeoffs-summary": h_tradeoffs_summary, "install": h_install, "metrics": h_metrics, "api": h_api, "source": h_source, "flags": h_flags,
+    "claim": h_claim, "open-items": h_open_items, "retired": h_retired, "tools": h_tools, "criticality": h_criticality, "configuration": h_configuration, "toolchain": h_toolchain, "tags": h_tags,
+}
+DIRECTIVE = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->[ \t]*$", re.M)
+
+
+BLOCK = re.compile(r"^<!--[ \t]*ecss:([\w-]+)((?:[ \t]+[\w-]+=(?:\"[^\"]*\"|\S+))*)[ \t]*-->\n((?:(?!<!--[ \t]*ecss:).)*?)\n<!--[ \t]*ecss:end[ \t]*-->[ \t]*$",
+                   re.M | re.S)
+
+
+def expand(M, text, where):
+    """The directives of a template: <!-- ecss:name args --> becomes the handler's text; a block, closed by <!-- ecss:end -->,
+    hands its lines to the handler as a["body"]."""
+    M.placed = set()   # the diagrams this document shows so far
+    M.where = where
+
+    def block(m):
+        args = {k: v.strip('"') for k, v in re.findall(r"([\w-]+)=(\"[^\"]*\"|\S+)", m.group(2))}
+        args["body"] = m.group(3)
+        h = HANDLERS.get(m.group(1))
+        return h(M, args) if h else m.group(0)
+    text = BLOCK.sub(block, text)
+
+    def one(m):
+        args = {k: v.strip('"') for k, v in re.findall(r"([\w-]+)=(\"[^\"]*\"|\S+)", m.group(2))}
+        h = HANDLERS.get(m.group(1))
+        if not h:
+            print("ecss.py: %s: unknown directive %s" % (where, m.group(1)), file=sys.stderr)
+            return m.group(0)
+        return h(M, args)
+    return DIRECTIVE.sub(one, text)
+
+
+def doc_target(d):
+    """The anchor a document id or name links to: its page or section when produced, its DRL row when tailored out."""
+    if d.applicability == "N" or not d.notes.get("path", "-").endswith((".md",)) and "#" not in d.notes.get("path", ""):
+        return anchor("drl_" + d.id)
+    page, _, sec = d.notes["path"].partition("#")
+    return sec or page_label(page)
+
+
+def link_registry(M):
+    """Every target a reference in the text can link to (refs.Index)."""
+    ids, abbr = {}, {}
+    for r in M.reqs + M.retired:
+        ids[r.id] = anchor("req_" + r.id)
+    for c in M.cases:
+        ids[c.id] = anchor("tc_" + c.id)
+    for c in M.comps:
+        ids[c.id] = anchor("cmp_" + c.id)
+    for d in M.docs:
+        ids[d.id] = doc_target(d)
+    for d in sorted(M.docs, key=lambda d: d.applicability == "Y"):   # a produced document wins an abbreviation
+        m = re.search(r"\(([A-Za-z]{2,8})\)$", d.title)
+        if m:
+            abbr[m.group(1)] = doc_target(d)
+    for d in M.docs:   # whole documents without one: SValR, UTR, JRR; TAILORING as the data names it
+        path = d.notes.get("path", "")
+        base = os.path.basename(path)[:-3]
+        if d.applicability == "Y" and path.endswith(".md") and re.fullmatch(r"[A-Z][A-Za-z]{1,5}|[A-Z0-9_]+", base):
+            abbr.setdefault(base, doc_target(d))
+    if "SPR" in abbr:
+        abbr["NCR"] = abbr["SPR"]
+    for rv in REVIEWS:
+        f = review_facts(M, rv)
+        ids["UUID7-REV-" + rv] = ("jrr_" + rv.lower()) if (M.mode == "rms" and f["art"]) else "rev_" + rv.lower()
+    for x in M.arts:
+        if x.kind == "review-comment":
+            ids[x.id] = anchor("rid_" + x.id)
+    for c in M.crs:
+        ids[c.id] = anchor("cr_" + c.id)
+    for o in M.open_items:
+        ids[o["id"]] = anchor("oi_" + o["id"])
+    for x in M.decisions + M.rationales:
+        ids[x.id] = anchor("dec_" + x.id)
+    tools = []
+    with open(os.path.join(ECSS, "PAF", "tools.csv"), newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            for name in re.findall(r"[\w./-]+(?: root| rms)?", r["tool"].replace("ecss/tools/", "")):
+                if name not in ("and",):
+                    tools.append((name, tool_anchor(r["tool"])))
+    tools.append(("kyr rms", tool_anchor("kyr_rms (kyr-rms-cli)")))
+    clauses = {}
+    for std, path in (("e40", "MGT/e40_compliance.csv"), ("q80", "PAF/q80_compliance.csv")):
+        with open(os.path.join(ECSS, path), newline="", encoding="utf-8") as f:
+            clauses[std] = {r["clause"]: anchor(std + "_" + r["clause"]) for r in csv.DictReader(f)}
+    std_pages = {"e40": "UUID7_DOC_E40_COMPLIANCE", "q80": "UUID7_DOC_Q80_COMPLIANCE", "m40": "UUID7_DOC_SCMP"}
+    std_parts = {("e40", "Annex A"): "tailoring_6", ("e40", "Table A-1"): "tailoring_6", ("e40", "Figure A-1"): "tailoring_6",
+                 ("e40", "Annex R"): std_pages["e40"], ("e40", "Table R-1"): std_pages["e40"], ("e40", "Annex S"): "tailoring_4",
+                 ("q80", "Annex D"): "tailoring_3", ("q80", "Table D-1"): "tailoring_3", ("q80", "Annex D.1"): "tailoring_3",
+                 ("q80", "Annex D.2"): std_pages["q80"], ("q80", "Table D-2"): std_pages["q80"]}
+    for d in sorted(M.docs, key=lambda d: d.applicability != "N"):
+        m = re.match(r"ECSS-([EQM])-ST-(\d+) (Annex [A-Z])$", d.notes.get("drd", ""))
+        if m:
+            std_parts[({"E": "e40", "Q": "q80", "M": "m40"}[m.group(1)], m.group(3))] = doc_target(d)
+    sources = {}
+    for d in ("app", "tests/ITs", "tests/plantuml", "tests/stress", "tests/package"):
+        for p in glob.glob(os.path.join(ROOT, d, "*.[ch]")):
+            sources[rel(p)] = sources[os.path.basename(p)] = os.path.basename(p)
+    symbols = sorted([n for n, x in M.symbols.items() if x["kind"] != "file" and n != "_Static_assert"] + [t["name"] for t in M.tests if t["exe"]])
+    return {"figure_info": figure_info(M), "svg": {n: os.path.exists(os.path.join(SVG, n + ".svg")) for n in M.diagrams},
+            "puml": {n: read(os.path.join(PUML, n + ".puml")) for n in M.diagrams},
+            "ids": ids, "abbr": abbr, "reviews": {rv: "rev_" + rv.lower() for rv in REVIEWS}, "sources": sources, "symbols": symbols,
+            "baselines": {b["name"]: anchor("bl_" + b["name"]) for b in M.baselines}, "files": {f: "files_" + f.lower() for f, _ in FILES},
+            "tools": tools, "clauses": clauses, "std_pages": std_pages, "std_parts": std_parts}
+
+
+def tool_anchor(name):
+    return "tool_" + anchor(re.sub(r"\s*\(.*\)$", "", name).split(" and ")[0]).lower()
+
+
+def gen_docs(M):
+    """The documents: directives expanded, sections labelled, every reference linked (refs.py), written to build/ecss/md."""
+    os.makedirs(MD, exist_ok=True)
+    texts = {}
+    for path in sorted(glob.glob(os.path.join(ECSS, "*", "*.md"))):
+        if os.path.basename(os.path.dirname(path)) in ("tools", "rms_export", "common"):
+            continue
+        texts[os.path.relpath(path, ECSS)] = expand(M, read(path), rel(path))
+    readme = read(os.path.join(ECSS, "README.md"))
+    readme = re.sub(r"^# (.*)$", r"# \1 {#UUID7_DOC_README}", readme, count=1, flags=re.M)
+    texts["README.md"] = expand(M, readme, "ecss/README.md")
+    texts["index.md"] = gen_index(M)
+    X = refs.Index(link_registry(M))
+    for r, t in texts.items():
+        p = X.add(r, t)
+        m, base = re.search(r"\((\w+)\)$", p.title), os.path.basename(r)[:-3]
+        p.short_name = m.group(1) if m else (base if len(base) <= 6 and "_" not in base and base != "index" else p.title)
+    for r in texts:
+        texts[r] = X.structure(r, texts[r])
+    # the package's lists of figures and of tables, in the order of the front page
+    order = []
+    for f, _ in FILES:
+        for d in M.docs:
+            path = d.notes.get("path", "")
+            if d.notes.get("file") == f and d.applicability == "Y" and path.endswith(".md") and path[5:] not in order:
+                order.append(path[5:])
+    order += sorted(r for r in texts if r not in order)
+    for kind in ("figures", "tables"):
+        r = "lists/%s.md" % kind
+        texts[r] = X.list_page(kind, order)
+        X.add(r, texts[r])
+    for r, t in texts.items():
+        write(os.path.join(MD, r), X.link(r, t))
+    M.refs = X
+    components_dox(M.comps)
+    # what the links gate (links_gate.py) reads: the pages, the names a reference can take, the references left unresolved
+    reg = X.reg
+    sources = sorted(rel(p) for d in ("app", "tests/ITs", "tests/plantuml", "tests/stress", "tests/package")
+                     for p in glob.glob(os.path.join(ROOT, d, "*.[ch]")))
+    html_pages = sorted(("index" if p.label == "index" else p.label) + ".html" for p in X.pages.values())
+    html_pages += sorted("group__%s.html" % c.notes["group"].replace("_", "__") for c in M.comps if c.notes.get("group"))
+    html_pages += ["satisfies.html", "verifies.html"]
+    write(os.path.join(OUT, "links.json"), json.dumps({
+        "html": html_pages, "abbr": sorted(reg["abbr"]), "reviews": sorted(reg["reviews"]), "files": sorted(reg["files"]),
+        "tools": sorted({t for t, _ in reg["tools"]}), "clauses": sorted(set(reg["clauses"]["e40"]) | set(reg["clauses"]["q80"])),
+        "sources": sources + sorted({os.path.basename(x) for x in sources}),
+        "symbols": sorted(n for n, x in M.symbols.items() if x["kind"] != "file" and n != "_Static_assert"),
+        "tests": sorted(t["name"] for t in M.tests if t["exe"]), "unresolved": sorted(set(X.unresolved)),
+        "links_written": X.count["links"]}, indent=1) + "\n")
+
+
+def gen_index(M):
+    n_sd = len([t for t in M.tests if t["suite"] == "SD"])
+    L = ["# uuid7 %s — ECSS package (category D)" % M.version, "",
+         "The time-ordered UUIDv7 library of the kyr platform, documented as software of criticality category D after ECSS-E-ST-40C "
+         "Rev.1 and ECSS-Q-ST-80C Rev.2. Every page is generated by `ecss/make.sh` from the rms (or, without an export, the "
+         "repository's CSVs) and from the repository's own facts; nothing here is edited by hand. The pipeline is explained in "
+         "\\ref UUID7_DOC_README \"the ECSS pipeline\".", "",
+         "## Claim", ""] + (["**RED: %s.**" % md_escape(M.refusal), ""] if M.refusal else []) + [h_claim(M, {}), "",
+         "Open items: %d (\\ref UUID7_DOC_SDP \"SDP\" <4.6>)." % len([o for o in M.open_items if o["status"] == "open"]), "",
+         "## Identification", "", h_configuration(M, {}), "", table(["Item", "Value"], [
+             ["Generated", M.generated], ["Criticality", "category D (ECSS-Q-ST-80 Table D-1), \\ref UUID7_DOC_TAILORING \"tailoring\""],
+             ["Diagrams", "%d PlantUML sources, %d rendered to SVG%s" % (len(M.diagrams), M.rendered, (": " + md_escape(M.render_note))
+                                                                           if M.render_note else " by " + md_escape(M.render_tool))]],
+                                                                           "This refresh"), "",
+         h_source(M, {}), "", "## Status", "", h_summary(M, {}), "", "## Documents by ECSS file", ""]
+    for f, name in FILES:
+        docs = [d for d in M.docs if d.notes.get("file") == f]
+        if not docs:
+            continue
+        rows = []
+        for d in docs:
+            rows.append([dref(d.id, M) if d.applicability != "N" else md_escape(d.title), md_escape(d.notes.get("drd", "-")),
+                         d.notes.get("reviews", "").replace(",", ", "),
+                         ("%s%s" % (d.status, " (generated)" if d.notes.get("gen") == "yes" else "")) if d.applicability != "N"
+                         else "tailored out"])
+        L += ["### %s (%s) {#files_%s}" % (f, name, f.lower()), "", table(["Document", "DRD", "Reviews", "Status"], rows, "Documents of the %s" % name.lower()), ""]
+    L += ["## Documents by review", "", h_reviews(M, {}), "", "The data package of each review, document by document: SRevP <10>.", ""]
+    L += ["## Figures and tables", "", "\\ref UUID7_LIST_FIGURES \"List of figures\" and \\ref UUID7_LIST_TABLES \"list of tables\" of the "
+          "package; each document lists its own under its identification. The %d sequence diagrams are recorded by the scenario tests of "
+          "`tests/plantuml` from real runs and shown where they explain something: the operations and errors of the SUM <9>, the "
+          "dynamic view of the SDD <5.2>, the scenario cases of the SVS <7>; the class, package and component diagrams are in the "
+          "SDD <4>." % n_sd, "",
+          "## Code", "", "The API reference (Files, Topics) is generated from the doc comments of `app/`; the `@satisfies` and `@verifies` "
+          "tags of the code and the tests become the \\ref satisfies \"implementation trace\" and \\ref verifies \"verification trace\" "
+          "lists.", ""]
+    return "\n".join(L)
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# The rms loader: the repository's facts into an rms database
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+def gen_rms(M):
+    d = os.path.join(OUT, "rms")
+    os.makedirs(d, exist_ok=True)
+    arts = load_csv(os.path.join(ECSS, "TS", "requirements.csv"), "csv") + load_csv(os.path.join(ECSS, "documents.csv"), "csv") + \
+        load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv") + load_csv(os.path.join(ECSS, "MGT", "reviews.csv"), "csv") + \
+        load_csv(os.path.join(ECSS, "DJF", "verification_cases.csv"), "csv")
+    ids = {a.id for a in arts}
+    for t in M.tests:
+        if t["id"] not in ids:
+            a = M.by_id[t["id"]]
+            arts.append(a)
+    with open(os.path.join(d, "artifacts.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(CSV_COLUMNS)
+        for a in arts:
+            w.writerow(a.row())
+    with open(os.path.join(d, "links.tsv"), "w", encoding="utf-8") as f:
+        for s, t, dd, o in M.repo_links:
+            f.write("%s\t%s\t%s\n" % (s, t, dd))
+    with open(os.path.join(d, "results.tsv"), "w", encoding="utf-8") as f:
+        for c in M.result_cases:
+            r = M.result.get(c.id, {})
+            v = {"passed": "passed", "failed": "failed"}.get(r.get("verdict"), "not-run")
+            f.write("%s\t%s\t%s\n" % (c.id, v, (r.get("detail", "") or "").replace("\t", " ")[:900]))
+    # the results are of the evidence's commit, recorded against its full hash
+    write(os.path.join(d, "load.sh"), LOADER.replace("@COMMIT@", M.ev_commit or M.commit).replace("@VERSION@", M.version)
+          .replace("@PIPELINE@", "green" if M.green else "failed"))
+    write(os.path.join(d, "export.sh"), EXPORTER)
+    os.chmod(os.path.join(d, "load.sh"), 0o755)
+    os.chmod(os.path.join(d, "export.sh"), 0o755)
+
+
+LOADER = r"""#!/usr/bin/env bash
+# load.sh <db-root> <actor-uid> — generated by ecss/make.sh (uuid7 @VERSION@): puts the repository's facts into an rms database
+# (kyr-rms-cli, $KYR_RMS_CLI or on PATH): the artifacts of the CSVs and of the tests, the links of the tags and notes, and the results
+# of this refresh, each recorded against the commit the evidence is of (@COMMIT@) and naming its evidence, results.tsv by sha256.
+# Idempotent: the import recognises unchanged rows, an existing link is refused and skipped, a result is a new record each run (the
+# latest one counts). An import the rms refuses (items already in their lifecycle, an actor without config-master) is reported and
+# the links and results still go in. Exit 1 when a result is refused.
+set -uo pipefail
+DB="${1:?usage: load.sh <db-root> <actor-uid>}"; ACT="${2:?usage: load.sh <db-root> <actor-uid>}"
+CLI="${KYR_RMS_CLI:-kyr-rms-cli}"; P=UUID7; COMMIT=@COMMIT@
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT="$(cd "${HERE}/../../.." && pwd)"
+rms() { "${CLI}" "${DB}" "$@" --actor "${ACT}"; }
+rms project create "${P}" 'uuid7 time-ordered UUIDv7 library' > /dev/null 2>&1 || true   # exists already, or not the OWNER: refused, fine
+if rms import "${HERE}/artifacts.csv" --map "${ROOT}/ecss/TS/requirements.map.json" --project "${P}" --reason "uuid7 @VERSION@ commit ${COMMIT}" \
+    > "${HERE}/import.txt" 2>&1; then printf 'imported: %s\n' "$(grep -v '^[0-9-]*T' "${HERE}/import.txt" | tail -n 1)"
+else printf 'import refused (%s): %s; the links and the results go on\n' "${HERE}/import.txt" "$(grep -v '^[0-9-]*T' "${HERE}/import.txt" | tail -n 1)"; fi
+n=0; while IFS=$'\t' read -r s t d; do rms link "$s" "$t" "$d" --project "${P}" >/dev/null 2>&1 && n=$((n + 1)); done < "${HERE}/links.tsv"
+printf 'links created: %d\n' "$n"
+EVIDENCE="uuid7 build/ecss/rms/results.tsv sha256:$(sha256sum "${HERE}/results.tsv" | cut -d' ' -f1)"
+ENVIRONMENT="uuid7 @VERSION@, commit ${COMMIT}, ecss/make.sh (pipeline @PIPELINE@)"
+r=0; f=0
+while IFS=$'\t' read -r c v sum; do
+    [[ "$v" == not-run ]] && continue
+    if rms record "$c" "$v" --project "${P}" --summary "$sum" --env "${ENVIRONMENT}" --evidence "${EVIDENCE}" > /dev/null 2>&1; then r=$((r + 1))
+    else printf 'record %s refused\n' "$c"; f=$((f + 1)); fi
+done < "${HERE}/results.tsv"
+printf 'results recorded: %d against commit %s, refused: %d\n' "$r" "${COMMIT}" "$f"
+printf 'review, freeze (kyr-rms-cli %s baseline <REVIEW> --project %s --commit %s), then export.sh\n' "${DB}" "${P}" "${COMMIT}"
+exit $(( f > 0 ))
+"""
+
+EXPORTER = r"""#!/usr/bin/env bash
+# export.sh <db-root> <actor-uid> — generated by ecss/make.sh: the rms project UUID7 into ecss/rms_export/ (package.json, the
+# lossless package; verification.csv, the verification matrix with each case's latest result), which the next make.sh reads.
+set -euo pipefail
+DB="${1:?usage: export.sh <db-root> <actor-uid>}"; ACT="${2:?usage: export.sh <db-root> <actor-uid>}"
+CLI="${KYR_RMS_CLI:-kyr-rms-cli}"; P=UUID7
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; ROOT="$(cd "${HERE}/../../.." && pwd)"
+mkdir -p "${ROOT}/ecss/rms_export"
+"${CLI}" "${DB}" package export --project "${P}" --actor "${ACT}" > "${ROOT}/ecss/rms_export/package.json"
+"${CLI}" "${DB}" matrix verification --project "${P}" --actor "${ACT}" > "${ROOT}/ecss/rms_export/verification.csv"
+printf 'exported: ecss/rms_export/package.json, ecss/rms_export/verification.csv\n'
+"""
+
+
+SNAPSHOTS = [(os.path.join("TS", "requirements.csv"), TS_KINDS), (os.path.join("DDF", "decisions.csv"), ("decision", "rationale", "assumption"))]
+
+
+def snapshot_text(rms, kinds):
+    """The export's items of these kinds in the import format (plus the criticality), one row each, by identifier."""
+    buf = io.StringIO()
+    buf.write(SNAPSHOT_NOTE)
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(CSV_COLUMNS + ["criticality"])
+    for a in sorted((a for a in rms["arts"] if a.kind in kinds), key=lambda a: a.id):
+        w.writerow(a.row() + [a.criticality or "none"])
+    return buf.getvalue()
+
+
+def snapshot_state(M):
+    if not M.rms:
+        return "not checked (no rms export)"
+    stale = [f for f, kinds in SNAPSHOTS if read(os.path.join(ECSS, f)) != snapshot_text(M.rms, kinds)]
+    return ("%s differs from the export: run ecss/tools/ecss.py snapshot" % " and ".join("ecss/" + f for f in stale)) if stale \
+        else "in step with the export"
+
+
+def write_snapshots():
+    rms = load_rms()
+    if not rms:
+        print("ecss.py: no rms export under %s" % rel(RMS_EXPORT), file=sys.stderr)
+        return 1
+    for f, kinds in SNAPSHOTS:
+        write(os.path.join(ECSS, f), snapshot_text(rms, kinds))
+        print("ecss.py: ecss/%s: %d items" % (f, len([a for a in rms["arts"] if a.kind in kinds])))
+    return 0
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Baselines: the rms export and the evidence of the commit a baseline names, frozen once as data (ecss/baseline/<name>/)
+# ---------------------------------------------------------------------------------------------------------------------------------
+
+BASELINES = os.path.join(ECSS, "baseline")
+# What a run of make.sh leaves that the documents read: the evidence of one commit, the pipeline's results for it.
+EVIDENCE = ["build/ecss/evidence/configuration.txt", "build/ecss/evidence/toolchain.txt", "build/ecss/evidence/pipeline.txt",
+            "build/ecss/evidence/deps.txt", "build/ecss/evidence/SHA256SUMS.first", "build/ecss/evidence/build_deb_again.txt",
+            "build/ecss/evidence/reproducible.txt", "build/ecss/evidence/hardening.txt", "build/ecss/evidence/stack",
+            "build/ecss/puml/sd_*.puml", "tests/results/logs/it", "tests/results/ITs/coverage", "tests/results/stress/stress_summary.tsv",
+            "build/release/libuuid7.so*", "build/release/libuuid7.a", "build/release/obj/app__uuid7.c.o", "build/pipeline/*.log",
+            "build/debs/*.buildinfo", "build/debs/SHA256SUMS"]
+
+
+def product_of(commit):
+    """The commit's top-level tree entries outside ecss/ (git ls-tree): the product a baseline froze. ecss/ holds the documents'
+    sources and the frozen baselines, which may follow the baseline's commit; everything else must be what was verified."""
+    return sorted(l for l in git("ls-tree", commit).splitlines() if l.split("\t", 1)[-1] != "ecss")
+
+
+def sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def evidence_tar(path, epoch):
+    """The EVIDENCE files as one gzip'd tar: sorted, owner 0, mode 0644/0755, mtime the baseline commit's, no gzip name or time."""
+    import gzip
+    import tarfile
+    members = []
+    for pat in EVIDENCE:
+        for p in sorted(glob.glob(os.path.join(ROOT, pat))):
+            if os.path.isdir(p) and not os.path.islink(p):
+                members += [os.path.join(d, f) for d, _, fs in os.walk(p) for f in fs]
+            else:
+                members.append(p)
+    with open(path, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=9) as gz, \
+            tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tar:
+        for p in sorted(set(members), key=rel):
+            ti = tar.gettarinfo(p, rel(p))
+            ti.uid = ti.gid = 0
+            ti.uname = ti.gname = ""
+            ti.mtime = epoch
+            ti.mode = 0o777 if ti.issym() else (0o755 if ti.mode & 0o111 else 0o644)
+            if ti.isreg():
+                with open(p, "rb") as f:
+                    tar.addfile(ti, f)
+            else:
+                tar.addfile(ti)
+    return len(set(members))
+
+
+def manifest_of(d):
+    """MANIFEST of a frozen baseline: its fields, its sums {file: sha256} and the product lines."""
+    fields, sums, product = {}, {}, []
+    for line in read(os.path.join(d, "MANIFEST")).splitlines():
+        m = re.match(r"^([0-9a-f]{64})  (\S+)$", line)
+        if m:
+            sums[m.group(2)] = m.group(1)
+        elif line.startswith("product: "):
+            product.append(line[len("product: "):])
+        elif ": " in line and not line.startswith("#"):
+            k, v = line.split(": ", 1)
+            fields[k] = v
+    return fields, sums, sorted(product)
+
+
+def freeze(name):
+    """ecss/baseline/<name>/: the rms export now (package.json, verification.csv), the evidence of the commit the baseline names
+    (evidence.tar.gz, from this checkout's last ecss/make.sh run at that commit) and a MANIFEST of their sha256 with that commit and
+    its product. A baseline is frozen once; the release build reads it and refuses a release it does not match (release.sh)."""
+    def no(why):
+        print("ecss.py freeze: %s" % why, file=sys.stderr)
+        return 5
+    rms = load_rms()
+    if not rms:
+        return no("no rms export under %s" % rel(RMS_EXPORT))
+    b = next((b for b in rms["baselines"] if b["name"] == name), None)
+    if not b:
+        return no("the export holds no baseline %s (it holds %s)" % (name, ", ".join(x["name"] for x in rms["baselines"]) or "none"))
+    commit = b["commit"]
+    if not re.fullmatch(r"[0-9a-f]{40}", commit or ""):
+        return no("baseline %s names no full commit (%r)" % (name, commit))
+    if run(["git", "cat-file", "-e", commit + "^{commit}"])[0] != 0:
+        return no("baseline %s names %s, which this repository does not hold" % (name, commit))
+    ev, tc = read_kv(os.path.join(EVID, "configuration.txt")), read_kv(os.path.join(EVID, "toolchain.txt"))
+    if ev.get("commit") != commit or ev.get("state") != "clean":
+        return no("the evidence in build/ecss/evidence is of commit %s (%s), not of %s clean: run ecss/make.sh in a checkout of %s, "
+                  "then freeze from there" % (ev.get("commit", "none")[:12], ev.get("state", "?"), commit[:12], commit[:12]))
+    if not tc.get("environment", "").startswith("release root"):
+        return no("the evidence of %s is a host build, not the release root's" % commit[:12])
+    d = os.path.join(BASELINES, name)
+    if os.path.exists(d):
+        return no("%s exists: a baseline is frozen once" % rel(d))
+    os.makedirs(d)
+    files = ["package.json"] + (["verification.csv"] if os.path.exists(os.path.join(RMS_EXPORT, "verification.csv")) else [])
+    for f in files:
+        shutil.copyfile(os.path.join(RMS_EXPORT, f), os.path.join(d, f))
+    n = evidence_tar(os.path.join(d, "evidence.tar.gz"), int(git("log", "-1", "--format=%ct", commit) or 0))
+    files.append("evidence.tar.gz")
+    L = ["# ecss/baseline/%s/MANIFEST, written by ecss/tools/ecss.py freeze; ecss/release.sh refuses a release this does not match" % name,
+         "baseline: " + name, "commit: " + commit, "frozen-by: " + (b["by"] or "?"), "approved-by: " + (b["approved_by"] or "?"),
+         "exported-by: " + (rms["exported_by"] or "?"), "kyr-rms: " + (rms["producer"] or "?"),
+         "evidence: %d files of the run at %s, %s" % (n, ev.get("at", "?"), tc.get("environment", "?"))]
+    L += ["product: " + l for l in product_of(commit)]
+    L += ["%s  %s" % (sha256_file(os.path.join(d, f)), f) for f in files]
+    write(os.path.join(d, "MANIFEST"), "\n".join(L) + "\n")
+    print("ecss.py freeze: %s: %s, commit %s, %d evidence files" % (rel(d), ", ".join(files), commit[:12], n))
+    return 0
+
+
+def baseline_check(name, unpack=False):
+    """A release's baseline: ecss/baseline/<name>/ present, its files those the MANIFEST sums, its export's baseline <name> naming the
+    MANIFEST's commit, its evidence of that commit, and the product of HEAD (outside ecss/) the one that commit froze. With unpack, the
+    evidence goes where make.sh leaves it, for make.sh --docs-only. Exit 5 and why when the release must be refused."""
+    import tarfile
+    d = os.path.join(BASELINES, name)
+
+    def no(why):
+        print("ecss.py baseline: refused: %s" % why, file=sys.stderr)
+        return 5
+    if not os.path.isfile(os.path.join(d, "MANIFEST")):
+        return no("%s/MANIFEST is missing: freeze the baseline (ecss.py freeze %s) and commit it before the release" % (rel(d), name))
+    fields, sums, product = manifest_of(d)
+    if fields.get("baseline") != name:
+        return no("%s/MANIFEST names baseline %s" % (rel(d), fields.get("baseline")))
+    for f in ("package.json", "evidence.tar.gz"):
+        if f not in sums:
+            return no("%s/MANIFEST sums no %s" % (rel(d), f))
+    for f, s in sums.items():
+        if not os.path.isfile(os.path.join(d, f)) or sha256_file(os.path.join(d, f)) != s:
+            return no("%s/%s is not the file the MANIFEST sums" % (rel(d), f))
+    commit = fields.get("commit", "")
+    pkg = json.loads(read(os.path.join(d, "package.json")))
+    b = next((x for x in pkg.get("baselines", []) if x.get("name") == name), {})
+    named = b.get("commit", "") or ((HEX_RE.search(b.get("description", "")) or [""])[0])
+    if not b or named != commit:
+        return no("the frozen export's baseline %s names commit %s, the MANIFEST %s" % (name, named or "none", commit))
+    with tarfile.open(os.path.join(d, "evidence.tar.gz")) as tar:
+        conf = tar.extractfile("build/ecss/evidence/configuration.txt").read().decode()
+        ev = re.search(r"^commit: (\S+)$", conf, re.M)
+        if not ev or ev.group(1) != commit:
+            return no("the frozen evidence is of commit %s, the baseline names %s" % (ev.group(1) if ev else "none", commit))
+        head = product_of("HEAD")
+        if head != product:
+            names = sorted({l.split("\t", 1)[-1] for l in set(head) ^ set(product)})
+            return no("baseline %s names commit %s, whose product differs from this commit's in %s: the release would not be what "
+                      "was verified" % (name, commit[:12], ", ".join(names)))
+        if unpack:
+            tar.extractall(ROOT, filter="data")
+    print("ecss.py baseline: %s: commit %s, product identical to HEAD's outside ecss/, files as the MANIFEST sums%s"
+          % (name, commit[:12], "; evidence unpacked" if unpack else ""))
+    return 0
+
+
+def summary(M):
+    js = {"version": M.version, "commit": M.commit, "mode": M.mode, "requirements": len(M.reqs),
+          "srs": len([r for r in M.reqs if r.notes.get("doc") == "SRS"]), "icd": len([r for r in M.reqs if r.notes.get("doc") == "ICD"]),
+          "verified": len([r for r in M.reqs if M.req_status[r.id] == "verified"]), "cases": len(M.cases),
+          "tests": len([t for t in M.tests if t["exe"]]), "scenarios": len([t for t in M.tests if t["suite"] == "SD"]),
+          "documents": len([d for d in M.docs if d.applicability != "N"]), "tailored_out": len([d for d in M.docs if d.applicability == "N"]),
+          "diagrams": len(M.diagrams), "svg": M.rendered, "render_note": M.render_note, "render_tool": M.render_tool,
+          "pipeline_green": M.green, "pipeline_ran": M.pipeline_ran, "claim": claim(M)[0], "evidence_commit": M.ev_commit,
+          "evidence_state": M.ev.get("state", ""), "environment": M.env_text, "config_flags": M.config_flags, "tag": M.tag_text,
+          "open_items": len([o for o in M.open_items if o["status"] == "open"]), "refusal": M.refusal,
+          "retired": len(M.retired), "interfaces": len(M.ifaces), "unverified": M.unverified, "orphan_cases": M.orphan_cases,
+          "drift": len(M.drift), "rms_only_links": len(M.rms_only), "snapshot": M.snapshot, "trace_red": M.trace_red}
+    write(os.path.join(OUT, "summary.json"), json.dumps(js, indent=1) + "\n")
+    return js
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "generate"
+    if cmd == "api-doxyfile":
+        sys.stdout.write(api_doxyfile())
+        return 0
+    if cmd == "snapshot":
+        return write_snapshots()
+    if cmd in ("freeze", "baseline") and len(sys.argv) > 2:
+        return freeze(sys.argv[2]) if cmd == "freeze" else baseline_check(sys.argv[2], "--unpack" in sys.argv[3:])
+    if cmd == "components-dox":
+        rms = load_rms()
+        comps = [a for a in rms["arts"] if a.kind == "component"] if rms else load_csv(os.path.join(ECSS, "DDF", "components.csv"), "csv")
+        components_dox(comps)
+        return 0
+    if cmd != "generate":
+        print(__doc__)
+        return 2
+    M = build_model()
+    gen_diagrams(M)
+    render(M)
+    gen_docs(M)
+    gen_rms(M)
+    files = [l for l in git("ls-files").splitlines() if os.path.isfile(os.path.join(ROOT, l))]
+    lines = []
+    for f in files:
+        with open(os.path.join(ROOT, f), "rb") as fh:
+            lines.append("%s  %s" % (hashlib.sha256(fh.read()).hexdigest(), f))
+    write(os.path.join(EVID, "scf_files.txt"), "\n".join(lines) + "\n")
+    js = summary(M)
+    print("ecss.py: %(requirements)d requirements (%(srs)d SRS, %(icd)d ICD), %(verified)d verified; %(cases)d verification cases; "
+          "%(documents)d documents, %(tailored_out)d DRL items tailored out; %(diagrams)d diagrams, %(svg)d rendered; source: %(mode)s" % js)
+    if M.refusal:
+        print("ecss.py: RED: " + M.refusal, file=sys.stderr)
+        return 3
+    if M.trace_red:
+        print("ecss.py: RED: traceability: " + M.trace_red, file=sys.stderr)
+        return 4
+    return 0
+
+
+def components_dox(comps):
+    """The doxygen groups of the SDD components (the code's @ingroup targets)."""
+    dox = []
+    for c in sorted(comps, key=lambda c: c.id):
+        g = c.notes.get("group")
+        if g:
+            dox += ["/**", " * @defgroup %s %s" % (g, c.title), " * @brief %s" % c.body.replace("*/", "* /"), " *",
+                    " * Component \\ref %s \"%s\" of the \\ref UUID7_DOC_SDD \"SDD\"." % (anchor("cmp_" + c.id), c.id), " */", ""]
+    write(os.path.join(MD, "components.dox"), "\n".join(dox))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

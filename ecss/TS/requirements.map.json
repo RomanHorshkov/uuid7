@@ -1,0 +1,1 @@
+{"kyr_rms_csv_mapping":1,"delimiter":"comma","header":true,"kind":"requirement","columns":["human_id","kind","title","body","rationale","criteria","method","status","owner","source_ref","applicability","notes"]}

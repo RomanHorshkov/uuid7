@@ -1,0 +1,36 @@
+@startuml pipeline
+' the ECSS pipeline of uuid7 (ecss/README.md); hand-written
+title The ECSS pipeline of uuid7
+skinparam shadowing false
+start
+:requirement, component, case, review
+in the rms (kyr-rms-cli),
+seeded from ecss/**/*.csv;
+:code with @ingroup and @satisfies,
+tests with @verifies;
+partition "ecss/make.sh (one click)" {
+  :utils/deps.sh sysroot;
+  :utils/run_pipeline.sh
+  gates, six profiles, the suites,
+  the scenarios (one .puml each),
+  coverage, stress, packages;
+  :evidence: packages rebuilt (reproducibility),
+  hardening, nm and readelf analyses;
+  :ecss/tools/ecss.py
+  model = rms export, else the CSVs,
+  + the tags + the results;
+  :class, package, component diagrams;
+  :PlantUML to SVG (when java is installed);
+  :Markdown documents (build/ecss/md);
+  :doxygen site (build/ecss/html);
+}
+:build/ecss/rms/load.sh
+artifacts, links, results into the rms;
+:review the package;
+note right: RIDs are rms review-comments
+:kyr-rms-cli baseline <REVIEW>;
+:build/ecss/rms/export.sh
+package export into ecss/rms_export/;
+note right: committed; the next make.sh reads it
+stop
+@enduml

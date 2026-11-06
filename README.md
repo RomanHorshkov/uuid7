@@ -25,6 +25,8 @@ Project layout
 - `tests/ITs/` — Integration tests.
 - `tests/stress/` — Single-thread and multi-thread stress benchmarks.
 - `tests/package/smoke.c` — the installed-package test.
+- `tests/plantuml/` — scenario tests that also write one sequence diagram each.
+- `ecss/` — the ECSS documents, their data and the generator.
 - `build/` — Build output directory.
 
 Build
@@ -36,6 +38,8 @@ Build
 ./utils/build_libs.sh release          # build/<profile>/libuuid7.{a,so.<VERSION>} (no argument: every profile)
 ./utils/build_deb.sh                   # build/debs: libuuid7, libuuid7-dev, SHA256SUMS, one .buildinfo per deb
 ```
+
+ECSS package (category D; documented and self-verified, not independently reviewed, not accepted): `ecss/make.sh` runs every gate and writes the documents to `build/ecss/md` and one site to `build/ecss/html/index.html`; see `ecss/README.md`.
 
 ## Release process
 
@@ -171,3 +175,5 @@ Release hardening by stage:
 Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/uuid7.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libuuid7.so` exports exactly the declared functions as `<name>@@UUID7_<major>` (`utils/uuid7.map`); `utils/uuid7_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
+
+Legacy names: `utils/check_legacy_names.sh` (kyr-build 3.0.0's check and patterns, copied until it is pinned) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
