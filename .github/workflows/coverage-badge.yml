@@ -22,9 +22,10 @@ permissions:
 jobs:
   update-badge:
     name: Update coverage badge
-    # Only for a real push to master that actually succeeded (tag pushes and other branches
-    # now also run Quality; the badge must not chase them) — not PR runs (forks can't push back
-    # anyway) and not a failed Quality run (nothing new/trustworthy to report).
+    # Only for a real push to master that actually succeeded (since 11 Nov a push to master is
+    # the only push that runs Quality; the check stays so the badge never chases another) — not
+    # PR runs (forks can't push back anyway) and not a failed Quality run (nothing new/trustworthy
+    # to report).
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
